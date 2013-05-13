@@ -56,11 +56,30 @@ case object Priority {
   }
 }
 
-case class SDIdentifier(name: String, number: Option[Int]) {
-  def reserved = number.isEmpty
+case class SDIdentifier(name: String, enterpriseId: Option[String]) {
+  def reserved = enterpriseId.isEmpty
+}
+
+case object SDIdentifier {
+  val TIME_QUALITY = SDIdentifier("timeQuality", None)
+  val ORIGIN = SDIdentifier("origin", None)
+  val META = SDIdentifier("meta", None)
 }
 
 case class SDElement(id: SDIdentifier, params: Map[String,String])
+
+case object SDElement {
+  val PARAM_TZ_KNOWN = "tzKnown"
+  val PARAM_IS_SYNCED = "isSynced"
+  val PARAM_SYNC_ACCURACY = "syncAccuracy"
+  val PARAM_IP = "ip"
+  val PARAM_ENTERPRISE_ID = "enterpriseId"
+  val PARAM_SOFTWARE = "software"
+  val PARAM_SW_VERSION = "swVersion"
+  val PARAM_SEQUENCE_ID = "sequenceId"
+  val PARAM_SYS_UPTIME = "sysUptime"
+  val PARAM_LANGUAGE = "language"
+}
 
 case class Message(
   origin: String,

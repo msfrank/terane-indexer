@@ -120,20 +120,24 @@ class ProcessBody extends SymmetricPipelineStage[SyslogContext, Message, ByteStr
 
       /* process STRUCTURED-DATA */
       val elements: Map[SDIdentifier,SDElement] = if (version.isDefined) {
-        val sdata = scala.collection.mutable.HashMap[SDIdentifier, SDElement]()
-        while (iterator.getByte match {
-        case '-' | ' ' => false
+        val elements = scala.collection.mutable.HashMap[SDIdentifier, SDElement]()
+        if (!iterator.hasNext) throw new IllegalArgumentException()
+        while (iterator.hasNext && (iterator.getByte match {
+        case ' ' => false
+        case '-' =>
+          if (iterator.getByte != ' ') throw new IllegalArgumentException()
+          false
         case '[' => true
-        case _ => throw new IllegalArgumentException() }) {
-          sdata += processStructuredData(iterator)
+        case _ => throw new IllegalArgumentException() })) {
+          val element = processStructuredData(iterator)
+          elements += element
         }
-        sdata.toMap
+        elements.toMap
       } else Map.empty
 
       /* process MSG */
       val msg: Option[String] = {
         if (iterator.hasNext) {
-          if (iterator.getByte != ' ') throw new IllegalArgumentException()
           Some(makeUtf8String(iterator))
         } else None
       }
@@ -142,56 +146,61 @@ class ProcessBody extends SymmetricPipelineStage[SyslogContext, Message, ByteStr
     }
 
     def processStructuredData(iterator: ByteIterator): (SDIdentifier, SDElement) = {
-      val element = getUntil(iterator, ']')
       val id: SDIdentifier = {
-        val id = makeAsciiString(getUntil(element, ' '))
-        val (name,number) = id.span(char => char != '@')
-        if (element.getByte != ' ') throw new IllegalArgumentException()
-        SDIdentifier(name, if (number.length == 0) None else Some(number.toInt))
+        val id = makeAsciiString(getUntil(iterator, ' '))
+        val (name,enterpriseId) = {
+          val (name,enterpriseId) = id.span(char => char != '@')
+          if (enterpriseId.length > 0) (name, Some(enterpriseId.tail)) else (name, None)
+        }
+        SDIdentifier(name, enterpriseId)
       }
       val params = scala.collection.mutable.HashMap[String,String]()
-      while (element.hasNext) {
-        params += processParam(element)
-        element.getByte match {
-          case ']' => return (id, SDElement(id, params.toMap))
-          case byte if byte != ' ' => throw new IllegalArgumentException()
-        }
+      while (iterator.hasNext && (iterator.getByte match {
+        case ' ' => true
+        case ']' => false
+        case _ => throw new IllegalArgumentException()
+      })) {
+        val param = processParam(iterator)
+        params += param
       }
-      throw new IllegalArgumentException()
+      (id, SDElement(id, params.toMap))
     }
 
     def processParam(iterator: ByteIterator): (String,String) = {
       val name = makeAsciiString(getUntil(iterator, '='))
       if (iterator.getByte != '=') throw new IllegalArgumentException()
-      (name, processParamValue(iterator))
+      val value = processParamValue(iterator)
+      (name, value)
     }
 
     def processParamValue(iterator: ByteIterator): String = {
       if (iterator.getByte != '"') throw new IllegalArgumentException()
-      val sb = new ByteStringBuilder()
+      val bb = ByteString.newBuilder
       var escaped = false
       while (iterator.hasNext) {
         iterator.getByte match {
           case '\\' =>
             if (escaped) {
-              sb.putByte('\\')
+              bb += '\\'
               escaped = false
             } else
               escaped = true
           case ']' =>
             if (escaped) {
-              sb.putByte(']')
+              bb += ']'
               escaped = false
             } else
               throw new IllegalArgumentException()
           case '"' =>
             if (escaped) {
-              sb.putByte('"')
+              bb += '"'
               escaped = false
-            } else
-              return new String(sb.result().toArray, "UTF-8")
-          case _ =>
-            sb.putByte(_)
+            } else {
+              val value = new String(bb.result.toArray, "UTF-8")
+              return value
+            }
+          case b =>
+            bb += b
         }
       }
       throw new IllegalArgumentException()
