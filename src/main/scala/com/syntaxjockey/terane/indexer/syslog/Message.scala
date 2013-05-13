@@ -5,6 +5,7 @@ import org.joda.time.DateTime
 case class Priority(facility: Int, severity: Int) {
   def facilityString = Priority.facilityToString(facility)
   def severityString = Priority.severityToString(severity)
+  override def toString: String = "%s|%s".format(facilityString, severityString)
 }
 
 case object Priority {
@@ -58,6 +59,7 @@ case object Priority {
 
 case class SDIdentifier(name: String, enterpriseId: Option[String]) {
   def reserved = enterpriseId.isEmpty
+  override def toString: String = if (reserved) name else "%s@%s".format(name, enterpriseId.get)
 }
 
 case object SDIdentifier {
@@ -89,4 +91,25 @@ case class Message(
   appName: Option[String] = None,
   procId: Option[String] = None,
   msgId: Option[String] = None,
-  message: Option[String] = None)
+  message: Option[String] = None) {
+
+  override def toString: String = {
+    val sb = new StringBuilder()
+    sb.append("%s@%s %s".format(origin, timestamp, priority))
+    for (v <- appName)
+      sb.append(" appName=%s".format(v))
+    for (v <- procId)
+      sb.append(" procId=%s".format(v))
+    for (v <- msgId)
+      sb.append(" msgId=%s".format(v))
+    for (element <- elements.values) {
+      sb.append(" [%s".format(element.id))
+      for ((name,value) <- element.params)
+        sb.append(" %s=%s".format(name, value))
+      sb.append("]")
+    }
+    for (v <- message)
+      sb.append(" " + v)
+    sb.toString()
+  }
+}

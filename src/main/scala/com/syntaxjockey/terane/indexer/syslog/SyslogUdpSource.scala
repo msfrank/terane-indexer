@@ -22,8 +22,9 @@ class SyslogUdpSource(addr: InetSocketAddress) extends Actor with ActorLogging {
     case CommandFailed(command) =>
       log.error("{} command failed", command)
     case Received(data, remoteAddr) =>
-      val message = evt(data)
-      log.debug("received {}", message)
+      val (messages,_) = evt(data)
+      for (message <- messages)
+        log.debug("received {}", message)
   }
 }
 
