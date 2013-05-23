@@ -4,7 +4,7 @@ import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
 import akka.actor.{Actor, ActorLogging, Props}
 import java.net.InetSocketAddress
 
-class SyslogUdpSource(addr: InetSocketAddress) extends Actor with ActorLogging {
+class SyslogUdpSource(addr: InetSocketAddress) extends Actor with SyslogReceiver with ActorLogging {
   import akka.io.Udp._
   import context.system
 
@@ -23,8 +23,10 @@ class SyslogUdpSource(addr: InetSocketAddress) extends Actor with ActorLogging {
       log.error("{} command failed", command)
     case Received(data, remoteAddr) =>
       val (messages,_) = evt(data)
-      for (message <- messages)
+      for (message <- messages) {
         log.debug("received {}", message)
+        context.parent ! message2event(message)
+      }
   }
 }
 

@@ -1,14 +1,13 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor.{Props, ActorSystem}
-import java.net.{InetSocketAddress, Inet4Address}
-import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
+import com.syntaxjockey.terane.indexer.sink.CassandraSink
 
 /**
  *
  */
 object IndexerApp extends App {
-  implicit val system = ActorSystem("echo-server")
-  val localAddr = new InetSocketAddress("localhost", 10514)
-  val server = system.actorOf(Props(new SyslogUdpSource(localAddr)), name = "syslog-source")
+  val system = ActorSystem("terane-indexer")
+  val sink = system.actorOf(Props(new CassandraSink("store")), "cassandra-sink")
+  val eventRouter = system.actorOf(Props(new EventRouter(sink)), "event-router")
 }
