@@ -1,18 +1,26 @@
 package com.syntaxjockey.terane.indexer
 
-import java.net.InetSocketAddress
-import akka.actor.{ActorRef, Props, Actor, ActorLogging}
-import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
+import akka.actor.{Props, Actor, ActorLogging}
+import com.syntaxjockey.terane.indexer.sink.CassandraSink
 import com.syntaxjockey.terane.indexer.bier.Event
+import java.util.UUID
+import com.syntaxjockey.terane.indexer.EventRouter.{QueryEvents, GetEvent}
 
-class EventRouter(sink: ActorRef) extends Actor with ActorLogging {
-  val localAddr = new InetSocketAddress("localhost", 10514)
-  val syslogSource = context.actorOf(Props(new SyslogUdpSource(localAddr)), "syslog-udp-source")
+class EventRouter extends Actor with ActorLogging {
+  val csSink = context.actorOf(Props(new CassandraSink("store")), "cassandra-sink")
 
   def receive = {
     case event: Event =>
-      log.debug("forwarding event from {} to {}", sender.path.name, sink.path.name)
-      sink forward event
+      log.debug("forwarding event from {} to {}", sender.path.name, csSink.path.name)
+      csSink forward event
+    case get: GetEvent =>
+      csSink forward get
+    case query: QueryEvents =>
+      csSink forward query
   }
+}
 
+object EventRouter {
+  case class GetEvent(id: UUID)
+  case class QueryEvents(query: String)
 }

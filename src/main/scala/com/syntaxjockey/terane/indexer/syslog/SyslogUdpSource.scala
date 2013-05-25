@@ -1,15 +1,16 @@
 package com.syntaxjockey.terane.indexer.syslog
 
 import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{ActorRef, Actor, ActorLogging, Props}
 import java.net.InetSocketAddress
 
-class SyslogUdpSource(addr: InetSocketAddress) extends Actor with SyslogReceiver with ActorLogging {
+class SyslogUdpSource(eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging {
   import akka.io.Udp._
   import context.system
 
-  log.debug("attempting to bind to {}", addr)
-  IO(Udp) ! Bind(self, addr)
+  val localAddr = new InetSocketAddress("localhost", 10514)
+  log.debug("attempting to bind to {}", localAddr)
+  IO(Udp) ! Bind(self, localAddr)
 
   val stages = new ProcessBody()
   val PipelinePorts(cmd, evt, mgmt) = PipelineFactory.buildFunctionTriple(new SyslogContext(), stages)
@@ -25,7 +26,7 @@ class SyslogUdpSource(addr: InetSocketAddress) extends Actor with SyslogReceiver
       val (messages,_) = evt(data)
       for (message <- messages) {
         log.debug("received {}", message)
-        context.parent ! message2event(message)
+        eventRouter ! message2event(message)
       }
   }
 }
