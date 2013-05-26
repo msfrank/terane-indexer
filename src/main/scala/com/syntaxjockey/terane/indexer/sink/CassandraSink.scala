@@ -86,25 +86,28 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
     val result = csKeyspace.prepareQuery(CassandraSink.CF_EVENTS).getKey(id).execute()
     val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
     val columnList: ColumnList[String] = result.getResult
-    if (!columnList.isEmpty()) {
+    if (!columnList.isEmpty) {
       val event = new Event(id)
-      for (value <- columnList) {
-        val columnName = value.getName
+      log.debug("found event {} in {}", event.id, latency)
+      val numColumns = columnList.size()
+      log.debug("event {} has {} columns", event.id, numColumns)
+      0 until numColumns foreach { n =>
+        val column = columnList.getColumnByIndex(n)
+        val columnName = column.getName
         val (valueType,name) = columnName.splitAt(columnName.indexOf(':'))
         valueType match {
           case "text" =>
-            event.set(name, value.getStringValue)
+            event.set(name.tail, column.getStringValue)
           case "integer" =>
-            event.set(name, value.getLongValue)
+            event.set(name.tail, column.getLongValue)
           case "float" =>
-            event.set(name, value.getDoubleValue)
+            event.set(name.tail, column.getDoubleValue)
           case "datetime" =>
-            event.set(name, new DateTime(value.getDateValue.getTime, DateTimeZone.UTC))
+            event.set(name.tail, new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))
           case default =>
             log.error("failed to read column {} from event {}; unknown value type {}", columnName, id, valueType)
         }
       }
-      log.debug("found event {} in {}", event.id, latency)
       Some(event)
     } else {
       log.debug("no such event {}", id)

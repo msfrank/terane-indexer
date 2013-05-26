@@ -11,7 +11,7 @@ import scala.collection.mutable
  */
 class Event(val id: UUID) extends MapProxy[String,Event.Value] {
 
-  def self = new mutable.HashMap[String,Event.Value]()
+  val self = new mutable.HashMap[String,Event.Value]()
 
   def set(name: String, text: Event.Text): Event = {
     val value = getOrElse(name, Event.Value()).copy(text = Some(text))
