@@ -5,6 +5,8 @@ import org.joda.time.DateTime
 import java.net.InetAddress
 import scala.collection.mutable.MapProxy
 import scala.collection.mutable
+import org.xbill.DNS.Name
+import com.netflix.astyanax.util.TimeUUIDUtils
 
 /**
  *
@@ -73,12 +75,16 @@ class Event(val id: UUID) extends MapProxy[String,Event.Value] {
 
 object Event {
   type Text = String
-  type Literal = Set[String]
+  type Literal = List[String]
   type Integer = Long
   type Float = Double
   type Datetime = DateTime
   type Address = InetAddress
-  type Hostname = List[String]
+  type Hostname = Name
+
+  class ValueType extends Enumeration {
+    val TEXT, LITERAL, INTEGER, FLOAT, DATETIME, ADDRESS, HOSTNAME = Value
+  }
 
   case class Value(
     text: Option[Text] = None,
@@ -90,6 +96,9 @@ object Event {
     hostname: Option[Hostname] = None)
 
   def apply(uuid: Option[UUID] = None): Event = {
-    if (uuid.isDefined) new Event(uuid.get) else new Event(UUID.randomUUID())
+    if (uuid.isDefined)
+      new Event(uuid.get)
+    else
+      new Event(TimeUUIDUtils.getUniqueTimeUUIDinMicros)
   }
 }

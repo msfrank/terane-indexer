@@ -27,7 +27,7 @@ class EventSpec extends WordSpec with MustMatchers {
 
     "set a literal value" in {
       val event = new Event(UUID.randomUUID())
-      event.set("literal", Set("hello", "world"))
+      event.set("literal", List("hello", "world"))
       event must contain key ("literal")
       val value: Option[Event.Value] = event.get("literal")
       value.get.literal must be === Some(Set("hello", "world"))

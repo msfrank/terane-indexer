@@ -1,21 +1,29 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor.{Actor, ActorLogging}
-import com.syntaxjockey.terane.indexer.bier.Event
+import com.syntaxjockey.terane.indexer.bier._
 import com.netflix.astyanax.impl.AstyanaxConfigurationImpl
 import com.netflix.astyanax.connectionpool.NodeDiscoveryType
 import com.netflix.astyanax.connectionpool.impl.{CountingConnectionPoolMonitor, ConnectionPoolConfigurationImpl}
 import com.netflix.astyanax.{MutationBatch, AstyanaxContext}
 import com.netflix.astyanax.thrift.ThriftFamilyFactory
 import com.netflix.astyanax.model.{ColumnList, ColumnFamily}
-import com.netflix.astyanax.serializers.{UUIDSerializer, StringSerializer}
-import java.util.UUID
+import com.netflix.astyanax.serializers.{ListSerializer, SetSerializer, UUIDSerializer, StringSerializer}
+import java.util.{Date, UUID}
 import scala.collection.JavaConversions._
 import com.netflix.astyanax.connectionpool.exceptions.BadRequestException
 import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import com.syntaxjockey.terane.indexer.EventRouter.GetEvent
 import org.joda.time.{DateTimeZone, DateTime}
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.FieldColumnFamily
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import org.apache.cassandra.db.marshal.{UTF8Type, AbstractType, IntegerType, Int32Type}
+import com.syntaxjockey.terane.indexer.EventRouter.GetEvent
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.FieldColumnFamily
+import scala.Some
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import org.xbill.DNS.Name
 
 /**
  *
@@ -24,6 +32,7 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
 
   val config = context.system.settings.config.getConfig("terane.cassandra")
 
+  /* connect to cassandra cluster */
   val csConfiguration = new AstyanaxConfigurationImpl()
     .setDiscoveryType(NodeDiscoveryType.RING_DESCRIBE)
   log.debug("csConfiguration = {}", csConfiguration)
@@ -47,6 +56,27 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
   log.debug("csKeyspace = {}", csKeyspace)
   log.info("connecting to store '{}'", storeName)
 
+  /* declare our field -> column family mappings */
+  val textColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[TextField,StringPosting]]()
+  textColumnFamilies("message") = FieldColumnFamily(
+    new TextField(),
+    new ColumnFamily[StringPosting,String]("text:message", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
+  val literalColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[LiteralField,StringPosting]]()
+  literalColumnFamilies("facility") = FieldColumnFamily(
+    new LiteralField(),
+    new ColumnFamily[StringPosting,String]("literal:facility", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
+  literalColumnFamilies("severity") = FieldColumnFamily(
+    new LiteralField(),
+    new ColumnFamily[StringPosting,String]("literal:severity", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
+  val datetimeColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[DatetimeField,DatePosting]]()
+  datetimeColumnFamilies("timestamp") = FieldColumnFamily(
+    new DatetimeField(),
+    new ColumnFamily[DatePosting,String]("datetime:timestamp", FieldSerializers.DatetimeFieldSerializer, StringSerializer.get()))
+  val hostnameColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[HostnameField,StringPosting]]()
+  hostnameColumnFamilies("origin") = FieldColumnFamily(
+    new HostnameField(),
+    new ColumnFamily[StringPosting,String]("hostname:origin", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
+
   /* if the keyspace for storeName doesn't exist, then create it */
   val csKeyspaceDef = try {
     csKeyspace.describeKeyspace()
@@ -59,12 +89,20 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
       keyspaceOpts.put("strategy_options", strategyOpts)
       val cfOpts = new java.util.HashMap[ColumnFamily[_,_],java.util.Map[String,Object]]()
       cfOpts.put(CassandraSink.CF_EVENTS, null)
+      /* create the keyspace with the "events" column family pre-specified */
       csKeyspace.createKeyspace(keyspaceOpts, cfOpts)
-      csKeyspace.describeKeyspace()
+      val csKeyspaceDef = csKeyspace.describeKeyspace()
+      /* create the postings column families */
+      //csKeyspaceDef.addColumnFamily()
+      //cfOpts.put(textColumnFamilies("message").cf, null)
+      //cfOpts.put(literalColumnFamilies("facility").cf, null)
+      //cfOpts.put(literalColumnFamilies("severity").cf, null)
+      //cfOpts.put(datetimeColumnFamilies("timestamp").cf, null)
+      //cfOpts.put(hostnameColumnFamilies("origin").cf, null)
+      csKeyspaceDef
   }
 
-  val cachedColumnFamilies = scala.collection.mutable.HashMap[String,ColumnFamily[_,_]]()
-
+  /* create any missing column families */
   log.debug("csKeyspaceDef = {}", csKeyspaceDef)
   for (cf <- csKeyspaceDef.getColumnFamilyList)
     log.debug("found ColumnFamily {}", cf.getName)
@@ -121,26 +159,29 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
    */
   def writeEvent(event: Event) {
     log.debug("received event {}", event.id)
-    val batch = csKeyspace.prepareMutationBatch()
-    val row = batch.withRow(CassandraSink.CF_EVENTS, event.id)
+    val postingsMutation = csKeyspace.prepareMutationBatch()
+    val eventMutation = csKeyspace.prepareMutationBatch()
+    val row = eventMutation.withRow(CassandraSink.CF_EVENTS, event.id)
     for ((name,value) <- event) {
-      for (text <- value.text)
+      for (text <- value.text) {
         row.putColumn("text:" + name, text)
-      //for (literal <- value.literal)
-      //  row.putColumn[UTF8Type]("literal:" + name, literal, new SetSerializer[String](UTF8Type.instance), null)
-      for (integer <- value.integer)
-        row.putColumn("integer:" + name, integer)
-      for (float <- value.float)
-        row.putColumn("float:" + name, float)
-      for (datetime <- value.datetime)
+        writeTextPosting(postingsMutation, name, text, event.id)
+      }
+      for (literal <- value.literal) {
+        val javaLiteral: java.util.List[java.lang.String] = literal
+        row.putColumn("literal:" + name, javaLiteral, CassandraSink.SER_LITERAL, new java.lang.Integer(0))
+      }
+      for (datetime <- value.datetime) {
         row.putColumn("datetime:" + name, datetime.toDate)
-      //for (v <- value.address)
-      //
-      //for (v <- value.hostname)
-      //
+        writeDatetimePosting(postingsMutation, name, datetime, event.id)
+      }
+      for (hostname <- value.hostname) {
+        row.putColumn("hostname:" + name, hostname.toString)
+        writeHostnamePosting(postingsMutation, name, hostname, event.id)
+      }
     }
     try {
-      val result = batch.execute()
+      val result = eventMutation.execute()
       val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
       log.debug("wrote event {} in {}", event.id, latency)
     } catch {
@@ -148,8 +189,99 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
         log.error(ex, "failed to write event {}", event.id)
     }
   }
+
+  /**
+   *
+   * @param mutation
+   * @param name
+   * @param text
+   * @param id
+   */
+  def writeTextPosting(mutation: MutationBatch, name: String, text: String, id: UUID) {
+    textColumnFamilies(name) match {
+      case FieldColumnFamily(field: TextField, cf: ColumnFamily[StringPosting,String]) =>
+        val postings: Seq[(String,PostingMetadata)] = field.parseValue(text)
+        for ((term,postingMetadata) <- postings) {
+          val row = mutation.withRow(cf, new StringPosting(term, id))
+          val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
+            pos:java.lang.Integer
+          }
+          val ttl = new java.lang.Integer(0)
+          row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+        }
+    }
+  }
+
+  /**
+   *
+   * @param mutation
+   * @param name
+   * @param literal
+   * @param id
+   */
+  def writeLiteralPosting(mutation: MutationBatch, name: String, literal: List[String], id: UUID) {
+     literalColumnFamilies(name) match {
+      case FieldColumnFamily(field: LiteralField, cf: ColumnFamily[StringPosting,String]) =>
+        val postings: Seq[(String,PostingMetadata)] = field.parseValue(literal)
+        for ((term,postingMetadata) <- postings) {
+          val row = mutation.withRow(cf, new StringPosting(term, id))
+          val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
+            pos:java.lang.Integer
+          }
+          val ttl = new java.lang.Integer(0)
+          row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+        }
+    }
+  }
+
+  /**
+   *
+   * @param mutation
+   * @param name
+   * @param datetime
+   * @param id
+   */
+  def writeDatetimePosting(mutation: MutationBatch, name: String, datetime: DateTime, id: UUID) {
+    datetimeColumnFamilies(name) match {
+      case FieldColumnFamily(field: DatetimeField, cf: ColumnFamily[DatePosting,String]) =>
+        val postings: Seq[(Date,PostingMetadata)] = field.parseValue(datetime)
+        for ((term,postingMetadata) <- postings) {
+          val row = mutation.withRow(cf, new DatePosting(term, id))
+          val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
+            pos:java.lang.Integer
+          }
+          val ttl = new java.lang.Integer(0)
+          row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+        }
+    }
+  }
+
+  /**
+   *
+   * @param mutation
+   * @param name
+   * @param hostname
+   * @param id
+   */
+  def writeHostnamePosting(mutation: MutationBatch, name: String, hostname: Name, id: UUID) {
+     hostnameColumnFamilies(name) match {
+      case FieldColumnFamily(field: HostnameField, cf: ColumnFamily[StringPosting,String]) =>
+        val postings: Seq[(String,PostingMetadata)] = field.parseValue(hostname)
+        for ((term,postingMetadata) <- postings) {
+          val row = mutation.withRow(cf, new StringPosting(term, id))
+          val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
+            pos:java.lang.Integer
+          }
+          val ttl = new java.lang.Integer(0)
+          row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+        }
+    }
+  }
 }
 
 object CassandraSink {
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
+  val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
+  val SER_LITERAL = new ListSerializer[java.lang.String](UTF8Type.instance)
+  case class FieldColumnFamily[F,P](field: F, cf: ColumnFamily[P,String])
 }

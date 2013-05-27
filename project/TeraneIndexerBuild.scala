@@ -22,6 +22,7 @@ object TeraneIndexerBuild extends Build {
         "io.spray" % "spray-routing" % "1.2-M8-SNAPSHOT",
         "joda-time" % "joda-time" % "2.2",
         "org.joda" % "joda-convert" % "1.3.1",
+        "dnsjava" % "dnsjava" % "2.1.1",
         "nl.grons" %% "metrics-scala" % "2.2.0",
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",
