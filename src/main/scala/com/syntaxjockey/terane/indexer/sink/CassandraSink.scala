@@ -49,33 +49,36 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
     .withAstyanaxConfiguration(csConfiguration)
     .withConnectionPoolConfiguration(csPoolConfiguration)
     .withConnectionPoolMonitor(csConnectionPoolMonitor)
-    .buildKeyspace(ThriftFamilyFactory.getInstance())
+    .buildCluster(ThriftFamilyFactory.getInstance())
   log.debug("csContext = {}", csContext)
   csContext.start()
-  val csKeyspace = csContext.getClient
+  val csCluster = csContext.getClient
+  log.debug("csCluster = {}", csCluster)
+  val csKeyspace = csCluster.getKeyspace(storeName)
   log.debug("csKeyspace = {}", csKeyspace)
   log.info("connecting to store '{}'", storeName)
 
   /* declare our field -> column family mappings */
   val textColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[TextField,StringPosting]]()
+  val literalColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[LiteralField,StringPosting]]()
+  val datetimeColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[DatetimeField,DatePosting]]()
+  val hostnameColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[HostnameField,StringPosting]]()
+
   textColumnFamilies("message") = FieldColumnFamily(
     new TextField(),
-    new ColumnFamily[StringPosting,String]("text:message", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
-  val literalColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[LiteralField,StringPosting]]()
+    new ColumnFamily[StringPosting,String]("text_message", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
   literalColumnFamilies("facility") = FieldColumnFamily(
     new LiteralField(),
-    new ColumnFamily[StringPosting,String]("literal:facility", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
+    new ColumnFamily[StringPosting,String]("literal_facility", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
   literalColumnFamilies("severity") = FieldColumnFamily(
     new LiteralField(),
-    new ColumnFamily[StringPosting,String]("literal:severity", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
-  val datetimeColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[DatetimeField,DatePosting]]()
+    new ColumnFamily[StringPosting,String]("literal_severity", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
   datetimeColumnFamilies("timestamp") = FieldColumnFamily(
     new DatetimeField(),
-    new ColumnFamily[DatePosting,String]("datetime:timestamp", FieldSerializers.DatetimeFieldSerializer, StringSerializer.get()))
-  val hostnameColumnFamilies = scala.collection.mutable.HashMap[String,FieldColumnFamily[HostnameField,StringPosting]]()
+    new ColumnFamily[DatePosting,String]("datetime_timestamp", FieldSerializers.DatetimeFieldSerializer, StringSerializer.get()))
   hostnameColumnFamilies("origin") = FieldColumnFamily(
     new HostnameField(),
-    new ColumnFamily[StringPosting,String]("hostname:origin", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
+    new ColumnFamily[StringPosting,String]("hostname_origin", FieldSerializers.TextFieldSerializer, StringSerializer.get()))
 
   /* if the keyspace for storeName doesn't exist, then create it */
   val csKeyspaceDef = try {
@@ -91,15 +94,34 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
       cfOpts.put(CassandraSink.CF_EVENTS, null)
       /* create the keyspace with the "events" column family pre-specified */
       csKeyspace.createKeyspace(keyspaceOpts, cfOpts)
-      val csKeyspaceDef = csKeyspace.describeKeyspace()
       /* create the postings column families */
-      //csKeyspaceDef.addColumnFamily()
-      //cfOpts.put(textColumnFamilies("message").cf, null)
+      csCluster.addColumnFamily(
+        csCluster.makeColumnFamilyDefinition()
+          .setKeyspace(storeName)
+          .setName("text_message")
+          .setComparatorType("UTF8Type")
+          .setDefaultValidationClass("BytesType")
+          .setKeyValidationClass("CompositeType(UTF8Type, TimeUUIDType)"))
+      csCluster.addColumnFamily(
+        csCluster.makeColumnFamilyDefinition()
+          .setKeyspace(storeName)
+          .setName("datetime_timestamp")
+          .setComparatorType("UTF8Type")
+          .setDefaultValidationClass("BytesType")
+          .setKeyValidationClass("CompositeType(DateType, TimeUUIDType)"))
+      /*
+      csCluster.addColumnFamily(
+        csCluster.makeColumnFamilyDefinition()
+          .setKeyspace(storeName)
+          .setName("datetime_timestamp")
+          .setComparatorType("DateType")
+          .setDefaultValidationClass("UTF8Type")
+          .setKeyValidationClass("CompositeType(DateType, TimeUUIDType)"))
+      */
       //cfOpts.put(literalColumnFamilies("facility").cf, null)
       //cfOpts.put(literalColumnFamilies("severity").cf, null)
-      //cfOpts.put(datetimeColumnFamilies("timestamp").cf, null)
       //cfOpts.put(hostnameColumnFamilies("origin").cf, null)
-      csKeyspaceDef
+      csKeyspace.describeKeyspace()
   }
 
   /* create any missing column families */
@@ -136,12 +158,17 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
         valueType match {
           case "text" =>
             event.set(name.tail, column.getStringValue)
+          case "literal" =>
+            val literal: List[String] = column.getValue(CassandraSink.SER_LITERAL).toList
+            event.set(name.tail, literal)
           case "integer" =>
             event.set(name.tail, column.getLongValue)
           case "float" =>
             event.set(name.tail, column.getDoubleValue)
           case "datetime" =>
             event.set(name.tail, new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))
+          case "hostname" =>
+            event.set(name.tail, Name.fromString(column.getStringValue))
           case default =>
             log.error("failed to read column {} from event {}; unknown value type {}", columnName, id, valueType)
         }
@@ -161,6 +188,7 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
     log.debug("received event {}", event.id)
     val postingsMutation = csKeyspace.prepareMutationBatch()
     val eventMutation = csKeyspace.prepareMutationBatch()
+    /* write the event and postings */
     val row = eventMutation.withRow(CassandraSink.CF_EVENTS, event.id)
     for ((name,value) <- event) {
       for (text <- value.text) {
@@ -170,6 +198,7 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
       for (literal <- value.literal) {
         val javaLiteral: java.util.List[java.lang.String] = literal
         row.putColumn("literal:" + name, javaLiteral, CassandraSink.SER_LITERAL, new java.lang.Integer(0))
+        writeLiteralPosting(postingsMutation, name, literal, event.id)
       }
       for (datetime <- value.datetime) {
         row.putColumn("datetime:" + name, datetime.toDate)
@@ -180,6 +209,7 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
         writeHostnamePosting(postingsMutation, name, hostname, event.id)
       }
     }
+    /* execute the event mutation */
     try {
       val result = eventMutation.execute()
       val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
@@ -187,6 +217,15 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
     } catch {
       case ex: Exception =>
         log.error(ex, "failed to write event {}", event.id)
+    }
+    /* execute the postings mutations */
+    try {
+      val result = postingsMutation.execute()
+      val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+      log.debug("wrote postings for {} in {}", event.id, latency)
+    } catch {
+      case ex: Exception =>
+        log.error(ex, "failed to write postings for {}", event.id)
     }
   }
 
@@ -198,8 +237,8 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
    * @param id
    */
   def writeTextPosting(mutation: MutationBatch, name: String, text: String, id: UUID) {
-    textColumnFamilies(name) match {
-      case FieldColumnFamily(field: TextField, cf: ColumnFamily[StringPosting,String]) =>
+    textColumnFamilies.get(name) match {
+      case Some(FieldColumnFamily(field: TextField, cf: ColumnFamily[StringPosting,String])) =>
         val postings: Seq[(String,PostingMetadata)] = field.parseValue(text)
         for ((term,postingMetadata) <- postings) {
           val row = mutation.withRow(cf, new StringPosting(term, id))
@@ -208,7 +247,10 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
           }
           val ttl = new java.lang.Integer(0)
           row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+          log.debug("wrote posting %s,%s to batch".format(term, id))
         }
+      case None =>
+        log.warning("no column family '%s' defined for type text".format(name))
     }
   }
 
@@ -220,8 +262,8 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
    * @param id
    */
   def writeLiteralPosting(mutation: MutationBatch, name: String, literal: List[String], id: UUID) {
-     literalColumnFamilies(name) match {
-      case FieldColumnFamily(field: LiteralField, cf: ColumnFamily[StringPosting,String]) =>
+     literalColumnFamilies.get(name) match {
+      case Some(FieldColumnFamily(field: LiteralField, cf: ColumnFamily[StringPosting,String])) =>
         val postings: Seq[(String,PostingMetadata)] = field.parseValue(literal)
         for ((term,postingMetadata) <- postings) {
           val row = mutation.withRow(cf, new StringPosting(term, id))
@@ -230,7 +272,10 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
           }
           val ttl = new java.lang.Integer(0)
           row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+          log.debug("wrote posting %s,%s to batch".format(term, id))
         }
+      case None =>
+        log.warning("no column family '%s' defined for type literal".format(name))
     }
   }
 
@@ -242,8 +287,8 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
    * @param id
    */
   def writeDatetimePosting(mutation: MutationBatch, name: String, datetime: DateTime, id: UUID) {
-    datetimeColumnFamilies(name) match {
-      case FieldColumnFamily(field: DatetimeField, cf: ColumnFamily[DatePosting,String]) =>
+    datetimeColumnFamilies.get(name) match {
+      case Some(FieldColumnFamily(field: DatetimeField, cf: ColumnFamily[DatePosting,String])) =>
         val postings: Seq[(Date,PostingMetadata)] = field.parseValue(datetime)
         for ((term,postingMetadata) <- postings) {
           val row = mutation.withRow(cf, new DatePosting(term, id))
@@ -252,7 +297,10 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
           }
           val ttl = new java.lang.Integer(0)
           row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+          log.debug("wrote posting %s,%s to batch".format(term, id))
         }
+      case None =>
+        log.warning("no column family '%s' defined for type datetime".format(name))
     }
   }
 
@@ -264,8 +312,8 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
    * @param id
    */
   def writeHostnamePosting(mutation: MutationBatch, name: String, hostname: Name, id: UUID) {
-     hostnameColumnFamilies(name) match {
-      case FieldColumnFamily(field: HostnameField, cf: ColumnFamily[StringPosting,String]) =>
+     hostnameColumnFamilies.get(name) match {
+      case Some(FieldColumnFamily(field: HostnameField, cf: ColumnFamily[StringPosting,String])) =>
         val postings: Seq[(String,PostingMetadata)] = field.parseValue(hostname)
         for ((term,postingMetadata) <- postings) {
           val row = mutation.withRow(cf, new StringPosting(term, id))
@@ -274,7 +322,10 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
           }
           val ttl = new java.lang.Integer(0)
           row.putColumn("positions", positions, CassandraSink.SER_POSITIONS, ttl)
+          log.debug("wrote posting %s,%s to batch".format(term, id))
         }
+      case None =>
+        log.warning("no column family '%s' defined for type hostname".format(name))
     }
   }
 }

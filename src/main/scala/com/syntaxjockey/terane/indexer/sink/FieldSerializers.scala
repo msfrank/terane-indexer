@@ -1,10 +1,18 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import java.util.{Date, UUID}
-import com.netflix.astyanax.annotations.Component
+import com.netflix.astyanax.annotations.{Component => AstyanaxComponent}
 import com.netflix.astyanax.serializers.AnnotatedCompositeSerializer
+import scala.annotation.meta.field
 
 class Posting
+
+// see http://blog.fakod.eu/2010/07/14/constructor-arguments-with-jpa-annotations/
+object Posting {
+  type Component = AstyanaxComponent @field
+}
+
+import Posting.Component
 
 class StringPosting(@Component(ordinal = 0) var term: String, @Component(ordinal = 1) var id: UUID) extends Posting {
   def this() = this("", FieldSerializers.emptyUUID)
