@@ -24,6 +24,7 @@ import com.syntaxjockey.terane.indexer.sink.CassandraSink.FieldColumnFamily
 import scala.Some
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import org.xbill.DNS.Name
+import java.net.InetAddress
 
 /**
  *
@@ -105,22 +106,31 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
       csCluster.addColumnFamily(
         csCluster.makeColumnFamilyDefinition()
           .setKeyspace(storeName)
-          .setName("datetime_timestamp")
+          .setName("literal_facility")
           .setComparatorType("UTF8Type")
           .setDefaultValidationClass("BytesType")
-          .setKeyValidationClass("CompositeType(DateType, TimeUUIDType)"))
-      /*
+          .setKeyValidationClass("CompositeType(UTF8Type, TimeUUIDType)"))
+      csCluster.addColumnFamily(
+        csCluster.makeColumnFamilyDefinition()
+          .setKeyspace(storeName)
+          .setName("literal_severity")
+          .setComparatorType("UTF8Type")
+          .setDefaultValidationClass("BytesType")
+          .setKeyValidationClass("CompositeType(UTF8Type, TimeUUIDType)"))
       csCluster.addColumnFamily(
         csCluster.makeColumnFamilyDefinition()
           .setKeyspace(storeName)
           .setName("datetime_timestamp")
-          .setComparatorType("DateType")
-          .setDefaultValidationClass("UTF8Type")
+          .setComparatorType("UTF8Type")
+          .setDefaultValidationClass("BytesType")
           .setKeyValidationClass("CompositeType(DateType, TimeUUIDType)"))
-      */
-      //cfOpts.put(literalColumnFamilies("facility").cf, null)
-      //cfOpts.put(literalColumnFamilies("severity").cf, null)
-      //cfOpts.put(hostnameColumnFamilies("origin").cf, null)
+      csCluster.addColumnFamily(
+        csCluster.makeColumnFamilyDefinition()
+          .setKeyspace(storeName)
+          .setName("hostname_origin")
+          .setComparatorType("UTF8Type")
+          .setDefaultValidationClass("BytesType")
+          .setKeyValidationClass("CompositeType(UTF8Type, TimeUUIDType)"))
       csKeyspace.describeKeyspace()
   }
 
@@ -167,6 +177,8 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging {
             event.set(name.tail, column.getDoubleValue)
           case "datetime" =>
             event.set(name.tail, new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))
+          case "address" =>
+            event.set(name.tail, InetAddress.getByAddress(column.getByteArrayValue))
           case "hostname" =>
             event.set(name.tail, Name.fromString(column.getStringValue))
           case default =>
