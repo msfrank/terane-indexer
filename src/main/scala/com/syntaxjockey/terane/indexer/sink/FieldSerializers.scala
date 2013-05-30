@@ -34,9 +34,11 @@ object FieldSerializers {
   val emptyUUID = new UUID(0, 0)
   val emptyDate = new Date(0)
 
-  val TextFieldSerializer = new AnnotatedCompositeSerializer[StringPosting](classOf[StringPosting])
-  val IntegerFieldSerializer = new AnnotatedCompositeSerializer[LongPosting](classOf[LongPosting])
-  val FloatFieldSerializer = new AnnotatedCompositeSerializer[DoublePosting](classOf[DoublePosting])
-  val DatetimeFieldSerializer = new AnnotatedCompositeSerializer[DatePosting](classOf[DatePosting])
+  val Text = new AnnotatedCompositeSerializer[StringPosting](classOf[StringPosting])
+  val Literal = new AnnotatedCompositeSerializer[StringPosting](classOf[StringPosting])
+  val Integer = new AnnotatedCompositeSerializer[LongPosting](classOf[LongPosting])
+  val Float = new AnnotatedCompositeSerializer[DoublePosting](classOf[DoublePosting])
+  val Datetime = new AnnotatedCompositeSerializer[DatePosting](classOf[DatePosting])
+  val Hostname = new AnnotatedCompositeSerializer[StringPosting](classOf[StringPosting])
 }
 

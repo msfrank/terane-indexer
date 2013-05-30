@@ -7,7 +7,7 @@ from loggerglue.rfc5424 import SDElement
 from loggerglue import constants
 
 def stringtoprival(facility, severity):
-    return getattr(constants, "LOG_" + facility) | getattr(constants, "LOG_" + severity)
+    return getattr(constants, "LOG_" + facility) + getattr(constants, "LOG_" + severity)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Send RFC5424-compliant syslog message via UDP')
@@ -29,13 +29,13 @@ if __name__ == '__main__':
     help='message hostname')
   parser.add_argument('-f','--facility',
     dest='facility',
+    choices=('KERN', 'USER', 'MAIL', 'DAEMON', 'AUTH', 'SYSLOG', 'LPR', 'NEWS', 'UUCP', 'CRON', 'AUTHPRIV', 'LOCAL0', 'LOCAL1', 'LOCAL2', 'LOCAL3', 'LOCAL4', 'LOCAL5', 'LOCAL6', 'LOCAL7'),
     metavar='facility', 
-    choices=('DEBUG','INFO','NOTICE','WARNING','ERROR','CRITICAL','ALERT','EMERG'),
     default='INFO',
     help='message facility')
   parser.add_argument('-s','--severity',
     dest='severity',
-    choices=('KERN', 'USER', 'MAIL', 'DAEMON', 'AUTH', 'SYSLOG', 'LPR', 'NEWS', 'UUCP', 'CRON', 'AUTHPRIV', 'LOCAL0', 'LOCAL1', 'LOCAL2', 'LOCAL3', 'LOCAL4', 'LOCAL5', 'LOCAL6', 'LOCAL7'),
+    choices=('DEBUG','INFO','NOTICE','WARNING','ERROR','CRITICAL','ALERT','EMERG'),
     metavar='SEVERITY', 
     default='USER',
     help='message severity')
