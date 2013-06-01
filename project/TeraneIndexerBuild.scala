@@ -11,7 +11,7 @@ object TeraneIndexerBuild extends Build {
       name := "terane-indexer",
       version := "0.1-SNAPSHOT",
       scalaVersion := "2.10.1",
-      resolvers += "spray repo" at "http://nightlies.spray.io",
+      resolvers += "spray repo" at "http://repo.spray.io",
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % "2.2-M3",
         "com.typesafe.akka" %% "akka-slf4j" % "2.2-M3",
@@ -20,6 +20,7 @@ object TeraneIndexerBuild extends Build {
         "com.netflix.astyanax" % "astyanax-cassandra" % "1.56.37",
         "io.spray" % "spray-can" % "1.2-M8-SNAPSHOT",
         "io.spray" % "spray-routing" % "1.2-M8-SNAPSHOT",
+        "io.spray" %% "spray-json" % "1.2.4",
         "joda-time" % "joda-time" % "2.2",
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",

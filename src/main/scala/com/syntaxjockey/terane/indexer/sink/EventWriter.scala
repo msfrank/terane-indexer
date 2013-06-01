@@ -71,8 +71,8 @@ trait EventWriter extends FieldManager {
   }
 
   def getShardKey(id: UUID, fcf: FieldColumnFamily): java.lang.Long = {
-    val lsb: Long = id.getLeastSignificantBits
-    val mask: Long = (0xffffffffffffffffL) >>> (64 - fcf.width)
+    val lsb: Long = id.getMostSignificantBits
+    val mask: Long = 0xffffffffffffffffL >>> (64 - fcf.width)
     lsb & mask
   }
 
