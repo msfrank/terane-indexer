@@ -50,7 +50,7 @@ trait ApiService extends HttpService {
   implicit def log: LoggingAdapter
   implicit def eventRouter: ActorRef
   implicit def executionContext = actorRefFactory.dispatcher
-  implicit val timeout: Timeout = 3.seconds
+  implicit val timeout: Timeout = 30.seconds
 
   val routes = {
     path("1" / "queries") {

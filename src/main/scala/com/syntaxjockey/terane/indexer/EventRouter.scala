@@ -40,11 +40,12 @@ class EventRouter extends Actor with ActorLogging {
       queries.get(id) match {
         case Some(query) =>
           log.debug("retrieving batch of events for " + id)
-          //csSink forward get
+          csSink forward query.query
         case None =>
           sender ! new Exception("no such query " + id)
       }
 
+    /* delete the query */
     case DeleteQuery(id) =>
       queries.get(id) match {
         case Some(query) =>

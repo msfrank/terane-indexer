@@ -74,6 +74,8 @@ trait EventWriter extends FieldManager {
     val lsb: Long = id.getMostSignificantBits
     val mask: Long = 0xffffffffffffffffL >>> (64 - fcf.width)
     lsb & mask
+    // FIXME: return the actual shard key
+    0
   }
 
   /**

@@ -13,11 +13,12 @@ import java.util.UUID
 import scala.collection.JavaConversions._
 import com.netflix.astyanax.connectionpool.exceptions.BadRequestException
 import org.apache.cassandra.db.marshal.{UTF8Type, Int32Type}
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 
 /**
  *
  */
-class CassandraSink(storeName: String) extends Actor with ActorLogging with EventReader with EventWriter {
+class CassandraSink(storeName: String) extends Actor with ActorLogging with EventReader with EventWriter with EventSearcher {
   import com.syntaxjockey.terane.indexer.EventRouter._
 
   val config = context.system.settings.config.getConfig("terane.cassandra")
@@ -78,8 +79,12 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging with Even
   def receive = {
     case event: Event =>
       writeEvent(event)
-    //case GetEvents(ids) =>
-    // sender ! readEvent(ids)
+    case matchers: Matchers =>
+      // FIXME: use future here
+      val optimized = matchers.optimizeMatcher(this)
+      val postings: List[UUID] = optimized.take(10).map(p => p._1).toList
+      val events = getEvents(postings)
+      sender ! events
   }
 }
 
