@@ -1,16 +1,17 @@
 package com.syntaxjockey.terane.indexer
 
-import akka.actor.{Props, Actor, ActorLogging}
+import akka.actor._
 import com.syntaxjockey.terane.indexer.sink.CassandraSink
 import com.syntaxjockey.terane.indexer.bier.{Query, Event}
 import java.util.{Date, UUID}
 import org.joda.time.DateTime
+import scala.Some
 
 class EventRouter extends Actor with ActorLogging {
   import EventRouter._
 
   val csSink = context.actorOf(Props(new CassandraSink("store")), "cassandra-sink")
-  val queries = scala.collection.mutable.LinkedHashMap[UUID,Query]()
+  val queries = scala.collection.mutable.LinkedHashMap[UUID,ActorRef]()
 
   def receive = {
 
@@ -20,27 +21,30 @@ class EventRouter extends Actor with ActorLogging {
       csSink forward event
 
     /* create a new query */
-    case createQuery @ CreateQuery(query, stores, fields, limit, reverse) =>
-      val query = new Query(createQuery)
-      queries(query.id) = query
-      log.debug("created query " + query.id)
-      sender ! CreateQueryResponse(query.id)
+    case createQuery: CreateQuery =>
+      val id = UUID.randomUUID()
+      val query = context.actorOf(Props(new Query(id, createQuery)), "query-" + id.toString)
+      context.watch(query)
+      queries(id) = query
+      log.debug("created query " + id)
+      sender ! CreateQueryResponse(id)
 
     /* describe a query */
-    case DescribeQuery(id) =>
+    case message @ DescribeQuery(id) =>
       queries.get(id) match {
         case Some(query) =>
-          sender ! DescribeQueryResponse(query.id, query.created)
+          log.debug("retrieving query description for " + id)
+          query forward message
         case None =>
           sender ! new Exception("no such query " + id)
       }
 
     /* retrieve next batch of events matching the query */
-    case GetEvents(id) =>
+    case message @ GetEvents(id) =>
       queries.get(id) match {
         case Some(query) =>
           log.debug("retrieving batch of events for " + id)
-          csSink forward query.query
+          query forward message
         case None =>
           sender ! new Exception("no such query " + id)
       }
@@ -49,11 +53,17 @@ class EventRouter extends Actor with ActorLogging {
     case DeleteQuery(id) =>
       queries.get(id) match {
         case Some(query) =>
-          queries.remove(id)
-          log.debug("deleted query " + id)
+          query ! PoisonPill
+          log.debug("deleting query " + id)
         case None =>
           sender ! new Exception("no such query " + id)
       }
+
+    /* the query has been terminated, remove the reference */
+    case Terminated(actor) =>
+      val id = UUID.fromString(actor.path.name.stripPrefix("query-"))
+      queries.remove(id)
+      log.debug("deleted query " + id)
   }
 }
 

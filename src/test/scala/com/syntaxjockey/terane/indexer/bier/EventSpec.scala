@@ -6,13 +6,6 @@ import java.util.UUID
 import org.joda.time.DateTime
 import java.net.{InetAddress, Inet4Address}
 
-/**
- * Created with IntelliJ IDEA.
- * User: msfrank
- * Date: 5/25/13
- * Time: 4:40 PM
- * To change this template use File | Settings | File Templates.
- */
 class EventSpec extends WordSpec with MustMatchers {
 
   "An Event" must {

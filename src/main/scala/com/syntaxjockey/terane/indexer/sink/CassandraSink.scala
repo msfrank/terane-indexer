@@ -14,6 +14,7 @@ import scala.collection.JavaConversions._
 import com.netflix.astyanax.connectionpool.exceptions.BadRequestException
 import org.apache.cassandra.db.marshal.{UTF8Type, Int32Type}
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import scala.concurrent.Future
 
 /**
  *
@@ -79,12 +80,13 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging with Even
   def receive = {
     case event: Event =>
       writeEvent(event)
+    /*
     case matchers: Matchers =>
-      // FIXME: use future here
-      val optimized = matchers.optimizeMatcher(this)
-      val postings: List[UUID] = optimized.take(10).map(p => p._1).toList
+      val query = matchers.optimizeMatcher(this)
+      val postings: List[UUID] = query.getPostings(100)
       val events = getEvents(postings)
       sender ! events
+    */
   }
 }
 
