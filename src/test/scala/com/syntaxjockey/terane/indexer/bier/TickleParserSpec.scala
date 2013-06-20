@@ -19,8 +19,8 @@ class TickleParserSpec extends WordSpec with MustMatchers {
     }
 
     "parse a qualified subject with a field name and type" in {
-      val query = TickleParser.parseQueryString("fieldname[fieldtype]=foobar")
-      query.query must be(Left(Subject("foobar", Some("fieldname"), Some("fieldtype"))))
+      val query = TickleParser.parseQueryString("fieldname[text]=foobar")
+      query.query must be(Left(Subject("foobar", Some("fieldname"), Some(EventValueType.TEXT))))
     }
 
     "parse an AND group" in {

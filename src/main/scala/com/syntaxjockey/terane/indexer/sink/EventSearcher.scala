@@ -1,6 +1,6 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import com.syntaxjockey.terane.indexer.bier.{Event, Matchers, TermMatcher, Searcher}
+import com.syntaxjockey.terane.indexer.bier.{Event, Matchers, Searcher}
 import com.netflix.astyanax.{Keyspace, Cluster}
 import akka.event.LoggingAdapter
 import java.util.UUID
@@ -8,6 +8,7 @@ import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher
 
 trait EventSearcher extends Searcher with FieldManager with EventReader {
 
@@ -23,7 +24,7 @@ trait EventSearcher extends Searcher with FieldManager with EventReader {
    * @return
    */
   def optimizeTermMatcher[T](matcher: TermMatcher[T]): Matchers = {
-    new Term(matcher.name, matcher.term, csKeyspace, this)
+    new Term(matcher.field, matcher.term, csKeyspace, this)
   }
 
   /**

@@ -26,7 +26,12 @@ class TickleParser extends StandardTokenParsers {
   /* subject with field name, and optional type */
   val qualifiedSubject: Parser[Subject] = ident ~ opt("[" ~ ident ~ "]") ~ "=" ~ bareSubject ^^ {
     case fieldName ~ Some("[" ~ fieldType ~ "]") ~ "=" ~ s =>
-      Subject(s.value, Some(fieldName), Some(fieldType))
+      val fieldValueType = try {
+        Some(EventValueType.withName(fieldType.toUpperCase))
+      } catch { case ex: Exception => None }
+      if (fieldValueType.isEmpty)
+        failure("unknown field type " + fieldType)
+      Subject(s.value, Some(fieldName), fieldValueType)
     case fieldName ~ None ~ "=" ~ s =>
       Subject(s.value, Some(fieldName), None)
   }
@@ -91,5 +96,5 @@ object TickleParser {
   case class OrGroup(children: List[SubjectOrGroup]) extends Group
   case class NotGroup(children: List[SubjectOrGroup]) extends Group
   case class Query(query: Either[Subject,Group])
-  case class Subject(value: String, fieldName: Option[String], fieldType: Option[String])
+  case class Subject(value: String, fieldName: Option[String], fieldType: Option[EventValueType.Value])
 }

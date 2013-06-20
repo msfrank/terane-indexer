@@ -47,7 +47,7 @@ object JsonProtocol extends DefaultJsonProtocol {
   //implicit val ListQueriesResponseFormat = jsonFormat1(ListQueriesResponse.apply)
   implicit val CreateQueryFormat = jsonFormat5(CreateQuery.apply)
   implicit val CreateQueryResponseFormat = jsonFormat1(CreateQueryResponse.apply)
-  implicit val DescribeQueryResponseFormat = jsonFormat2(DescribeQueryResponse.apply)
+  implicit val DescribeQueryResponseFormat = jsonFormat3(DescribeQueryResponse.apply)
   implicit val DeleteQueryFormat = jsonFormat1(DeleteQuery.apply)
 
 }

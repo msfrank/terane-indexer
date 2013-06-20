@@ -1,6 +1,6 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import com.syntaxjockey.terane.indexer.bier.{Matchers, TermMatcher}
+import com.syntaxjockey.terane.indexer.bier.Matchers
 import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
@@ -8,11 +8,13 @@ import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import scala.collection.JavaConversions._
 import com.netflix.astyanax.Keyspace
 import scala.concurrent.{ExecutionContext, Future}
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.Field
 
-class Term[T](override val name: String,
+class Term[T](override val field: Field,
               override val term: T,
               val keyspace: Keyspace,
-              val fields: FieldManager) extends TermMatcher[T](name, term) {
+              val fields: FieldManager) extends TermMatcher[T](field, term) {
 
   import Matchers._
 
@@ -21,7 +23,7 @@ class Term[T](override val name: String,
   def nextBatch: List[Posting] = {
     val query = term match {
       case text: String =>
-        val fcf = fields.getOrCreateTextField(name)
+        val fcf = fields.getOrCreateTextField(field.fieldName)
         val range = FieldSerializers.Text.buildRange()
           .limit(100)
           .greaterThanEquals(text)

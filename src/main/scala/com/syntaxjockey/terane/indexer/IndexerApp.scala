@@ -3,6 +3,7 @@ package com.syntaxjockey.terane.indexer
 import akka.actor.{Props, ActorSystem}
 import com.syntaxjockey.terane.indexer.http.HttpServer
 import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
+import com.syntaxjockey.terane.indexer.metadata.MetadataManager
 
 /**
  *

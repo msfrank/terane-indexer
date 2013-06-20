@@ -18,6 +18,7 @@ object TeraneIndexerBuild extends Build {
         "com.netflix.astyanax" % "astyanax-core" % "1.56.37",
         "com.netflix.astyanax" % "astyanax-thrift" % "1.56.37",
         "com.netflix.astyanax" % "astyanax-cassandra" % "1.56.37",
+        "com.netflix.curator" % "curator-recipes" % "1.3.3",
         "io.spray" % "spray-can" % "1.2-M8-SNAPSHOT",
         "io.spray" % "spray-routing" % "1.2-M8-SNAPSHOT",
         "io.spray" %% "spray-json" % "1.2.4",

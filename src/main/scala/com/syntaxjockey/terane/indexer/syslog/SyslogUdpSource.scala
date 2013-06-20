@@ -3,8 +3,10 @@ package com.syntaxjockey.terane.indexer.syslog
 import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
 import akka.actor.{ActorRef, Actor, ActorLogging, Props}
 import java.net.InetSocketAddress
+import com.syntaxjockey.terane.indexer.EventRouter
 
 class SyslogUdpSource(eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging {
+  import EventRouter._
   import akka.io.Udp._
   import context.system
 
@@ -26,7 +28,7 @@ class SyslogUdpSource(eventRouter: ActorRef) extends Actor with SyslogReceiver w
       val (messages,_) = evt(data)
       for (message <- messages) {
         log.debug("received {}", message)
-        eventRouter ! message2event(message)
+        eventRouter ! StoreEvent("main", message2event(message))
       }
   }
 }
