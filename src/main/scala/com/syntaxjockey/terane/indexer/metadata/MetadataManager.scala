@@ -49,25 +49,27 @@ class MetadataManager extends Actor with ActorLogging with StoreManager {
     config.getInt("retry-count"))
   log.debug("zkRetryPolicy = {}", zkRetryPolicy)
   val connectionString = config.getStringList("servers").mkString(",")
-  val zkClient = CuratorFrameworkFactory.newClient(connectionString, zkRetryPolicy)
-    .usingNamespace(config.getString("namespace"))
-  log.debug("zkClient = {}", zkClient)
-  zkClient.start()
+  val _zkClient = CuratorFrameworkFactory.newClient(connectionString, zkRetryPolicy)
   log.info("connecting to zookeeper servers {}", connectionString)
+  _zkClient.start()
+  val zkClient = _zkClient.usingNamespace(config.getString("namespace"))
+  log.debug("zkClient = {}", zkClient)
 
   /* synchronously load metadata */
   // FIXME: can we do this asynchronously?
-  zkClient.getChildren.forPath("/stores").foreach { path =>
+  zkClient.getChildren.forPath("/stores").foreach { storeNode =>
+    val storePath = "/stores/" + storeNode
     /* load the store */
-    val id = UUID.fromString(ZKPaths.getNodeFromPath(path))
-    val storeName = zkClient.getData.forPath(path).mkString
-    val created = new DateTime(zkClient.getData.forPath(path + "/created").mkString.toLong, DateTimeZone.UTC)
+    val id = UUID.fromString(storeNode)
+    val storeName = zkClient.getData.forPath(storePath).mkString
+    val created = new DateTime(zkClient.getData.forPath(storePath + "/created").mkString.toLong, DateTimeZone.UTC)
     /* load each field in the store */
-    val fields = zkClient.getChildren.forPath(path + "/fields").map { path =>
-      val id = UUID.fromString(ZKPaths.getNodeFromPath(path))
-      val fieldName = zkClient.getData.forPath(path).mkString
-      val fieldType = EventValueType.withName(zkClient.getData.forPath(path + "/type").mkString)
-      val created = new DateTime(zkClient.getData.forPath(path + "/created").mkString.toLong, DateTimeZone.UTC)
+    val fields = zkClient.getChildren.forPath(storePath + "/fields").map { fieldNode =>
+      val fieldPath = storePath + "/fields/" + fieldNode
+      val id = UUID.fromString(fieldNode)
+      val fieldName = zkClient.getData.forPath(fieldPath).mkString
+      val fieldType = EventValueType.withName(zkClient.getData.forPath(fieldPath + "/type").mkString)
+      val created = new DateTime(zkClient.getData.forPath(fieldPath + "/created").mkString.toLong, DateTimeZone.UTC)
       Field(id, fieldName, fieldType, created)
     }
     val fieldsById = fields.map(field => field.id -> field).toMap

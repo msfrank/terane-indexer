@@ -28,7 +28,7 @@ class EventRouter extends Actor with ActorLogging {
         case Some(exists) =>
           log.warning("ignoring StoreCreated notification for {}: store already exists", store.id)
         case None =>
-          val sink = context.actorOf(Props[CassandraSink], "sink-" + store.id)
+          val sink = context.actorOf(Props(new CassandraSink(store)), "sink-" + store.id)
           storesById.put(store.id, store)
           storesByName.put(store.storeName, store)
           sinksByName.put(store.storeName, sink)

@@ -15,11 +15,12 @@ import com.netflix.astyanax.connectionpool.exceptions.BadRequestException
 import org.apache.cassandra.db.marshal.{UTF8Type, Int32Type}
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import scala.concurrent.Future
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 
 /**
  *
  */
-class CassandraSink(storeName: String) extends Actor with ActorLogging with EventReader with EventWriter with EventSearcher {
+class CassandraSink(store: Store) extends Actor with ActorLogging with EventReader with EventWriter with EventSearcher {
   import com.syntaxjockey.terane.indexer.EventRouter._
 
   val config = context.system.settings.config.getConfig("terane.cassandra")
@@ -37,7 +38,7 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging with Even
   log.debug("csConnectionPoolMonitor = {}", csConnectionPoolMonitor)
   val csContext = new AstyanaxContext.Builder()
     .forCluster(config.getString("cluster-name"))
-    .forKeyspace(storeName)
+    .forKeyspace(store.id.toString)
     .withAstyanaxConfiguration(csConfiguration)
     .withConnectionPoolConfiguration(csPoolConfiguration)
     .withConnectionPoolMonitor(csConnectionPoolMonitor)
@@ -46,9 +47,9 @@ class CassandraSink(storeName: String) extends Actor with ActorLogging with Even
   csContext.start()
   val csCluster = csContext.getClient
   log.debug("csCluster = {}", csCluster)
-  val csKeyspace = csCluster.getKeyspace(storeName)
+  val csKeyspace = csCluster.getKeyspace(store.id.toString)
   log.debug("csKeyspace = {}", csKeyspace)
-  log.info("connecting to store '{}'", storeName)
+  log.info("connecting to store '{}' ({})", store.storeName, store.id.toString)
 
   /* if the keyspace for storeName doesn't exist, then create it */
   val csKeyspaceDef = try {
