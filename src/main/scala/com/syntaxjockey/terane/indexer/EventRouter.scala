@@ -1,38 +1,47 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
-import com.syntaxjockey.terane.indexer.sink.CassandraSink
-import com.syntaxjockey.terane.indexer.bier.{Query, Event}
 import java.util.UUID
 import org.joda.time.DateTime
 import scala.Some
-import com.syntaxjockey.terane.indexer.metadata.MetadataManager
-import com.syntaxjockey.terane.indexer.metadata.StoreManager
 
-class EventRouter extends Actor with ActorLogging {
+import com.syntaxjockey.terane.indexer.metadata.{ZookeeperClient, StoreManager}
+import com.syntaxjockey.terane.indexer.sink.{CassandraClient, CassandraSink}
+import com.syntaxjockey.terane.indexer.bier.{Query, Event}
+
+class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with ActorLogging {
   import EventRouter._
-  import MetadataManager._
   import StoreManager._
 
-  val metadataManager = context.actorOf(Props[MetadataManager], "metadata-manager")
-  val storesById = scala.collection.mutable.HashMap[UUID,Store]()
-  val storesByName = scala.collection.mutable.HashMap[String,Store]()
+  var storesById = Map.empty[String,Store]
+  var storesByName = Map.empty[String,Store]
   val sinksByName = scala.collection.mutable.HashMap[String,ActorRef]()
   val queries = scala.collection.mutable.HashMap[UUID,ActorRef]()
+
+  val storeManager = context.actorOf(Props(new StoreManager(zk)), "store-manager")
+
+  log.debug("started {}", self.path.name)
 
   def receive = {
 
     /* a new store was created */
-    case StoreCreated(store) =>
-      storesById.get(store.id) match {
-        case Some(exists) =>
-          log.warning("ignoring StoreCreated notification for {}: store already exists", store.id)
-        case None =>
-          val sink = context.actorOf(Props(new CassandraSink(store)), "sink-" + store.id)
-          storesById.put(store.id, store)
-          storesByName.put(store.storeName, store)
-          sinksByName.put(store.storeName, sink)
+    case StoresChanged(_storesById, _storesByName) =>
+      // remove any dropped stores
+      storesById.values.filter(store => !_storesById.contains(store.id)).foreach { store =>
+        for (sink <- sinksByName.remove(store.name)) {
+          log.debug("terminating sink {} for store {}", sink.path.name, store.name)
+          sink ! PoisonPill
+        }
       }
+      // add any created stores
+      _storesById.values.filter(store => !storesById.contains(store.id)).foreach { store =>
+        val keyspace = cs.getKeyspace(store.id)
+        val sink = context.actorOf(Props(new CassandraSink(store, keyspace, zk)), "sink-" + store.id)
+        sinksByName.put(store.name, sink)
+        log.debug("creating sink {} for store {}", sink.path.name, store.name)
+      }
+      storesById = _storesById
+      storesByName = _storesByName
 
     /* store event in the appropriate sink */
     case StoreEvent(store, event) =>

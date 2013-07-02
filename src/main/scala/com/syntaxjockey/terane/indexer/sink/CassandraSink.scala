@@ -1,98 +1,73 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{Actor, ActorLogging}
-import com.syntaxjockey.terane.indexer.bier._
-import com.netflix.astyanax.impl.AstyanaxConfigurationImpl
-import com.netflix.astyanax.connectionpool.NodeDiscoveryType
-import com.netflix.astyanax.connectionpool.impl.{CountingConnectionPoolMonitor, ConnectionPoolConfigurationImpl}
-import com.netflix.astyanax.AstyanaxContext
-import com.netflix.astyanax.thrift.ThriftFamilyFactory
+import akka.actor._
+import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.model.ColumnFamily
-import com.netflix.astyanax.serializers.{ListSerializer, SetSerializer, UUIDSerializer}
-import java.util.UUID
-import scala.collection.JavaConversions._
-import com.netflix.astyanax.connectionpool.exceptions.BadRequestException
+import com.netflix.astyanax.serializers.{StringSerializer, ListSerializer, SetSerializer, UUIDSerializer}
 import org.apache.cassandra.db.marshal.{UTF8Type, Int32Type}
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import scala.concurrent.Future
+import java.util.UUID
+
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
+import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
+import com.syntaxjockey.terane.indexer.metadata.ZookeeperClient
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
 
 /**
  *
  */
-class CassandraSink(store: Store) extends Actor with ActorLogging with EventReader with EventWriter with EventSearcher {
-  import com.syntaxjockey.terane.indexer.EventRouter._
+class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) extends Actor with FSM[State,Data] with ActorLogging {
+  import CassandraSink._
+  import context.dispatcher
 
   val config = context.system.settings.config.getConfig("terane.cassandra")
 
-  /* connect to cassandra cluster */
-  val csConfiguration = new AstyanaxConfigurationImpl()
-    .setDiscoveryType(NodeDiscoveryType.RING_DESCRIBE)
-  log.debug("csConfiguration = {}", csConfiguration)
-  val csPoolConfiguration = new ConnectionPoolConfigurationImpl(config.getString("connection-pool-name"))
-    .setPort(config.getInt("port"))
-    .setMaxConnsPerHost(config.getInt("max-conns-per-host"))
-    .setSeeds(config.getStringList("seeds").mkString(","))
-  log.debug("csPoolConfiguration = {}", csPoolConfiguration)
-  val csConnectionPoolMonitor = new CountingConnectionPoolMonitor()
-  log.debug("csConnectionPoolMonitor = {}", csConnectionPoolMonitor)
-  val csContext = new AstyanaxContext.Builder()
-    .forCluster(config.getString("cluster-name"))
-    .forKeyspace(store.id.toString)
-    .withAstyanaxConfiguration(csConfiguration)
-    .withConnectionPoolConfiguration(csPoolConfiguration)
-    .withConnectionPoolMonitor(csConnectionPoolMonitor)
-    .buildCluster(ThriftFamilyFactory.getInstance())
-  log.debug("csContext = {}", csContext)
-  csContext.start()
-  val csCluster = csContext.getClient
-  log.debug("csCluster = {}", csCluster)
-  val csKeyspace = csCluster.getKeyspace(store.id.toString)
-  log.debug("csKeyspace = {}", csKeyspace)
-  log.info("connecting to store '{}' ({})", store.storeName, store.id.toString)
+  val fieldBus = new FieldBus()
+  val fieldManager = context.actorOf(Props(new FieldManager(store, keyspace, zk, fieldBus)), "field-manager")
 
-  /* if the keyspace for storeName doesn't exist, then create it */
-  val csKeyspaceDef = try {
-    csKeyspace.describeKeyspace()
-  } catch {
-    case ex: BadRequestException =>
-      val keyspaceOpts = new java.util.HashMap[String,Object]()
-      keyspaceOpts.put("strategy_class", "SimpleStrategy")
-      val strategyOpts = new java.util.HashMap[String,Object]()
-      strategyOpts.put("replication_factor", "1")
-      keyspaceOpts.put("strategy_options", strategyOpts)
-      val cfOpts = new java.util.HashMap[ColumnFamily[_,_],java.util.Map[String,Object]]()
-      cfOpts.put(CassandraSink.CF_EVENTS, null)
-      /* create the keyspace with the "events" column family pre-specified */
-      csKeyspace.createKeyspace(keyspaceOpts, cfOpts)
-      /* create the postings column families */
-      getOrCreateTextField("message")
-      getOrCreateLiteralField("facility")
-      getOrCreateLiteralField("severity")
-      getOrCreateDatetimeField("timestamp")
-      /* get the keyspace definition */
-      csKeyspace.describeKeyspace()
+  val writers = context.actorOf(Props(new EventWriter(store, keyspace, fieldBus)), "writer")
+  //val readers = context.actorOf()
+
+  startWith(Connected, EventBuffer(Seq.empty))
+
+  log.debug("started {}", self.path.name)
+
+  /* when unconnected we buffer events until reconnection occurs */
+  when(Unconnected) {
+    case Event(cs: CassandraClient, EventBuffer(retries)) =>
+      retries.foreach(retry => self ! retry)
+      goto(Connected) using EventBuffer(Seq.empty)
+    case Event(event: BierEvent, EventBuffer(retries)) =>
+      stay() using EventBuffer(RetryEvent(event, 1) +: retries)
+    case Event(retry: RetryEvent, EventBuffer(retries)) =>
+      stay() using EventBuffer(retry +: retries)
   }
 
-  log.debug("csKeyspaceDef = {}", csKeyspaceDef)
-  for (cf <- csKeyspaceDef.getColumnFamilyList)
-    log.debug("found ColumnFamily {}", cf.getName)
-
-  def receive = {
-    case event: Event =>
-      writeEvent(event)
-    /*
-    case matchers: Matchers =>
-      val query = matchers.optimizeMatcher(this)
-      val postings: List[UUID] = query.getPostings(100)
-      val events = getEvents(postings)
-      sender ! events
-    */
+  /* when connected we send events to the event writers */
+  when(Connected) {
+    case Event(event: BierEvent, EventBuffer(retries)) =>
+      writers ! StoreEvent(event, 1)
+      stay()
+    case Event(retry: RetryEvent, EventBuffer(retries)) =>
+      writers ! StoreEvent(retry.event, retry.attempt)
+      stay()
   }
+
+  initialize()
 }
 
 object CassandraSink {
-  val CF_EVENTS = new ColumnFamily[UUID,UUID]("events", UUIDSerializer.get(), UUIDSerializer.get())
+  val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
   val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
   val SER_LITERAL = new ListSerializer[java.lang.String](UTF8Type.instance)
+
+  case class StoreEvent(event: BierEvent, attempt: Int)
+  case class RetryEvent(event: BierEvent, attempt: Int)
+
+  sealed trait State
+  case object Unconnected extends State
+  case object Connected extends State
+
+  sealed trait Data
+  case class EventBuffer(events: Seq[RetryEvent]) extends Data
 }

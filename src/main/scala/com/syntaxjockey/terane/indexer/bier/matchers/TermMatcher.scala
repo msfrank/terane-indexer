@@ -2,8 +2,7 @@ package com.syntaxjockey.terane.indexer.bier.matchers
 
 import scala.concurrent.Future
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting, NoMoreMatches}
-import com.syntaxjockey.terane.indexer.bier.{EventValueType, Searcher, Matchers}
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Field
+import com.syntaxjockey.terane.indexer.bier.{Field, EventValueType, Searcher, Matchers}
 
 /**
  * Match the term of the specified type in the specified field.  This class is a

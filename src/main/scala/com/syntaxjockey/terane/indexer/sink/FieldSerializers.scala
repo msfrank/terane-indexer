@@ -34,9 +34,14 @@ class DatePosting(@Component(ordinal = 0) var term: Date, @Component(ordinal = 1
   def this() = this(FieldSerializers.emptyDate, FieldSerializers.emptyUUID)
 }
 
+class AddressPosting(@Component(ordinal = 0) var term: Array[Byte], @Component(ordinal = 1) var id: UUID) extends Posting {
+  def this() = this(FieldSerializers.emptyAddress, FieldSerializers.emptyUUID)
+}
+
 object FieldSerializers {
   val emptyUUID = new UUID(0, 0)
   val emptyDate = new Date(0)
+  val emptyAddress = Array[Byte](0x00, 0x00, 0x00, 0x00)
 
   val smallestUUID = UUID.fromString("13814000-1dd2-11b2-bf91-000000000000")
   val largestUUID = UUID.fromString("138118f0-1dd2-11b2-bf91-ffffffffffff")
@@ -46,6 +51,7 @@ object FieldSerializers {
   val Integer = new AnnotatedCompositeSerializer[LongPosting](classOf[LongPosting])
   val Float = new AnnotatedCompositeSerializer[DoublePosting](classOf[DoublePosting])
   val Datetime = new AnnotatedCompositeSerializer[DatePosting](classOf[DatePosting])
+  val Address = new AnnotatedCompositeSerializer[AddressPosting](classOf[AddressPosting])
   val Hostname = new AnnotatedCompositeSerializer[StringPosting](classOf[StringPosting])
 }
 

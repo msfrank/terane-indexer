@@ -1,25 +1,27 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import com.syntaxjockey.terane.indexer.bier.Matchers
 import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-
 import scala.collection.JavaConversions._
 import com.netflix.astyanax.Keyspace
 import scala.concurrent.{ExecutionContext, Future}
+
+import com.syntaxjockey.terane.indexer.bier.Matchers
+import com.syntaxjockey.terane.indexer.bier.Field
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Field
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldColumnFamily
 
 class Term[T](override val field: Field,
               override val term: T,
               val keyspace: Keyspace,
-              val fields: FieldManager) extends TermMatcher[T](field, term) {
+              val fcf: FieldColumnFamily) extends TermMatcher[T](field, term) {
 
   import Matchers._
 
   private[this] var postings = List[Posting]()
 
+  /*
   def nextBatch: List[Posting] = {
     val query = term match {
       case text: String =>
@@ -61,5 +63,6 @@ class Term[T](override val field: Field,
       }
     }
   }
+  */
 
 }

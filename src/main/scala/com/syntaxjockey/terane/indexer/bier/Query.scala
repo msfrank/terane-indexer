@@ -5,18 +5,17 @@ import java.util.UUID
 import org.joda.time.{DateTimeZone, DateTime}
 import akka.actor.{FSM, Actor, ActorLogging}
 import com.syntaxjockey.terane.indexer.bier.Query.{State, Data}
-import com.syntaxjockey.terane.indexer.metadata.MetadataManager
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store) extends Actor with ActorLogging with FSM[State,Data] {
   import Query._
-  import MetadataManager._
 
   val created = DateTime.now(DateTimeZone.UTC)
 
   /* step 0: transform the query string into a Matchers tree */
-  val unlinkedQuery = buildQueryMatchers(createQuery.query, store)
+  // FIXME: pass current fields map
+  val unlinkedQuery = buildQueryMatchers(createQuery.query, Map.empty)
 
   /* start the FSM */
   startWith(WaitingForMatcherEstimates, QueryData(unlinkedQuery))
@@ -73,8 +72,8 @@ object Query {
    * @param qs
    * @return
    */
-  def buildQueryMatchers(qs: String, store: Store): Option[Matchers] = {
-    parseSubjectOrGroup(parseQueryString(qs).query, store)
+  def buildQueryMatchers(qs: String, fields: Map[FieldIdentifier,Field]): Option[Matchers] = {
+    parseSubjectOrGroup(parseQueryString(qs).query, fields)
   }
 
   /**
@@ -83,22 +82,22 @@ object Query {
    * @param subjectOrGroup
    * @return
    */
-  def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup, store: Store): Option[Matchers] = {
+  def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup, fields: Map[FieldIdentifier,Field]): Option[Matchers] = {
     subjectOrGroup match {
       case Left(Subject(value, fieldName, fieldType)) =>
         val _fieldName = fieldName.getOrElse("message")
         val _fieldType = fieldType.getOrElse(EventValueType.TEXT)
-        store.fieldsByIdentifer.get(FieldIdentifier(_fieldName, _fieldType)) match {
+        fields.get(FieldIdentifier(_fieldName, _fieldType)) match {
           case Some(field) =>
             Some(new TermMatcher[String](field, value))
           case missing =>
             None
         }
       case Right(AndGroup(children)) =>
-        val andMatcher = new AndMatcher(children map { child => parseSubjectOrGroup(child, store) } flatten)
+        val andMatcher = new AndMatcher(children map { child => parseSubjectOrGroup(child, fields) } flatten)
         if (andMatcher.children.isEmpty) None else Some(andMatcher)
       case Right(OrGroup(children)) =>
-        val orMatcher = new OrMatcher(children map { child => parseSubjectOrGroup(child, store) } flatten)
+        val orMatcher = new OrMatcher(children map { child => parseSubjectOrGroup(child, fields) } flatten)
         if (orMatcher.children.isEmpty) None else Some(orMatcher)
       case Right(unknown) =>
         throw new Exception("unknown group type " + unknown.toString)

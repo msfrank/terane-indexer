@@ -1,32 +1,83 @@
 package com.syntaxjockey.terane.indexer.metadata
 
+import akka.actor.{Actor, ActorLogging}
 import java.util.UUID
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import org.joda.time.DateTime
-import com.syntaxjockey.terane.indexer.bier.EventValueType
+import scala.collection.JavaConversions._
+import org.joda.time.{DateTimeZone, DateTime}
+import scala.concurrent.Future
+import akka.pattern.pipe
 
-trait StoreManager {
+/**
+ * + namespace: String
+ *  + "stores"
+ *    + store: String -> id: UUIDLike
+ *      - "created" -> Long
+ *      - "count" -> UUID
+ *      + "fields"
+ */
+class StoreManager(zk: ZookeeperClient) extends Actor with ActorLogging {
   import StoreManager._
 
-  private val storesById = scala.collection.mutable.HashMap[UUID,Store]()
-  private val storesByName = scala.collection.mutable.HashMap[String,Store]()
+  val config = context.system.settings.config.getConfig("terane.zookeeper")
+  import context.dispatcher
 
-  def getStore(id: UUID): Option[Store] = storesById.get(id)
+  var stores: StoresChanged = _
+  getStores pipeTo self
 
-  def getStore(name: String): Option[Store] = storesByName.get(name)
+  log.debug("started {}", self.path.name)
 
-  def putStore(store: Store) {
-    storesById.put(store.id, store)
-    storesByName.put(store.storeName, store)
+  def receive = {
+
+    /* the getStores future has returned with the current stores list */
+    case _stores: StoresChanged =>
+      stores = _stores
+      context.parent ! _stores
+
+    case CreateStore(name) =>
+      val path = "/stores/" + name
+      val id = UUID.randomUUID()
+      val created = DateTime.now(DateTimeZone.UTC)
+      zk.client.inTransaction()
+        .create().forPath(path)
+          .and()
+        .create().forPath(path + "/fields")
+          .and()
+        .create().forPath(path + "/id", id.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
+          .and()
+        .create().forPath(path + "/created", created.getMillis.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
+          .and()
+        .commit()
   }
 
-  def removeStore(store: Store) {
-    storesById.remove(store.id)
-    storesByName.remove(store.storeName)
+  /**
+   * Asynchronously retrieve the list of stores.
+   *
+   * @return
+   */
+  def getStores = Future[StoresChanged] {
+    val znodes = zk.client.getChildren.forPath("/stores")
+    log.debug("found {} stores in /stores", znodes.length)
+    val storesById: Map[String,Store] = znodes.map { storeNode =>
+      val storePath = "/stores/" + storeNode
+      val name = storeNode
+      val id = zk.client.getData.forPath(storePath).mkString
+      val created = new DateTime(zk.client.getData.forPath(storePath + "/created").mkString.toLong, DateTimeZone.UTC)
+      val store = Store(id, name, created)
+      log.debug("found store {}", store)
+      (store.id, store)
+    }.toMap
+    val storesByName = storesById.values.map(store => (store.name, store)).toMap
+    StoresChanged(storesById, storesByName)
   }
 }
 
 object StoreManager {
-  case class Store(id: UUID, storeName: String, created: DateTime, fieldsById: Map[UUID,Field], fieldsByIdentifer: Map[FieldIdentifier,Field])
-  case class Field(id: UUID, fieldName: String, fieldType: EventValueType.Value, created: DateTime)
+
+  case class Store(id: String, name: String, created: DateTime)
+
+  sealed trait StoreOperation
+  case class CreateStore(name: String) extends StoreOperation
+
+  sealed trait StoreNotification
+  case class StoresChanged(storesById: Map[String,Store], storesByName: Map[String,Store]) extends StoreNotification
 }

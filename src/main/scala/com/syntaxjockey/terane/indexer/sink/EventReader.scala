@@ -21,6 +21,7 @@ trait EventReader extends FieldManager {
   def csKeyspace: Keyspace
   def csCluster: Cluster
 
+  /*
   def getEvent(id: UUID): Option[Event] = {
     log.debug("looking up event {}", id)
     val result = csKeyspace.prepareQuery(CassandraSink.CF_EVENTS).getKey(id).execute()
@@ -30,12 +31,7 @@ trait EventReader extends FieldManager {
     if (!columnList.isEmpty) Some(readEvent(id, columnList)) else None
   }
 
-  /**
-   *
-   * @param id
-   * @return
-   */
-  def readEvent(id: UUID, columnList: ColumnList[UUID]): Event = {
+  def readEvent(id: UUID, columnList: ColumnList[String]): Event = {
     val event = new Event(id)
     val numColumns = columnList.size()
     log.debug("event {} has {} columns", event.id, numColumns)
@@ -65,4 +61,5 @@ trait EventReader extends FieldManager {
     }
     event
   }
+  */
 }
