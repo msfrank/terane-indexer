@@ -1,6 +1,6 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{Actor, ActorLogging}
+import akka.actor.{ActorRef, Actor, ActorLogging}
 import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import com.netflix.astyanax.{Keyspace, MutationBatch}
@@ -12,13 +12,12 @@ import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
 
-class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) extends Actor with ActorLogging with CassandraRowOperations {
+class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) extends Actor with ActorLogging with CassandraRowOperations {
   import CassandraSink._
   import EventWriter._
   import FieldManager._
 
-  fieldBus.subscribe(self, classOf[FieldsChanged])
-  fieldBus.publish(GetFields(self))
+  fieldManager ! GetFields
 
   var fieldsById: Map[FieldIdentifier,Field] = Map.empty
 
@@ -28,7 +27,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
     case StoreEvent(event, attempt) =>
       buildMutation(event, keyspace) match {
         case Left(missingFields) =>
-          missingFields foreach { fieldBus.publish(_) }
+          missingFields foreach { fieldManager ! _ }
           context.parent ! RetryEvent(event, attempt + 1)
         case Right(mutation) =>
           writeEvent(mutation) match {
@@ -66,6 +65,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.text.get.id, text)
             writeTextPosting(postingsMutation, field.text.get, text, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.TEXT))
         }
@@ -76,6 +76,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
             val javaLiteral: java.util.List[java.lang.String] = literal
             row.putColumn(field.literal.get.id, javaLiteral, CassandraSink.SER_LITERAL, new java.lang.Integer(0))
             writeLiteralPosting(postingsMutation, field.literal.get, literal, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.LITERAL))
         }
@@ -85,6 +86,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.integer.get.id, integer)
             writeIntegerPosting(postingsMutation, field.integer.get, integer, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.LITERAL))
         }
@@ -94,6 +96,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.float.get.id, float)
             writeFloatPosting(postingsMutation, field.float.get, float, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.LITERAL))
         }
@@ -103,6 +106,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.datetime.get.id, datetime.toDate)
             writeDatetimePosting(postingsMutation, field.datetime.get, datetime, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.DATETIME))
         }
@@ -112,6 +116,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.address.get.id, address.getAddress)
             writeAddressPosting(postingsMutation, field.address.get, address, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.ADDRESS))
         }
@@ -121,6 +126,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) exte
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.hostname.get.id, hostname.toString)
             writeHostnamePosting(postingsMutation, field.hostname.get, hostname, event.id)
+          case Some(field) => // do nothing
           case None =>
             missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.HOSTNAME))
         }

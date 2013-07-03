@@ -60,8 +60,9 @@ class StoreManager(zk: ZookeeperClient) extends Actor with ActorLogging {
     val storesById: Map[String,Store] = znodes.map { storeNode =>
       val storePath = "/stores/" + storeNode
       val name = storeNode
-      val id = zk.client.getData.forPath(storePath).mkString
-      val created = new DateTime(zk.client.getData.forPath(storePath + "/created").mkString.toLong, DateTimeZone.UTC)
+      val id = new String(zk.client.getData.forPath(storePath), ZookeeperClient.UTF_8_CHARSET)
+      val createdString = new String(zk.client.getData.forPath(storePath + "/created"), ZookeeperClient.UTF_8_CHARSET)
+      val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
       val store = Store(id, name, created)
       log.debug("found store {}", store)
       (store.id, store)
