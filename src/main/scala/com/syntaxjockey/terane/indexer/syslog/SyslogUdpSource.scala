@@ -4,13 +4,20 @@ import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
 import akka.actor.{ActorRef, Actor, ActorLogging, Props}
 import java.net.InetSocketAddress
 import com.syntaxjockey.terane.indexer.EventRouter
+import com.typesafe.config.Config
 
-class SyslogUdpSource(eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging {
+class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging {
   import EventRouter._
   import akka.io.Udp._
   import context.system
 
-  val localAddr = new InetSocketAddress("localhost", 10514)
+  val syslogPort = config.getInt("port")
+  val syslogInterface = config.getString("interface")
+  val defaultSink = config.getString("use-sink")
+  val allowSinkRouting = config.getBoolean("allow-sink-routing")
+  val allowSinkCreate = config.getBoolean("allow-sink-creation")
+
+  val localAddr = new InetSocketAddress(syslogInterface, syslogPort)
   log.debug("attempting to bind to {}", localAddr)
   IO(Udp) ! Bind(self, localAddr)
 
@@ -21,14 +28,14 @@ class SyslogUdpSource(eventRouter: ActorRef) extends Actor with SyslogReceiver w
     case Bound(localAddr) =>
       log.debug("bound to {}", localAddr)
     case CommandFailed(b: Bind) =>
-      log.error("failed to bind to {}", b.endpoint)
+      log.error("failed to bind to {}", b.localAddress)
     case CommandFailed(command) =>
       log.error("{} command failed", command)
     case Received(data, remoteAddr) =>
       val (messages,_) = evt(data)
       for (message <- messages) {
         log.debug("received {}", message)
-        eventRouter ! StoreEvent("main", message2event(message))
+        eventRouter ! StoreEvent(defaultSink, message2event(message))
       }
   }
 }

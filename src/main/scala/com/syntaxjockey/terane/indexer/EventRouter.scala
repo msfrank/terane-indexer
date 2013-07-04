@@ -4,10 +4,12 @@ import akka.actor._
 import java.util.UUID
 import org.joda.time.DateTime
 import scala.Some
+import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.metadata.{ZookeeperClient, StoreManager}
 import com.syntaxjockey.terane.indexer.sink.{CassandraClient, CassandraSink}
 import com.syntaxjockey.terane.indexer.bier.{Query, Event}
+import com.typesafe.config.ConfigValueType
 
 class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with ActorLogging {
   import EventRouter._
@@ -18,7 +20,13 @@ class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with A
   val sinksByName = scala.collection.mutable.HashMap[String,ActorRef]()
   val queries = scala.collection.mutable.HashMap[UUID,ActorRef]()
 
-  val storeManager = context.actorOf(Props(new StoreManager(zk)), "store-manager")
+  val storeManager = context.actorOf(Props(new StoreManager(zk, cs)), "store-manager")
+
+  /* make sure all specified sinks have been created */
+  if (context.system.settings.config.hasPath("terane.sinks"))
+    context.system.settings.config.getConfig("terane.sinks").root()
+      .filter { entry => entry._2.valueType() == ConfigValueType.OBJECT }
+      .foreach { entry => storeManager ! CreateStore(entry._1) }
 
   log.debug("started {}", self.path.name)
 

@@ -15,6 +15,7 @@ import scala.util.{Failure, Success}
 import spray.http.HttpHeaders.Location
 import spray.http.HttpResponse
 import spray.http.HttpHeaders.Location
+import com.typesafe.config.Config
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -22,9 +23,8 @@ import reflect.ClassTag
 /**
  *
  */
-class HttpServer(val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
+class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
 
-  val config = context.system.settings.config.getConfig("terane.http")
   val httpPort = config.getInt("port")
   val httpInterface = config.getString("interface")
   val httpBacklog = config.getInt("backlog")

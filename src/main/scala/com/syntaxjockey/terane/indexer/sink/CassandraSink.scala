@@ -67,6 +67,7 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
 object CassandraSink {
   val FLUSH_INTERVAL = 60.seconds
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
+  val CF_META = new ColumnFamily[UUID,String]("meta", UUIDSerializer.get(), StringSerializer.get())
   val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
   val SER_LITERAL = new ListSerializer[java.lang.String](UTF8Type.instance)
 
