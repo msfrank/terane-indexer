@@ -4,6 +4,7 @@ import scala.concurrent.Future
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting, NoMoreMatches}
 import com.syntaxjockey.terane.indexer.bier.{EventValueType, Searcher, Matchers}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import java.util.UUID
 
 /**
  * Match the term of the specified type in the specified field.  This class is a
@@ -17,8 +18,11 @@ import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
  */
 case class TermMatcher[T](fieldId: FieldIdentifier, term: T) extends Matchers {
 
-  def optimizeMatcher(searcher: Searcher): Matchers = searcher.optimizeTermMatcher[T](this)
-  def getNextPosting: Future[Either[NoMoreMatches.type,Posting]] = Future.successful(Left(NoMoreMatches))
+  def nextPosting = Future.failed(new NotImplementedError("TermMatcher doesn't implement nextPosting"))
+
+  def findPosting(id: UUID) = Future.failed(new NotImplementedError("TermMatcher doesn't implement findPosting"))
+
+  def close() {}
 }
 
 object TermMatcher {

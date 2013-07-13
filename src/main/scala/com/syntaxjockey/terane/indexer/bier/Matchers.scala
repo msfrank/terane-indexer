@@ -9,10 +9,14 @@ import scala.concurrent.Future
  * All matchers must derive from this abstract class.
  */
 abstract class Matchers {
-  def getNextPosting: Future[Either[NoMoreMatches.type,Posting]]
+  import Matchers._
+  def nextPosting: Future[MatchResult]
+  def findPosting(id: UUID): Future[MatchResult]
+  def close()
 }
 
 object Matchers {
+  type MatchResult = Either[NoMoreMatches.type,Posting]
   case class Posting(id: UUID, postingMetadata: PostingMetadata)
   case object NoMoreMatches
 }

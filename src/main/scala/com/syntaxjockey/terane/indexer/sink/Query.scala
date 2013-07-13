@@ -23,6 +23,7 @@ import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldsChanged) extends Actor with ActorLogging with LoggingFSM[State,Data] {
+  import com.syntaxjockey.terane.indexer.bier.matchers._
   import Query._
   import context.dispatcher
 
@@ -35,7 +36,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     buildTerms(matchers.get, fields, keyspace) match {
       case Some(query) =>
         startWith(WaitingForRequest, WaitingForRequest(query, List.empty, 0))
-        query.getNextPosting pipeTo self
+        query.nextPosting pipeTo self
       case None =>
         startWith(FinishedQuery, EmptyQuery)
     }
@@ -56,7 +57,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
     case Event(FoundEvents(foundEvents), WaitingForRequest(query, events, numFound)) =>
       if (numFound + foundEvents.length < limit)
-        query.getNextPosting pipeTo self
+        query.nextPosting pipeTo self
       stay() using WaitingForRequest(query, events ++ foundEvents, numFound + foundEvents.length)
 
     case Event(GetEvents, WaitingForRequest(query, events, numFound)) =>
@@ -83,7 +84,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
     case Event(FoundEvents(foundEvents), ProcessingRequest(client, query, events, numFound)) =>
       if (numFound + foundEvents.length < limit)
-        query.getNextPosting pipeTo self
+        query.nextPosting pipeTo self
       stay() using ProcessingRequest(client, query, events ++ foundEvents, numFound + foundEvents.length)
 
     case Event(GetEvents, ProcessingRequest(client, query, events, numFound)) =>
@@ -103,6 +104,44 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   }
 
   initialize()
+
+  /**
+   * Recursively descend the Matchers tree replacing TermMatchers with Terms.
+   *
+   * @param matchers
+   * @return
+   */
+  def buildTerms(matchers: Matchers, fields: FieldsChanged, keyspace: Keyspace): Option[Matchers] = {
+    matchers match {
+      case TermMatcher(fieldId @ FieldIdentifier(name, EventValueType.TEXT), term: String) =>
+        fields.fieldsByIdent.get(fieldId) match {
+          case Some(field) =>
+            Some(new Term[String](fieldId, term, keyspace, field))
+          case missing =>
+            None
+        }
+      case andGroup @ AndMatcher(children) =>
+        AndMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten) match {
+          case AndMatcher(_children) if _children.isEmpty =>
+            None
+          case AndMatcher(_children) if _children.length == 1 =>
+            Some(_children.head)
+          case andMatcher: AndMatcher =>
+            Some(andMatcher)
+        }
+      case orGroup @ OrMatcher(children) =>
+        OrMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten) match {
+          case OrMatcher(_children) if _children.isEmpty =>
+            None
+          case OrMatcher(_children) if _children.length == 1 =>
+            Some(_children.head)
+          case orMatcher: OrMatcher =>
+            Some(orMatcher)
+        }
+      case unknown =>
+        throw new Exception("unknown Matcher type " + unknown.toString)
+    }
+  }
 
   /**
    * Asynchronously retrieve the specified events from cassandra.
@@ -155,8 +194,6 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 }
 
 object Query {
-  import com.syntaxjockey.terane.indexer.bier.matchers._
-
   /* query case classes */
   case object GetEvents
   case class FoundEvents(events: List[BierEvent])
@@ -165,31 +202,6 @@ object Query {
   case object DeleteQuery
   case class QueryStatistics(id: UUID, created: DateTime, state: String)
 
-  /**
-   * Recursively descend the Matchers tree replacing TermMatchers with Terms.
-   *
-   * @param matchers
-   * @return
-   */
-  def buildTerms(matchers: Matchers, fields: FieldsChanged, keyspace: Keyspace): Option[Matchers] = {
-    matchers match {
-      case TermMatcher(fieldId @ FieldIdentifier(name, EventValueType.TEXT), term: String) =>
-        fields.fieldsByIdent.get(fieldId) match {
-          case Some(field) =>
-            Some(new Term[String](fieldId, term, keyspace, field))
-          case missing =>
-            None
-        }
-      case andGroup @ AndMatcher(children) =>
-        val andMatcher = new AndMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten)
-        if (andMatcher.children.isEmpty) None else Some(andMatcher)
-      case orGroup @ OrMatcher(children) =>
-        val orMatcher = new OrMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten)
-        if (orMatcher.children.isEmpty) None else Some(orMatcher)
-      case unknown =>
-        throw new Exception("unknown Matcher type " + unknown.toString)
-    }
-  }
 
   /* our FSM states */
   sealed trait State
