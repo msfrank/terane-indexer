@@ -1,51 +1,35 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit
 import scala.collection.JavaConversions._
 import com.netflix.astyanax.Keyspace
 import scala.concurrent.{ExecutionContext, Future}
 
 import com.syntaxjockey.terane.indexer.bier.Matchers
-import com.syntaxjockey.terane.indexer.bier.Field
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldColumnFamily
+import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 
-class Term[T](override val field: Field,
-              override val term: T,
-              val keyspace: Keyspace,
-              val fcf: FieldColumnFamily) extends TermMatcher[T](field, term) {
-
+case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: Field) extends Matchers {
   import Matchers._
+
+  val limit = 100
 
   private[this] var postings = List[Posting]()
 
-  /*
-  def nextBatch: List[Posting] = {
+  def nextBatch(shard: Int): List[Posting] = {
     val query = term match {
       case text: String =>
-        val fcf = fields.getOrCreateTextField(field.fieldName)
-        val range = FieldSerializers.Text.buildRange()
-          .limit(100)
-          .greaterThanEquals(text)
-          .lessThanEquals(text)
-          .build()
-        keyspace.prepareQuery(fcf.cf)
-          .getKey(0)
-          .withColumnRange(range)
+        val range = FieldSerializers.Text.buildRange().limit(limit).greaterThanEquals(text).lessThanEquals(text).build()
+        keyspace.prepareQuery(field.text.get.cf).getKey(shard).withColumnRange(range)
     }
-    /* */
-    val result = query.execute()
-    val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
-    val postings = result.getResult.map { r =>
+    val postings = query.execute().getResult.map { r =>
       val positions = r.getValue(CassandraSink.SER_POSITIONS) map { i => i.toInt }
       Posting(r.getName.id, PostingMetadata(Some(positions)))
     }.toList
     postings
   }
 
-  override def getNextPosting: Future[Either[NoMoreMatches.type,Posting]] = {
+  def getNextPosting: Future[Either[NoMoreMatches.type,Posting]] = {
     // FIXME: shouldn't use global context
     import ExecutionContext.Implicits.global
     if (postings.size > 0) {
@@ -54,7 +38,7 @@ class Term[T](override val field: Field,
       Future.successful(Right(posting))
     } else {
       Future[Either[NoMoreMatches.type,Posting]] {
-        val batch = nextBatch
+        val batch = nextBatch(0)
         if (batch.size > 0) {
           postings = batch.tail
           Right(postings.head)
@@ -63,6 +47,4 @@ class Term[T](override val field: Field,
       }
     }
   }
-  */
-
 }

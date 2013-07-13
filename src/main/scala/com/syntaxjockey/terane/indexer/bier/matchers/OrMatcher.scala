@@ -10,8 +10,7 @@ import com.syntaxjockey.terane.indexer.bier.Matchers.NoMoreMatches
  *
  * @param children
  */
-class OrMatcher(val children: List[Matchers]) extends Matchers {
+case class OrMatcher(children: List[Matchers]) extends Matchers {
 
-  def optimizeMatcher(searcher: Searcher): Matchers = this
   def getNextPosting = Future.successful(Left(NoMoreMatches))
 }

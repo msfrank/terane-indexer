@@ -23,10 +23,15 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
   import context.dispatcher
   val config = context.system.settings.config.getConfig("terane.cassandra")
 
+  var currentFields = FieldsChanged(Map.empty, Map.empty)
   val fieldBus = new FieldBus()
+  fieldBus.subscribe(self, classOf[FieldNotification])
+
   val fieldManager = context.actorOf(Props(new FieldManager(store, keyspace, zk, fieldBus)), "field-manager")
+
   val writers = context.actorOf(Props(new EventWriter(store, keyspace, fieldManager)), "writer")
   fieldBus.subscribe(writers, classOf[FieldNotification])
+
   //val readers = context.actorOf(Props(new EventSearcher(store, keyspace, fieldManager)), "reader")
   //fieldBus.subscribe(readers, classOf[FieldNotification])
 
@@ -37,12 +42,20 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
 
   /* when unconnected we buffer events until reconnection occurs */
   when(Unconnected) {
+
+    case Event(fieldsChanged: FieldsChanged, _) =>
+      currentFields = fieldsChanged
+      stay()
+
     case Event(event: BierEvent, UnconnectedBuffer(retries)) =>
       stay() using UnconnectedBuffer(RetryEvent(event, 1) +: retries)
+
     case Event(retry: RetryEvent, UnconnectedBuffer(retries)) =>
       stay() using UnconnectedBuffer(retry +: retries)
+
     case Event(FlushRetries, _) =>
       stay()
+
     case Event(Connected, UnconnectedBuffer(retries)) =>
       self ! FlushRetries
       goto(Connected) using EventBuffer(retries, None)
@@ -50,15 +63,28 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
 
   /* when connected we send events to the event writers */
   when(Connected) {
+
+    case Event(fieldsChanged: FieldsChanged, _) =>
+      currentFields = fieldsChanged
+      stay()
+
     case Event(event: BierEvent, EventBuffer(retries, scheduledFlush)) =>
       writers ! StoreEvent(event, 1)
       stay()
+
     case Event(retry: RetryEvent, EventBuffer(retries, scheduledFlush)) =>
       stay() using EventBuffer(retry +: retries, scheduledFlush)
+
     case Event(FlushRetries, EventBuffer(retries, _)) =>
       retries.foreach(retry => writers ! StoreEvent(retry.event, retry.attempt))
       val scheduledFlush = context.system.scheduler.scheduleOnce(FLUSH_INTERVAL, self, FlushRetries)
       stay() using EventBuffer(Seq.empty, Some(scheduledFlush))
+
+    case Event(createQuery: CreateQuery, _) =>
+      val id = UUID.randomUUID()
+      context.system.actorOf(Props(new Query(id, createQuery, store, keyspace, currentFields)), "query-" + id.toString)
+      sender ! CreatedQuery(id)
+      stay()
   }
 
   initialize()
@@ -74,6 +100,8 @@ object CassandraSink {
   case class StoreEvent(event: BierEvent, attempt: Int)
   case class RetryEvent(event: BierEvent, attempt: Int)
   case object FlushRetries
+  case class CreateQuery(query: String, store: String, fields: Option[Set[String]], limit: Option[Int], reverse: Option[Boolean])
+  case class CreatedQuery(id: UUID)
 
   sealed trait State
   case object Unconnected extends State

@@ -5,9 +5,8 @@ import Keys._
 object TeraneIndexerBuild extends Build {
 
   val teraneVersion = "0.1-SNAPSHOT"
-
-  val akkaVersion = "2.2.0-RC2"
-  val sprayVersion = "1.2-M8"
+  val akkaVersion = "2.2.0"
+  val sprayVersion = "1.2-20130712"
 
   lazy val teraneIndexerBuild = Project(
     id = "terane-indexer",
@@ -17,7 +16,7 @@ object TeraneIndexerBuild extends Build {
       name := "terane-indexer",
       version := teraneVersion,
       scalaVersion := "2.10.2",
-      resolvers += "spray repo" at "http://repo.spray.io",
+      resolvers += "spray repo" at "http://nightlies.spray.io",
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
@@ -32,6 +31,7 @@ object TeraneIndexerBuild extends Build {
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",
         "nl.grons" %% "metrics-scala" % "2.2.0",
+        "com.typesafe" %% "scalalogging-log4j" % "1.0.1",
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",
         "org.scalatest" %% "scalatest" % "1.9.1" % "test",

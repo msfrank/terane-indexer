@@ -10,10 +10,8 @@ class TeraneServer(restkit.resource.Resource):
     def __init__(self, url, **kwargs):
         super(TeraneServer, self).__init__(url, **kwargs)
 
-    def create_query(self, query, stores=None, fields=None, limit=100, reverse=False):
-        body = { 'query': str(query), 'limit': int(limit), 'reverse': bool(reverse) }
-        if stores != None:
-            body['stores'] = list(stores)
+    def create_query(self, query, store, fields=None, limit=100, reverse=False):
+        body = { 'query': str(query), 'store': store, 'limit': int(limit), 'reverse': bool(reverse) }
         if fields != None:
             body['fields'] = list(fields)
         resp = self.post('/1/queries', headers=TeraneServer.headers, payload=json.dumps(body))
@@ -26,7 +24,7 @@ class TeraneServer(restkit.resource.Resource):
 
 if __name__ == "__main__":
     s = TeraneServer("http://localhost:8080")
-    created = s.create_query(' '.join(sys.argv[1:]))
+    created = s.create_query(' '.join(sys.argv[1:]), "main")
     print "created: " + pprint.pformat(created)
     events = s.retrieve_events(created['id'])
     print "retrieved: " + pprint.pformat(events)

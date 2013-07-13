@@ -5,6 +5,7 @@ import java.util.Date
 import org.joda.time.DateTime
 import org.xbill.DNS.Name
 import java.net.InetAddress
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
 class Field
 
@@ -19,6 +20,7 @@ class TextField extends Field {
     }
     positions.toMap.toSeq
   }
+  def makeValue(text: String): Seq[(String,PostingMetadata)] = parseValue(text)
 }
 
 class LiteralField extends Field {
@@ -31,30 +33,35 @@ class LiteralField extends Field {
     }
     positions.toMap.toSeq
   }
+  def makeValue(literal: String): Seq[(String,PostingMetadata)] = parseValue(List(literal))
 }
 
 class IntegerField extends Field {
   def parseValue(long: Long): Seq[(Long,PostingMetadata)] = {
     Seq((long, PostingMetadata(None)))
   }
+  def makeValue(long: String): Seq[(Long,PostingMetadata)] = parseValue(long.toLong)
 }
 
 class FloatField extends Field {
   def parseValue(double: Double): Seq[(Double,PostingMetadata)] = {
     Seq((double, PostingMetadata(None)))
   }
+  def makeValue(double: String): Seq[(Double,PostingMetadata)] = parseValue(double.toDouble)
 }
 
 class DatetimeField extends Field {
   def parseValue(datetime: DateTime): Seq[(Date,PostingMetadata)] = {
     Seq((datetime.toDate, PostingMetadata(None)))
   }
+  def makeValue(datetime: String): Seq[(Date,PostingMetadata)] = parseValue(DateTime.parse(datetime))
 }
 
 class AddressField extends Field {
   def parseValue(address: InetAddress): Seq[(Array[Byte],PostingMetadata)] = {
     Seq((address.getAddress, PostingMetadata(None)))
   }
+  def makeValue(address: String): Seq[(Array[Byte],PostingMetadata)] = parseValue(InetAddress.getByName(address))
 }
 
 class HostnameField extends Field {
@@ -68,8 +75,26 @@ class HostnameField extends Field {
     }
     positions.toMap.toSeq
   }
+  def makeValue(hostname: String): Seq[(String,PostingMetadata)] = parseValue(Name.fromString(hostname))
 }
 
 object Field {
   case class PostingMetadata(positions: Option[scala.collection.mutable.Set[Int]])
+
+  def apply(fieldId: FieldIdentifier): Field = fieldId.fieldType match {
+    case EventValueType.TEXT =>
+      new TextField()
+    case EventValueType.LITERAL =>
+      new LiteralField()
+    case EventValueType.INTEGER =>
+      new IntegerField()
+    case EventValueType.FLOAT =>
+      new FloatField()
+    case EventValueType.DATETIME =>
+      new DatetimeField()
+    case EventValueType.ADDRESS =>
+      new AddressField()
+    case EventValueType.HOSTNAME =>
+      new HostnameField()
+  }
 }

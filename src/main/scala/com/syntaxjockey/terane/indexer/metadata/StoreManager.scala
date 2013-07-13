@@ -26,7 +26,7 @@ class StoreManager(zk: ZookeeperClient, cs: CassandraClient) extends Actor with 
   val config = context.system.settings.config.getConfig("terane.zookeeper")
   import context.dispatcher
 
-  var stores: StoresChanged = _
+  var stores: StoresChanged = StoresChanged(Map.empty, Map.empty)
   getStores pipeTo self
 
   log.debug("started {}", self.path.name)

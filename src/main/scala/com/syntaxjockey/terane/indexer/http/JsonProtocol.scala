@@ -5,6 +5,8 @@ import spray.json._
 import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.Event
 import org.joda.time.DateTime
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
+import com.syntaxjockey.terane.indexer.sink.Query.{QueryStatistics, DeleteQuery}
 
 object JsonProtocol extends DefaultJsonProtocol {
   import EventRouter._
@@ -46,8 +48,6 @@ object JsonProtocol extends DefaultJsonProtocol {
   /* convert query case classes */
   //implicit val ListQueriesResponseFormat = jsonFormat1(ListQueriesResponse.apply)
   implicit val CreateQueryFormat = jsonFormat5(CreateQuery.apply)
-  implicit val CreateQueryResponseFormat = jsonFormat1(CreateQueryResponse.apply)
-  implicit val DescribeQueryResponseFormat = jsonFormat3(DescribeQueryResponse.apply)
-  implicit val DeleteQueryFormat = jsonFormat1(DeleteQuery.apply)
-
+  implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
+  implicit val QueryStatisticsFormat = jsonFormat3(QueryStatistics.apply)
 }

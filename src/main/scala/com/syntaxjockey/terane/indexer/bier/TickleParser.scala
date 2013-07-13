@@ -1,6 +1,10 @@
 package com.syntaxjockey.terane.indexer.bier
 
 import scala.util.parsing.combinator.syntactical._
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher, TermMatcher}
+import java.util.Date
+import org.xbill.DNS.Name
 
 /**
  * Tickle EBNF Grammar is as follows:
@@ -81,12 +85,69 @@ class TickleParser extends StandardTokenParsers {
 object TickleParser {
 
   private val parser = new TickleParser()
+  private val textParser = new TextField()
+  private val literalParser = new LiteralField()
+  private val integerParser = new IntegerField()
+  private val floatParser = new FloatField()
+  private val datetimeParser = new DatetimeField()
+  private val addressParser = new AddressField()
+  private val hostnameParser = new HostnameField()
 
   def parseQueryString(qs: String): Query = {
     val result = parser.parseAll(parser.query, qs)
     if (!result.successful)
       throw new Exception("parsing was unsuccessful")
     result.get
+  }
+
+  /**
+   * Given a raw query string, produce Matchers tree.
+   *
+   * @param qs
+   * @return
+   */
+  def buildMatchers(qs: String): Option[Matchers] = {
+    parseSubjectOrGroup(parseQueryString(qs).query)
+  }
+
+  /**
+   * Recursively descend the syntax tree and build a Matchers tree.
+   *
+   * @param subjectOrGroup
+   * @return
+   */
+  def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup): Option[Matchers] = {
+    subjectOrGroup match {
+      case Left(Subject(value, fieldName, fieldType)) =>
+        val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(EventValueType.TEXT))
+        val terms: List[Matchers] = fieldId.fieldType match {
+          case EventValueType.TEXT =>
+            textParser.makeValue(value).map(v => new TermMatcher[String](fieldId, v._1)).toList
+          case EventValueType.LITERAL =>
+            literalParser.makeValue(value).map(v => new TermMatcher[String](fieldId, v._1)).toList
+          case EventValueType.INTEGER =>
+            integerParser.makeValue(value).map(v => new TermMatcher[Long](fieldId, v._1)).toList
+          case EventValueType.FLOAT =>
+            floatParser.makeValue(value).map(v => new TermMatcher[Double](fieldId, v._1)).toList
+          case EventValueType.DATETIME =>
+            datetimeParser.makeValue(value).map(v => new TermMatcher[Date](fieldId, v._1)).toList
+          case EventValueType.HOSTNAME =>
+            hostnameParser.makeValue(value).map(v => new TermMatcher[String](fieldId, v._1)).toList
+          case EventValueType.ADDRESS =>
+            addressParser.makeValue(value).map(v => new TermMatcher[Array[Byte]](fieldId, v._1)).toList
+          case unknown =>
+            throw new Exception("unknown value type " + unknown.toString)
+        }
+        Some(new AndMatcher(terms))
+      case Right(AndGroup(children)) =>
+        val andMatcher = new AndMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
+        if (andMatcher.children.isEmpty) None else Some(andMatcher)
+      case Right(OrGroup(children)) =>
+        val orMatcher = new OrMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
+        if (orMatcher.children.isEmpty) None else Some(orMatcher)
+      case Right(unknown) =>
+        throw new Exception("unknown group type " + unknown.toString)
+    }
   }
 
   type SubjectOrGroup = Either[Subject,Group]

@@ -9,8 +9,6 @@ import scala.concurrent.Future
  * All matchers must derive from this abstract class.
  */
 abstract class Matchers {
-
-  def optimizeMatcher(searcher: Searcher): Matchers
   def getNextPosting: Future[Either[NoMoreMatches.type,Posting]]
 }
 

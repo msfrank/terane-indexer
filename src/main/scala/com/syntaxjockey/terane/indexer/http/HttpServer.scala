@@ -11,11 +11,12 @@ import com.syntaxjockey.terane.indexer.EventRouter
 import akka.event.LoggingAdapter
 import spray.http._
 import com.syntaxjockey.terane.indexer.bier.Event
-import scala.util.{Failure, Success}
-import spray.http.HttpHeaders.Location
 import spray.http.HttpResponse
 import spray.http.HttpHeaders.Location
 import com.typesafe.config.Config
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
+import com.syntaxjockey.terane.indexer.sink.Query.{DeleteQuery, GetEvents, QueryStatistics, DescribeQuery}
+import java.util.concurrent.TimeUnit
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -28,6 +29,7 @@ class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with A
   val httpPort = config.getInt("port")
   val httpInterface = config.getString("interface")
   val httpBacklog = config.getInt("backlog")
+  val timeout: Timeout = Timeout(config.getMilliseconds("request-timeout"), TimeUnit.MILLISECONDS)
 
   implicit val system = context.system
   implicit val dispatcher = context.dispatcher
@@ -42,7 +44,6 @@ class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with A
 }
 
 trait ApiService extends HttpService {
-  import EventRouter._
   import JsonProtocol._
   import spray.httpx.SprayJsonSupport._
   import spray.json._
@@ -50,7 +51,7 @@ trait ApiService extends HttpService {
   implicit def log: LoggingAdapter
   implicit def eventRouter: ActorRef
   implicit def executionContext = actorRefFactory.dispatcher
-  implicit val timeout: Timeout = 30.seconds
+  implicit val timeout: Timeout
 
   val routes = {
     path("1" / "queries") {
@@ -61,7 +62,7 @@ trait ApiService extends HttpService {
         entity(as[CreateQuery]) { createQuery =>
           complete {
             eventRouter.ask(createQuery).map({
-              case result: CreateQueryResponse =>
+              case result: CreatedQuery =>
                 HttpResponse(StatusCodes.Accepted,
                   HttpEntity(MediaTypes.`application/json`, result.toJson.toString()),
                   List(Location("http://localhost:8080/1/queries/" + result.id)))
@@ -70,15 +71,15 @@ trait ApiService extends HttpService {
         }
       }
     } ~
-    path("1" / "queries" / JavaUUID) { queryId =>
+    path("1" / "queries" / JavaUUID) { id =>
       get {
-        complete { eventRouter.ask(DescribeQuery(queryId)).mapTo[DescribeQueryResponse] }
+        complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).mapTo[QueryStatistics] }
       } ~
       post {
-        complete { eventRouter.ask(GetEvents(queryId)).mapTo[List[Event]] }
+        complete { actorRefFactory.actorSelection("/user/query-" + id).ask(GetEvents).mapTo[List[Event]] }
       } ~
       delete {
-        complete { eventRouter.ask(DeleteQuery(queryId)).map(result => StatusCodes.Accepted) }
+        complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DeleteQuery).map(result => StatusCodes.Accepted) }
       }
     }
   }
