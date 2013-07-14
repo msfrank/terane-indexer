@@ -8,9 +8,8 @@ import java.util.UUID
 import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.bier._
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 
 class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) extends Actor with ActorLogging with CassandraRowOperations {
   import CassandraSink._
@@ -33,7 +32,8 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
           writeEvent(mutation) match {
             case Retry =>
               context.parent ! RetryEvent(event, attempt + 1)
-            case default => // do nothing
+            case default =>
+              context.parent ! WroteEvent(event)
           }
       }
 

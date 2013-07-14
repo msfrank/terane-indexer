@@ -9,7 +9,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.Matchers
+import com.syntaxjockey.terane.indexer.bier.{EventValueType, Matchers}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
@@ -19,7 +19,7 @@ case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field:
   import Term._
 
   val fetcher = context.actorOf(Props(new TermIterator[T](this, 0)),
-    "term-%s-%s-%s".format(fieldId.fieldType.toString, fieldId.fieldName, term.toString))
+    "term-%s-%s-%d-%s".format(fieldId.fieldType.toString, fieldId.fieldName, 0, term.toString))
   implicit val timeout = Timeout(5 seconds)
 
   def nextPosting: Future[Either[NoMoreMatches.type,Posting]] = fetcher.ask(NextPosting).mapTo[Either[NoMoreMatches.type,Posting]]
@@ -41,12 +41,18 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
   import Term._
 
   val limit = 100
-  val query = term.term match {
-    case text: String =>
+  val query = term match {
+    case Term(FieldIdentifier(_, EventValueType.TEXT), text: String, _, _) =>
       val range = FieldSerializers.Text.buildRange().limit(limit).greaterThanEquals(text).lessThanEquals(text).build()
       term.keyspace.prepareQuery(term.field.text.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+    case Term(FieldIdentifier(_, EventValueType.LITERAL), literal: String, _, _) =>
+      val range = FieldSerializers.Literal.buildRange().limit(limit).greaterThanEquals(literal).lessThanEquals(literal).build()
+      term.keyspace.prepareQuery(term.field.literal.get.cf)
+        .getKey(shard)
+        .withColumnRange(range)
+    // FIXME: query all value types
   }
   var postings: List[Posting] = query.execute().getResult.map { r =>
     val positions = r.getValue(CassandraSink.SER_POSITIONS) map { i => i.toInt }

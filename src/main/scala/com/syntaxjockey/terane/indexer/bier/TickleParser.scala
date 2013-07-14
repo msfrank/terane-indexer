@@ -93,21 +93,27 @@ object TickleParser {
   private val addressParser = new AddressField()
   private val hostnameParser = new HostnameField()
 
-  def parseQueryString(qs: String): Query = {
-    val result = parser.parseAll(parser.query, qs)
-    if (!result.successful)
-      throw new Exception("parsing was unsuccessful")
-    result.get
-  }
 
   /**
-   * Given a raw query string, produce Matchers tree.
+   * Given a raw query string, produce a Matchers tree.
    *
    * @param qs
    * @return
    */
   def buildMatchers(qs: String): Option[Matchers] = {
     parseSubjectOrGroup(parseQueryString(qs).query)
+  }
+
+  /**
+   * Given a raw query string, produce a syntax tree.
+   * @param qs
+   * @return
+   */
+  def parseQueryString(qs: String): Query = {
+    val result = parser.parseAll(parser.query, qs)
+    if (!result.successful)
+      throw new Exception("parsing was unsuccessful")
+    result.get
   }
 
   /**
@@ -139,6 +145,7 @@ object TickleParser {
             throw new Exception("unknown value type " + unknown.toString)
         }
         Some(new AndMatcher(terms))
+      // FIXME: parse all value types
       case Right(AndGroup(children)) =>
         val andMatcher = new AndMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
         if (andMatcher.children.isEmpty) None else Some(andMatcher)

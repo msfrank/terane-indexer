@@ -32,9 +32,6 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
   val writers = context.actorOf(Props(new EventWriter(store, keyspace, fieldManager)), "writer")
   fieldBus.subscribe(writers, classOf[FieldNotification])
 
-  //val readers = context.actorOf(Props(new EventSearcher(store, keyspace, fieldManager)), "reader")
-  //fieldBus.subscribe(readers, classOf[FieldNotification])
-
   startWith(Connected, EventBuffer(Seq.empty, None))
   self ! FlushRetries
 
@@ -59,6 +56,10 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
     case Event(Connected, UnconnectedBuffer(retries)) =>
       self ! FlushRetries
       goto(Connected) using EventBuffer(retries, None)
+
+    // FIXME: add metric
+    case Event(_: WroteEvent, _) =>
+      stay()
   }
 
   /* when connected we send events to the event writers */
@@ -85,6 +86,10 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
       context.system.actorOf(Props(new Query(id, createQuery, store, keyspace, currentFields)), "query-" + id.toString)
       sender ! CreatedQuery(id)
       stay()
+
+    // FIXME: add metric
+    case Event(_: WroteEvent, _) =>
+      stay()
   }
 
   initialize()
@@ -99,6 +104,7 @@ object CassandraSink {
 
   case class StoreEvent(event: BierEvent, attempt: Int)
   case class RetryEvent(event: BierEvent, attempt: Int)
+  case class WroteEvent(event: BierEvent)
   case object FlushRetries
   case class CreateQuery(query: String, store: String, fields: Option[Set[String]], limit: Option[Int], reverse: Option[Boolean])
   case class CreatedQuery(id: UUID)
