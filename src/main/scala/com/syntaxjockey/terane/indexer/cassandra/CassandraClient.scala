@@ -1,4 +1,4 @@
-package com.syntaxjockey.terane.indexer.sink
+package com.syntaxjockey.terane.indexer.cassandra
 
 import org.slf4j.LoggerFactory
 import com.netflix.astyanax.impl.AstyanaxConfigurationImpl
@@ -9,7 +9,7 @@ import com.netflix.astyanax.thrift.ThriftFamilyFactory
 import com.typesafe.config.Config
 import scala.collection.JavaConversions._
 
-class CassandraClient(config: Config) {
+class CassandraClient(config: Config) extends CassandraKeyspaceOperations {
 
   private val log = LoggerFactory.getLogger(classOf[CassandraClient])
 
@@ -31,14 +31,6 @@ class CassandraClient(config: Config) {
   log.info("connecting to cluster {}", clusterName)
   context.start()
   val cluster = context.getClient
-
-  /**
-   * get a Keyspace from the client connection.
-   *
-   * @param keyspaceName
-   * @return
-   */
-  def getKeyspace(keyspaceName: String): Keyspace = cluster.getKeyspace(keyspaceName)
 
   /**
    * close the client connection.

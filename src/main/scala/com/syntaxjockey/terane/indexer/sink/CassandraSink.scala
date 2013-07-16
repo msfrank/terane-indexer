@@ -11,7 +11,7 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
-import com.syntaxjockey.terane.indexer.metadata.ZookeeperClient
+import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 
 /**
  *
@@ -105,6 +105,7 @@ object CassandraSink {
   case class StoreEvent(event: BierEvent, attempt: Int)
   case class RetryEvent(event: BierEvent, attempt: Int)
   case class WroteEvent(event: BierEvent)
+  case class WriteFailed(event: BierEvent)
   case object FlushRetries
   case class CreateQuery(query: String, store: String, fields: Option[Set[String]], limit: Option[Int], reverse: Option[Boolean])
   case class CreatedQuery(id: UUID)

@@ -1,4 +1,4 @@
-package com.syntaxjockey.terane.indexer.sink
+package com.syntaxjockey.terane.indexer.cassandra
 
 import com.netflix.astyanax.{MutationBatch, Keyspace}
 import scala.collection.JavaConversions._
@@ -11,6 +11,11 @@ import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import org.joda.time.DateTime
 import java.net.InetAddress
 import org.xbill.DNS.Name
+import com.syntaxjockey.terane.indexer.sink._
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldColumnFamily
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldColumnFamily
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 
 trait CassandraRowOperations {
 

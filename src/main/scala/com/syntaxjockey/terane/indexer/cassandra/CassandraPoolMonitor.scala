@@ -1,4 +1,4 @@
-package com.syntaxjockey.terane.indexer.sink
+package com.syntaxjockey.terane.indexer.cassandra
 
 import com.netflix.astyanax.connectionpool.{HostConnectionPool, HostStats, Host, ConnectionPoolMonitor}
 import scala.collection.JavaConversions._

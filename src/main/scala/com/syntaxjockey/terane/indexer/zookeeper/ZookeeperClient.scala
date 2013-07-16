@@ -1,4 +1,4 @@
-package com.syntaxjockey.terane.indexer.metadata
+package com.syntaxjockey.terane.indexer.zookeeper
 
 import com.typesafe.config.Config
 import com.netflix.curator.retry.ExponentialBackoffRetry

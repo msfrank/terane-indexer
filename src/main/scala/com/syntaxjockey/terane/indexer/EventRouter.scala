@@ -8,11 +8,13 @@ import org.joda.time.DateTime
 import scala.Some
 import scala.collection.JavaConversions._
 
-import com.syntaxjockey.terane.indexer.metadata.{ZookeeperClient, StoreManager}
-import com.syntaxjockey.terane.indexer.sink.{CassandraClient, CassandraSink}
+import com.syntaxjockey.terane.indexer.metadata.{StoreManager}
+import com.syntaxjockey.terane.indexer.sink.{CassandraSink}
 import com.syntaxjockey.terane.indexer.bier.Event
 import com.typesafe.config.ConfigValueType
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
+import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
+import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 
 class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with ActorLogging {
   import EventRouter._

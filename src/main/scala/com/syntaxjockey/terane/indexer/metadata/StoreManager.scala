@@ -9,8 +9,9 @@ import akka.pattern.pipe
 import com.syntaxjockey.terane.indexer.UUIDLike
 import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
-import com.syntaxjockey.terane.indexer.sink.CassandraClient
 import akka.actor.Status.Failure
+import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
+import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 
 /**
  * + namespace: String

@@ -6,9 +6,9 @@ import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.http.HttpServer
 import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
-import com.syntaxjockey.terane.indexer.metadata.ZookeeperClient
-import com.syntaxjockey.terane.indexer.sink.CassandraClient
 import scala.Some
+import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
+import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 
 /**
  * Indexer application entry point

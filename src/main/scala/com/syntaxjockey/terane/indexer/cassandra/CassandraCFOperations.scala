@@ -1,67 +1,75 @@
-package com.syntaxjockey.terane.indexer.sink
+package com.syntaxjockey.terane.indexer.cassandra
 
-import com.netflix.astyanax.ddl.SchemaChangeResult
-import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.connectionpool.OperationResult
+import com.netflix.astyanax.ddl.SchemaChangeResult
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.EventValueType
 
 trait CassandraCFOperations {
 
   implicit val keyspace: Keyspace
 
-  def createTextField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createTextField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")     // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.text.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 
-  def createLiteralField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createLiteralField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")     // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.literal.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 
-  def createIntegerField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createIntegerField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(LongType,TimeUUIDType)")     // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.integer.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 
-  def createFloatField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createFloatField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(DoubleType,TimeUUIDType)")   // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.float.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 
-  def createDatetimeField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createDatetimeField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(DateType,TimeUUIDType)")     // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.datetime.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 
-  def createAddressField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createAddressField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(BytesType,TimeUUIDType)")    // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.address.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 
-  def createHostnameField(field: Field): OperationResult[SchemaChangeResult] = {
+  def createHostnameField(fieldName: String): OperationResult[SchemaChangeResult] = {
     val opts = new java.util.HashMap[String,Object]()
+    opts.put("name", fieldName)
     opts.put("key_validation_class", "BytesType")                           // Row Key
     opts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")     // Column Key
     opts.put("default_validation_class", "BytesType")                       // Column Value
-    keyspace.createColumnFamily(field.hostname.get.cf, opts)
+    keyspace.createColumnFamily(opts)
   }
 }
