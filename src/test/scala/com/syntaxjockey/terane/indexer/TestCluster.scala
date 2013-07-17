@@ -6,18 +6,28 @@ import org.joda.time.DateTime
 
 import com.syntaxjockey.terane.indexer.sink.FieldManager.{FieldsChanged, Field, TypedFieldColumnFamily}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.{EventValueType, TextField}
+import com.syntaxjockey.terane.indexer.bier._
 
-import com.syntaxjockey.terane.indexer.sink.{FieldSerializers, StringPosting}
+import com.syntaxjockey.terane.indexer.sink._
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.netflix.astyanax.{Cluster, Keyspace}
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraCFOperations, CassandraKeyspaceOperations, CassandraClient}
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import scala.Some
+import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import scala.Some
 
 trait TestCluster {
   import TestCluster._
+
+  def getZookeeperClient = new ZookeeperClient(config.getConfig("terane.zookeeper"))
+
+  def getCassandraClient = new CassandraClient(config.getConfig("terane.cassandra"))
 
   val config = ConfigFactory.parseString(
     """
@@ -37,25 +47,53 @@ trait TestCluster {
     new ColumnFamily[java.lang.Long,StringPosting]("text_field", LongSerializer.get, FieldSerializers.Text))
   val textField = Field(textId, DateTime.now(), text = Some(textCf))
 
-  /*
-  literal: Option[TypedFieldColumnFamily[LiteralField,StringPosting]] = None,
-  integer: Option[TypedFieldColumnFamily[IntegerField,LongPosting]] = None,
-  float: Option[TypedFieldColumnFamily[FloatField,DoublePosting]] = None,
-  datetime: Option[TypedFieldColumnFamily[DatetimeField,DatePosting]] = None,
-  address: Option[TypedFieldColumnFamily[AddressField,AddressPosting]] = None,
-  hostname: Option[TypedFieldColumnFamily[HostnameField,StringPosting]] = None)
-  */
+  val literalId = FieldIdentifier("literal_field", EventValueType.LITERAL)
+  val literalCf = new TypedFieldColumnFamily(literalId.fieldName, "literal_field", 0, new LiteralField(),
+    new ColumnFamily[java.lang.Long,StringPosting]("literal_field", LongSerializer.get, FieldSerializers.Literal))
+  val literalField = Field(literalId, DateTime.now(), literal = Some(literalCf))
 
-  def getZookeeperClient = new ZookeeperClient(config.getConfig("terane.zookeeper"))
+  val integerId = FieldIdentifier("integer_field", EventValueType.INTEGER)
+  val integerCf = new TypedFieldColumnFamily(integerId.fieldName, "integer_field", 0, new IntegerField(),
+    new ColumnFamily[java.lang.Long,LongPosting]("integer_field", LongSerializer.get, FieldSerializers.Integer))
+  val integerField = Field(integerId, DateTime.now(), integer = Some(integerCf))
 
-  def getCassandraClient = new CassandraClient(config.getConfig("terane.cassandra"))
+  val floatId = FieldIdentifier("float_field", EventValueType.FLOAT)
+  val floatCf = new TypedFieldColumnFamily(floatId.fieldName, "float_field", 0, new FloatField(),
+    new ColumnFamily[java.lang.Long,DoublePosting]("float_field", LongSerializer.get, FieldSerializers.Float))
+  val floatField = Field(floatId, DateTime.now(), float = Some(floatCf))
 
+  val datetimeId = FieldIdentifier("datetime_field", EventValueType.DATETIME)
+  val datetimeCf = new TypedFieldColumnFamily(datetimeId.fieldName, "datetime_field", 0, new DatetimeField(),
+    new ColumnFamily[java.lang.Long,DatePosting]("datetime_field", LongSerializer.get, FieldSerializers.Datetime))
+  val datetimeField = Field(datetimeId, DateTime.now(), datetime = Some(datetimeCf))
+
+  val addressId = FieldIdentifier("address_field", EventValueType.ADDRESS)
+  val addressCf = new TypedFieldColumnFamily(addressId.fieldName, "address_field", 0, new AddressField(),
+    new ColumnFamily[java.lang.Long,AddressPosting]("address_field", LongSerializer.get, FieldSerializers.Address))
+  val addressField = Field(addressId, DateTime.now(), address = Some(addressCf))
+
+  val hostnameId = FieldIdentifier("hostname_field", EventValueType.HOSTNAME)
+  val hostnameCf = new TypedFieldColumnFamily(hostnameId.fieldName, "hostname_field", 0, new HostnameField(),
+    new ColumnFamily[java.lang.Long,StringPosting]("hostname_field", LongSerializer.get, FieldSerializers.Hostname))
+  val hostnameField = Field(hostnameId, DateTime.now(), hostname = Some(hostnameCf))
+
+  /**
+   *
+   * @param client
+   * @param keyspaceName
+   * @return
+   */
   def createKeyspace(client: CassandraClient, keyspaceName: String): Keyspace = {
     client.createKeyspace(keyspaceName).getResult
     val _keyspace = new _Keyspace(client.getKeyspace(keyspaceName))
     _keyspace.keyspace
   }
 
+  /**
+   *
+   * @param keyspace
+   * @param field
+   */
   def createColumnFamily(keyspace: Keyspace, field: Field) {
     val _keyspace = new _Keyspace(keyspace)
     field.fieldId match {
