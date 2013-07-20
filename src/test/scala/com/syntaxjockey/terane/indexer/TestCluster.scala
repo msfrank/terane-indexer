@@ -13,7 +13,7 @@ import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.netflix.astyanax.{Cluster, Keyspace}
-import com.syntaxjockey.terane.indexer.cassandra.{CassandraCFOperations, CassandraKeyspaceOperations, CassandraClient}
+import com.syntaxjockey.terane.indexer.cassandra.{CassandraRowOperations, CassandraCFOperations, CassandraKeyspaceOperations, CassandraClient}
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
@@ -85,7 +85,7 @@ trait TestCluster {
    */
   def createKeyspace(client: CassandraClient, keyspaceName: String): Keyspace = {
     client.createKeyspace(keyspaceName).getResult
-    val _keyspace = new _Keyspace(client.getKeyspace(keyspaceName))
+    val _keyspace = new KeyspaceWithCFOperations(client.getKeyspace(keyspaceName))
     _keyspace.keyspace
   }
 
@@ -95,26 +95,31 @@ trait TestCluster {
    * @param field
    */
   def createColumnFamily(keyspace: Keyspace, field: Field) {
-    val _keyspace = new _Keyspace(keyspace)
     field.fieldId match {
       case FieldIdentifier(name, EventValueType.TEXT) =>
-        _keyspace.createTextField(name).getResult
+        keyspace.createTextField(name).getResult
       case FieldIdentifier(name, EventValueType.LITERAL) =>
-        _keyspace.createLiteralField(name).getResult
+        keyspace.createLiteralField(name).getResult
       case FieldIdentifier(name, EventValueType.INTEGER) =>
-        _keyspace.createIntegerField(name).getResult
+        keyspace.createIntegerField(name).getResult
       case FieldIdentifier(name, EventValueType.FLOAT) =>
-        _keyspace.createFloatField(name).getResult
+        keyspace.createFloatField(name).getResult
       case FieldIdentifier(name, EventValueType.DATETIME) =>
-        _keyspace.createDatetimeField(name).getResult
+        keyspace.createDatetimeField(name).getResult
       case FieldIdentifier(name, EventValueType.ADDRESS) =>
-        _keyspace.createAddressField(name).getResult
+        keyspace.createAddressField(name).getResult
       case FieldIdentifier(name, EventValueType.HOSTNAME) =>
-        _keyspace.createHostnameField(name).getResult
+        keyspace.createHostnameField(name).getResult
     }
   }
 }
 
 object TestCluster {
-  private class _Keyspace(val keyspace: Keyspace) extends CassandraCFOperations {}
+  class ClusterWithKeyspaceOperations(val cluster: Cluster) extends CassandraKeyspaceOperations {}
+  class KeyspaceWithCFOperations(val keyspace: Keyspace) extends CassandraCFOperations {}
+  class KeyspaceWithRowOperations(val keyspace: Keyspace) extends CassandraRowOperations {}
+
+  implicit def cluster2KeyspaceOperations(cluster: Cluster): ClusterWithKeyspaceOperations = new ClusterWithKeyspaceOperations(cluster)
+  implicit def keyspace2CFOperations(keyspace: Keyspace): KeyspaceWithCFOperations = new KeyspaceWithCFOperations(keyspace)
+  implicit def keyspace2RowOperations(keyspace: Keyspace): KeyspaceWithRowOperations = new KeyspaceWithRowOperations(keyspace)
 }
