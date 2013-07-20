@@ -59,6 +59,14 @@ class TickleParser extends StandardTokenParsers {
         }
       }
       Right(AndGroup(s +: children))
+  } | "(" ~ subject ~ rep1("AND" ~ notGroup) ~ ")" ^^ {
+    case "(" ~ s ~ nots ~ ")" =>
+      val children: List[SubjectOrGroup] = nots map { not =>
+        not match {
+          case "AND" ~ subjectOrGroup => subjectOrGroup
+        }
+      }
+      Right(AndGroup(s +: children))
   } | subject ^^ { s: SubjectOrGroup => s }
 
   /* match an OR group */
@@ -66,14 +74,26 @@ class TickleParser extends StandardTokenParsers {
     case and1 ~ ands =>
       val children = ands map { and =>
         and match {
-          case "AND" ~ subjectOrGroup => subjectOrGroup
+          case "OR" ~ subjectOrGroup => subjectOrGroup
+        }
+      }
+      Right(OrGroup(and1 +: children))
+  } | "(" ~ andGroup ~ rep1("OR" ~ andGroup) ~ ")" ^^ {
+    case "(" ~ and1 ~ ands ~ ")" =>
+      val children = ands map { and =>
+        and match {
+          case "OR" ~ subjectOrGroup => subjectOrGroup
         }
       }
       Right(OrGroup(and1 +: children))
   } | andGroup ^^ { and: SubjectOrGroup => and }
 
   /* the entry point */
-  val query: Parser[Query] = orGroup ^^ (Query(_))
+  val query: Parser[Query] = orGroup ^^ {
+    case subjectOrGroup => Query(subjectOrGroup)
+  } | notGroup ^^ {
+    case subjectOrGroup => Query(subjectOrGroup)
+  }
 
   /**
    *
