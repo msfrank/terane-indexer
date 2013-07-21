@@ -20,6 +20,8 @@ case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field:
   import Term._
 
   implicit val timeout = Timeout(5 seconds)
+
+  // FIXME: create multiple iterators for each shard
   val iterator = factory.actorOf(Props(new TermIterator[T](this, 0)))
 
   def nextPosting: Future[MatchResult] = iterator.ask(NextPosting).mapTo[MatchResult]
@@ -40,43 +42,49 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
   import Matchers._
   import Term._
 
-  val limit = 100
   val query = term match {
     case Term(FieldIdentifier(_, EventValueType.TEXT), text: String, _, _) =>
-      val range = FieldSerializers.Text.buildRange().limit(limit).greaterThanEquals(text).lessThanEquals(text).build()
+      val range = FieldSerializers.Text.buildRange().greaterThanEquals(text).lessThanEquals(text).build()
       term.keyspace.prepareQuery(term.field.text.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case Term(FieldIdentifier(_, EventValueType.LITERAL), literal: String, _, _) =>
-      val range = FieldSerializers.Literal.buildRange().limit(limit).greaterThanEquals(literal).lessThanEquals(literal).build()
+      val range = FieldSerializers.Literal.buildRange().greaterThanEquals(literal).lessThanEquals(literal).build()
       term.keyspace.prepareQuery(term.field.literal.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case Term(FieldIdentifier(_, EventValueType.INTEGER), integer: Long, _, _) =>
-      val range = FieldSerializers.Integer.buildRange().limit(limit).greaterThanEquals(integer).lessThanEquals(integer).build()
+      val range = FieldSerializers.Integer.buildRange().greaterThanEquals(integer).lessThanEquals(integer).build()
       term.keyspace.prepareQuery(term.field.integer.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case Term(FieldIdentifier(_, EventValueType.FLOAT), float: Double, _, _) =>
-      val range = FieldSerializers.Float.buildRange().limit(limit).greaterThanEquals(float).lessThanEquals(float).build()
+      val range = FieldSerializers.Float.buildRange().greaterThanEquals(float).lessThanEquals(float).build()
       term.keyspace.prepareQuery(term.field.float.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case Term(FieldIdentifier(_, EventValueType.DATETIME), datetime: Date, _, _) =>
-      val range = FieldSerializers.Datetime.buildRange().limit(limit).greaterThanEquals(datetime).lessThanEquals(datetime).build()
+      val range = FieldSerializers.Datetime.buildRange().greaterThanEquals(datetime).lessThanEquals(datetime).build()
       term.keyspace.prepareQuery(term.field.datetime.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case Term(FieldIdentifier(_, EventValueType.ADDRESS), address: Array[Byte], _, _) =>
-      val range = FieldSerializers.Address.buildRange().limit(limit).greaterThanEquals(address).lessThanEquals(address).build()
+      val range = FieldSerializers.Address.buildRange().greaterThanEquals(address).lessThanEquals(address).build()
       term.keyspace.prepareQuery(term.field.address.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case Term(FieldIdentifier(_, EventValueType.HOSTNAME), hostname: String, _, _) =>
-      val range = FieldSerializers.Hostname.buildRange().limit(limit).greaterThanEquals(hostname).lessThanEquals(hostname).build()
+      val range = FieldSerializers.Hostname.buildRange().greaterThanEquals(hostname).lessThanEquals(hostname).build()
       term.keyspace.prepareQuery(term.field.hostname.get.cf)
         .getKey(shard)
         .withColumnRange(range)
+        .autoPaginate(true)
     case unknown => throw new Exception("failed to iterate " + term.toString)
   }
   var postings: List[BierPosting] = query.execute().getResult.map { result =>

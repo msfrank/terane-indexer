@@ -184,9 +184,13 @@ object TickleParser {
   def liftMatchers(matchers: Option[Matchers]): Option[Matchers] = {
     matchers match {
       case andMatcher @ Some(AndMatcher(children)) =>
-        if (children.length == 1) Some(children.head) else andMatcher
+        if (children.isEmpty)
+          None
+        else if (children.length == 1) Some(children.head) else andMatcher
       case orMatcher @ Some(OrMatcher(children)) =>
-        if (children.length == 1) Some(children.head) else orMatcher
+        if (children.isEmpty)
+          None
+        else if (children.length == 1) Some(children.head) else orMatcher
       case other: Some[Matchers] =>
         other
       case None =>

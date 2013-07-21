@@ -1,6 +1,7 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.Some
 import scala.collection.JavaConversions._
 import akka.actor._
@@ -9,7 +10,7 @@ import com.netflix.astyanax.Keyspace
 import org.joda.time.{DateTimeZone, DateTime}
 import com.netflix.astyanax.model.ColumnList
 import org.xbill.DNS.Name
-import java.util.UUID
+import java.util.{Date, UUID}
 import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
@@ -29,18 +30,24 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
   val created = DateTime.now(DateTimeZone.UTC)
   val limit = createQuery.limit.getOrElse(100)
-  val matchers = TickleParser.buildMatchers(createQuery.query)
+  val reapingInterval = 5.minutes
+  val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
 
   /* get term estimates and possibly reorder the query */
-  if (matchers.isDefined) {
-    buildTerms(matchers.get, fields, keyspace) match {
-      case Some(query) =>
-        startWith(WaitingForRequest, WaitingForRequest(query, List.empty, 0))
-        query.nextPosting pipeTo self
-      case None =>
-        startWith(FinishedQuery, EmptyQuery)
-    }
-  } else startWith(FinishedQuery, EmptyQuery)
+  maybeMatchers match {
+    case Some(matchers) =>
+      buildTerms(matchers, fields, keyspace) match {
+        case Some(query) =>
+          startWith(WaitingForRequest, WaitingForRequest(query, List.empty, 0))
+          query.nextPosting pipeTo self
+        case None =>
+          startWith(FinishedQuery, EmptyQuery)
+          scheduleDelete()
+      }
+    case None =>
+      startWith(FinishedQuery, EmptyQuery)
+      scheduleDelete()
+  }
 
   when(WaitingForRequest) {
 
@@ -49,6 +56,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
       stay()
 
     case Event(Left(NoMoreMatches), WaitingForRequest(query, events, numFound)) =>
+      query.close()
       stay() using FinishedRequest(events)
 
     case Event(Right(BierPosting(eventId, _)), WaitingForRequest(query, events, numFound)) =>
@@ -66,6 +74,15 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     case Event(GetEvents, FinishedRequest(events)) =>
       self ! SendEvents
       goto(SendingRequest) using SendingRequest(sender, events)
+
+    case Event(DeleteQuery, WaitingForRequest(query, _, _)) =>
+      query.close()
+      self forward DeleteQuery
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
+
+    case Event(DeleteQuery, FinishedRequest(_)) =>
+      self forward DeleteQuery
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
   }
 
   when(ProcessingRequest) {
@@ -76,6 +93,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
     case Event(Left(NoMoreMatches), ProcessingRequest(client, query, events, numFound)) =>
       self ! SendEvents
+      query.close()
       goto(SendingRequest) using SendingRequest(client, events)
 
     case Event(Right(BierPosting(eventId, _)), ProcessingRequest(client, query, events, numFound)) =>
@@ -89,17 +107,37 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
     case Event(GetEvents, ProcessingRequest(client, query, events, numFound)) =>
       stay()
+
+    case Event(DeleteQuery, ProcessingRequest(_, query, _, _)) =>
+      query.close()
+      self forward DeleteQuery
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
+
   }
 
   when(SendingRequest) {
+
+    case Event(DescribeQuery, _) =>
+      sender ! QueryStatistics(id, created, "Sending request")
+      stay()
+
     case Event(SendEvents, SendingRequest(client, events)) =>
       client ! events
       goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), events.length)
+
+    case Event(DeleteQuery, _) =>
+      self forward DeleteQuery
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
   }
 
   when(FinishedQuery) {
+
+    case Event(DescribeQuery, _) =>
+      sender ! QueryStatistics(id, created, "Finished query")
+      stay()
+
     case Event(DeleteQuery, finishedQuery: FinishedQuery) =>
-      context.stop(self)
+      scheduleDelete()
       stay()
   }
 
@@ -114,14 +152,30 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    */
   def buildTerms(matchers: Matchers, fields: FieldsChanged, keyspace: Keyspace): Option[Matchers] = {
     matchers match {
-      case TermMatcher(fieldId @ FieldIdentifier(name, EventValueType.TEXT), term: String) =>
+      case termMatcher @ TermMatcher(fieldId: FieldIdentifier, _) =>
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
-            Some(new Term[String](fieldId, term, keyspace, field))
+            termMatcher match {
+              case TermMatcher(FieldIdentifier(_, EventValueType.TEXT), text: String) =>
+                Some(new Term[String](fieldId, text, keyspace, field))
+              case TermMatcher(FieldIdentifier(_, EventValueType.LITERAL), literal: String) =>
+                Some(new Term[String](fieldId, literal, keyspace, field))
+              case TermMatcher(FieldIdentifier(_, EventValueType.INTEGER), integer: Long) =>
+                Some(new Term[Long](fieldId, integer, keyspace, field))
+              case TermMatcher(FieldIdentifier(_, EventValueType.FLOAT), float: Double) =>
+                Some(new Term[Double](fieldId, float, keyspace, field))
+              case TermMatcher(FieldIdentifier(_, EventValueType.DATETIME), datetime: Date) =>
+                Some(new Term[Date](fieldId, datetime, keyspace, field))
+              case TermMatcher(FieldIdentifier(_, EventValueType.ADDRESS), address: Array[Byte]) =>
+                Some(new Term[Array[Byte]](fieldId, address, keyspace, field))
+              case TermMatcher(FieldIdentifier(_, EventValueType.HOSTNAME), hostname: String) =>
+                Some(new Term[String](fieldId, hostname, keyspace, field))
+              case unknown =>
+                throw new Exception("unknown field type or value type for " + termMatcher.toString)
+            }
           case missing =>
             None
         }
-      // FIXME: build terms for all event value types
       case andGroup @ AndMatcher(children) =>
         AndMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten) match {
           case AndMatcher(_children) if _children.isEmpty =>
@@ -192,6 +246,13 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
       }
     }
     event
+  }
+
+  /**
+   * Schedule the query to be destroyed at some point in the future
+   */
+  def scheduleDelete() {
+    context.system.scheduler.scheduleOnce(reapingInterval, self, PoisonPill)
   }
 }
 
