@@ -106,7 +106,8 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   initialize()
 
   /**
-   * Recursively descend the Matchers tree replacing TermMatchers with Terms.
+   * Recursively descend the Matchers tree replacing TermMatchers with Terms and removing
+   * leaves and branches if they are not capable or returning any matches.
    *
    * @param matchers
    * @return
@@ -120,6 +121,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
           case missing =>
             None
         }
+      // FIXME: build terms for all event value types
       case andGroup @ AndMatcher(children) =>
         AndMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten) match {
           case AndMatcher(_children) if _children.isEmpty =>

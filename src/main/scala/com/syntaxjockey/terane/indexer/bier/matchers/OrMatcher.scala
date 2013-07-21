@@ -1,6 +1,6 @@
 package com.syntaxjockey.terane.indexer.bier.matchers
 
-import com.syntaxjockey.terane.indexer.bier.{Searcher, Matchers}
+import com.syntaxjockey.terane.indexer.bier.{Matchers}
 import scala.concurrent.Future
 import com.syntaxjockey.terane.indexer.bier.Matchers.NoMoreMatches
 import java.util.UUID

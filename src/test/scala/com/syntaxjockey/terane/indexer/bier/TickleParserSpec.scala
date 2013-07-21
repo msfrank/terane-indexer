@@ -8,6 +8,11 @@ import com.syntaxjockey.terane.indexer.bier.TickleParser.AndGroup
 import com.syntaxjockey.terane.indexer.bier.TickleParser.Query
 import com.syntaxjockey.terane.indexer.bier.TickleParser.Subject
 import com.syntaxjockey.terane.indexer.bier.TickleParser.OrGroup
+import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import org.joda.time.{DateTimeZone, DateTime}
+import org.xbill.DNS.{Name, Address}
+import java.net.InetAddress
 
 class TickleParserSpec extends WordSpec with MustMatchers {
 
@@ -26,6 +31,39 @@ class TickleParserSpec extends WordSpec with MustMatchers {
     "parse a qualified subject with a field name and type" in {
       TickleParser.parseQueryString("fieldname[text]=foobar") must be(
         Query(Left(Subject("foobar", Some("fieldname"), Some(EventValueType.TEXT)))))
+    }
+
+    "parse a bare quoted subject" in {
+      TickleParser.parseQueryString(
+        """
+          |"hello, world!"
+        """.stripMargin) must be(
+        Query(
+          Left(Subject("hello, world!", None, None))
+        )
+      )
+    }
+
+    "parse a quoted subject with a field name" in {
+      TickleParser.parseQueryString(
+        """
+          |fieldname="hello, world!"
+        """.stripMargin) must be(
+        Query(
+          Left(Subject("hello, world!", Some("fieldname"), None))
+        )
+      )
+    }
+
+    "parse a quoted subject with a field name and type" in {
+      TickleParser.parseQueryString(
+        """
+          |fieldname[text]="hello, world!"
+        """.stripMargin) must be(
+        Query(
+          Left(Subject("hello, world!", Some("fieldname"), Some(EventValueType.TEXT)))
+        )
+      )
     }
 
     "parse an AND group" in {
@@ -60,7 +98,7 @@ class TickleParserSpec extends WordSpec with MustMatchers {
       )
     }
 
-    "parse nested groups with parentheses" in {
+    "parse nested OR group with parentheses" in {
       TickleParser.parseQueryString("foo AND (bar OR baz)") must be(
         Query(
           Right(AndGroup(List(
@@ -72,6 +110,9 @@ class TickleParserSpec extends WordSpec with MustMatchers {
           )))
         )
       )
+    }
+
+    "parse nested AND group with parentheses" in {
       TickleParser.parseQueryString("(foo AND bar) OR baz") must be(
         Query(
           Right(OrGroup(List(
@@ -85,7 +126,7 @@ class TickleParserSpec extends WordSpec with MustMatchers {
       )
     }
 
-    "parse nested groups without parentheses using operator precedence" in {
+    "parse trailing AND group without parentheses using operator precedence" in {
       TickleParser.parseQueryString("foo OR bar AND baz") must be(
         Query(
           Right(OrGroup(List(
@@ -97,6 +138,9 @@ class TickleParserSpec extends WordSpec with MustMatchers {
           )))
         )
       )
+    }
+
+    "parse leading AND group without parentheses using operator precedence" in {
       TickleParser.parseQueryString("foo AND bar OR baz") must be(
         Query(
           Right(OrGroup(List(
@@ -107,6 +151,84 @@ class TickleParserSpec extends WordSpec with MustMatchers {
             Left(Subject("baz", None, None))
           )))
         )
+      )
+    }
+
+    "parse a text value with a single term" in {
+      TickleParser.buildMatchers("fieldname[text]=foo") must be(
+        Some(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "foo"))
+      )
+    }
+
+    "parse a text value with multiple terms" in {
+      TickleParser.buildMatchers(
+        """
+          |fieldname[text]="foo bar baz"
+        """.stripMargin) must be(
+        Some(
+          AndMatcher(List(
+            TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "foo"),
+            TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "bar"),
+            TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "baz")
+          ))
+        )
+      )
+    }
+
+    "parse a literal value" in {
+      TickleParser.buildMatchers(
+        """
+          |fieldname[literal]="foo bar baz"
+        """.stripMargin) must be(
+        Some(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.LITERAL), "foo bar baz"))
+      )
+    }
+
+    "parse an integer value" in {
+      TickleParser.buildMatchers("fieldname[integer]=42") must be(
+        Some(TermMatcher[Long](FieldIdentifier("fieldname", EventValueType.INTEGER), 42L))
+      )
+    }
+
+    "parse a quoted float value" in {
+      TickleParser.buildMatchers(
+        """
+          |fieldname[float]="3.14159"
+        """.stripMargin) must be(
+        Some(TermMatcher[Double](FieldIdentifier("fieldname", EventValueType.FLOAT), 3.14159))
+      )
+    }
+
+    "parse an unquoted float value" in {
+      TickleParser.buildMatchers("fieldname[float]=3.14159") must be(
+        Some(TermMatcher[Double](FieldIdentifier("fieldname", EventValueType.FLOAT), 3.14159))
+      )
+    }
+
+    "parse a quoted datetime value" in {
+      val datetime = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC)
+      TickleParser.buildMatchers(
+        """
+          |fieldname[datetime]="1994-11-05T08:15:30Z"
+        """.stripMargin) must be(
+        Some(TermMatcher[DateTime](FieldIdentifier("fieldname", EventValueType.DATETIME), datetime))
+      )
+    }
+
+    "parse a quoted IPv4 address value" in {
+      val address = Address.getByAddress("127.0.0.1")
+      TickleParser.buildMatchers(
+        """
+          |fieldname[address]="127.0.0.1"
+        """.stripMargin) must be(
+        Some(TermMatcher[InetAddress](FieldIdentifier("fieldname", EventValueType.ADDRESS), address))
+      )
+    }
+
+    "parse a hostname value" in {
+      val hostname = Name.fromString("com")
+      TickleParser.buildMatchers("fieldname[hostname]=com") must be(
+        Some(TermMatcher[Name](FieldIdentifier("fieldname", EventValueType.HOSTNAME), hostname))
       )
     }
   }

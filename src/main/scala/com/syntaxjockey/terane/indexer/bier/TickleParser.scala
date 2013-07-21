@@ -143,29 +143,27 @@ object TickleParser {
    * @return
    */
   def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup): Option[Matchers] = {
-    subjectOrGroup match {
+    liftMatchers(subjectOrGroup match {
       case Left(Subject(value, fieldName, fieldType)) =>
         val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(EventValueType.TEXT))
-        val terms: List[Matchers] = fieldId.fieldType match {
+        Some(fieldId.fieldType match {
           case EventValueType.TEXT =>
-            textParser.makeValue(value).map(v => new TermMatcher[String](fieldId, v._1)).toList
+            textParser.makeMatcher(fieldId, value)
           case EventValueType.LITERAL =>
-            literalParser.makeValue(value).map(v => new TermMatcher[String](fieldId, v._1)).toList
+            literalParser.makeMatcher(fieldId, value)
           case EventValueType.INTEGER =>
-            integerParser.makeValue(value).map(v => new TermMatcher[Long](fieldId, v._1)).toList
+            integerParser.makeMatcher(fieldId, value)
           case EventValueType.FLOAT =>
-            floatParser.makeValue(value).map(v => new TermMatcher[Double](fieldId, v._1)).toList
+            floatParser.makeMatcher(fieldId, value)
           case EventValueType.DATETIME =>
-            datetimeParser.makeValue(value).map(v => new TermMatcher[Date](fieldId, v._1)).toList
+            datetimeParser.makeMatcher(fieldId, value)
           case EventValueType.HOSTNAME =>
-            hostnameParser.makeValue(value).map(v => new TermMatcher[String](fieldId, v._1)).toList
+            hostnameParser.makeMatcher(fieldId, value)
           case EventValueType.ADDRESS =>
-            addressParser.makeValue(value).map(v => new TermMatcher[Array[Byte]](fieldId, v._1)).toList
+            addressParser.makeMatcher(fieldId, value)
           case unknown =>
             throw new Exception("unknown value type " + unknown.toString)
-        }
-        Some(new AndMatcher(terms))
-      // FIXME: parse all value types
+        })
       case Right(AndGroup(children)) =>
         val andMatcher = new AndMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
         if (andMatcher.children.isEmpty) None else Some(andMatcher)
@@ -174,6 +172,25 @@ object TickleParser {
         if (orMatcher.children.isEmpty) None else Some(orMatcher)
       case Right(unknown) =>
         throw new Exception("unknown group type " + unknown.toString)
+    })
+  }
+
+  /**
+   * Pull up the subtree if the group only has one matcher.
+   *
+   * @param matchers
+   * @return
+   */
+  def liftMatchers(matchers: Option[Matchers]): Option[Matchers] = {
+    matchers match {
+      case andMatcher @ Some(AndMatcher(children)) =>
+        if (children.length == 1) Some(children.head) else andMatcher
+      case orMatcher @ Some(OrMatcher(children)) =>
+        if (children.length == 1) Some(children.head) else orMatcher
+      case other: Some[Matchers] =>
+        other
+      case None =>
+        None
     }
   }
 

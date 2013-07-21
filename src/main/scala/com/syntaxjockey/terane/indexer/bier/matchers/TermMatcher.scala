@@ -2,7 +2,7 @@ package com.syntaxjockey.terane.indexer.bier.matchers
 
 import scala.concurrent.Future
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting, NoMoreMatches}
-import com.syntaxjockey.terane.indexer.bier.{EventValueType, Searcher, Matchers}
+import com.syntaxjockey.terane.indexer.bier.{EventValueType, Matchers}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import java.util.UUID
 

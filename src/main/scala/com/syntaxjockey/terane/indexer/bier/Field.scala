@@ -1,13 +1,15 @@
 package com.syntaxjockey.terane.indexer.bier
 
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import java.util.Date
 import org.joda.time.DateTime
-import org.xbill.DNS.Name
+import org.xbill.DNS.{Address, Name}
+import java.util.Date
 import java.net.InetAddress
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
-class Field
+import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
+
+abstract class Field
 
 class TextField extends Field {
   def parseValue(text: String): Seq[(String,PostingMetadata)] = {
@@ -20,7 +22,9 @@ class TextField extends Field {
     }
     positions.toMap.toSeq
   }
-  def makeValue(text: String): Seq[(String,PostingMetadata)] = parseValue(text)
+  def makeMatcher(fieldId: FieldIdentifier, text: String): Matchers = {
+    AndMatcher(parseValue(text).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 class LiteralField extends Field {
@@ -33,35 +37,51 @@ class LiteralField extends Field {
     }
     positions.toMap.toSeq
   }
-  def makeValue(literal: String): Seq[(String,PostingMetadata)] = parseValue(List(literal))
+  def makeMatcher(fieldId: FieldIdentifier, literal: String): Matchers = {
+    AndMatcher(parseValue(List(literal)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 class IntegerField extends Field {
   def parseValue(long: Long): Seq[(Long,PostingMetadata)] = {
     Seq((long, PostingMetadata(None)))
   }
-  def makeValue(long: String): Seq[(Long,PostingMetadata)] = parseValue(long.toLong)
+  def makeMatcher(fieldId: FieldIdentifier, integer: String): Matchers = {
+    AndMatcher(parseValue(integer.toLong).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 class FloatField extends Field {
   def parseValue(double: Double): Seq[(Double,PostingMetadata)] = {
     Seq((double, PostingMetadata(None)))
   }
-  def makeValue(double: String): Seq[(Double,PostingMetadata)] = parseValue(double.toDouble)
+  def makeMatcher(fieldId: FieldIdentifier, float: String): Matchers = {
+    AndMatcher(parseValue(float.toDouble).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 class DatetimeField extends Field {
   def parseValue(datetime: DateTime): Seq[(Date,PostingMetadata)] = {
     Seq((datetime.toDate, PostingMetadata(None)))
   }
-  def makeValue(datetime: String): Seq[(Date,PostingMetadata)] = parseValue(DateTime.parse(datetime))
+  def parseDatetimeString(s: String): DateTime = {
+    DateTime.parse(s)
+  }
+  def makeMatcher(fieldId: FieldIdentifier, datetime: String): Matchers = {
+    AndMatcher(parseValue(parseDatetimeString(datetime)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 class AddressField extends Field {
   def parseValue(address: InetAddress): Seq[(Array[Byte],PostingMetadata)] = {
     Seq((address.getAddress, PostingMetadata(None)))
   }
-  def makeValue(address: String): Seq[(Array[Byte],PostingMetadata)] = parseValue(InetAddress.getByName(address))
+  def parseAddressString(s: String): InetAddress = {
+    Address.getByAddress(s)
+  }
+  def makeMatcher(fieldId: FieldIdentifier, address: String): Matchers = {
+    AndMatcher(parseValue(parseAddressString(address)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 class HostnameField extends Field {
@@ -75,7 +95,12 @@ class HostnameField extends Field {
     }
     positions.toMap.toSeq
   }
-  def makeValue(hostname: String): Seq[(String,PostingMetadata)] = parseValue(Name.fromString(hostname))
+  def parseHostnameString(s: String): Name = {
+    Name.fromString(s)
+  }
+  def makeMatcher(fieldId: FieldIdentifier, hostname: String): Matchers = {
+    AndMatcher(parseValue(parseHostnameString(hostname)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  }
 }
 
 object Field {
