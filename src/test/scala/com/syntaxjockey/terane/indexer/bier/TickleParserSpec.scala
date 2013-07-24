@@ -1,7 +1,7 @@
 package com.syntaxjockey.terane.indexer.bier
 
 import org.scalatest.matchers.MustMatchers
-import org.scalatest.WordSpec
+import org.scalatest.{BeforeAndAfterAll, WordSpec}
 import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import scala.Some
 import com.syntaxjockey.terane.indexer.bier.TickleParser.AndGroup
@@ -13,8 +13,18 @@ import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import org.joda.time.{DateTimeZone, DateTime}
 import org.xbill.DNS.{Name, Address}
 import java.net.InetAddress
+import akka.actor.ActorSystem
+import akka.testkit.{ImplicitSender, TestKit}
 
-class TickleParserSpec extends WordSpec with MustMatchers {
+class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfterAll {
+
+  // magic
+  def this() = this(ActorSystem("TickleParserSpec"))
+
+  // shutdown the actor system
+  override def afterAll() {
+    TestKit.shutdownActorSystem(system)
+  }
 
   "A TickleParser" must {
 

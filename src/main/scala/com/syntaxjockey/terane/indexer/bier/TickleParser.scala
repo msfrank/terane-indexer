@@ -5,6 +5,7 @@ import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher, TermMatcher}
 import java.util.Date
 import org.xbill.DNS.Name
+import akka.actor.ActorRefFactory
 
 /**
  * Tickle EBNF Grammar is as follows:
@@ -113,17 +114,6 @@ object TickleParser {
   private val addressParser = new AddressField()
   private val hostnameParser = new HostnameField()
 
-
-  /**
-   * Given a raw query string, produce a Matchers tree.
-   *
-   * @param qs
-   * @return
-   */
-  def buildMatchers(qs: String): Option[Matchers] = {
-    parseSubjectOrGroup(parseQueryString(qs).query)
-  }
-
   /**
    * Given a raw query string, produce a syntax tree.
    * @param qs
@@ -137,30 +127,44 @@ object TickleParser {
   }
 
   /**
-   * Recursively descend the syntax tree and build a Matchers tree.
+   * Given a raw query string, produce a Matchers tree.  An implicit ActorRefFactory
+   * is expected to be in scope, because some Matchers may need to use Actors for processing
+   * results.
+   *
+   * @param qs
+   * @return
+   */
+  def buildMatchers(qs: String)(implicit factory: ActorRefFactory): Option[Matchers] = {
+    parseSubjectOrGroup(parseQueryString(qs).query)
+  }
+
+  /**
+   * Recursively descend the syntax tree and build a Matchers tree.  An implicit
+   * ActorRefFactory is expected to be in scope, because some Matchers may need to use
+   * Actors for processing results.
    *
    * @param subjectOrGroup
    * @return
    */
-  def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup): Option[Matchers] = {
+  def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup)(implicit factory: ActorRefFactory): Option[Matchers] = {
     liftMatchers(subjectOrGroup match {
       case Left(Subject(value, fieldName, fieldType)) =>
         val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(EventValueType.TEXT))
         Some(fieldId.fieldType match {
           case EventValueType.TEXT =>
-            textParser.makeMatcher(fieldId, value)
+            textParser.makeMatcher(factory, fieldId, value)
           case EventValueType.LITERAL =>
-            literalParser.makeMatcher(fieldId, value)
+            literalParser.makeMatcher(factory, fieldId, value)
           case EventValueType.INTEGER =>
-            integerParser.makeMatcher(fieldId, value)
+            integerParser.makeMatcher(factory, fieldId, value)
           case EventValueType.FLOAT =>
-            floatParser.makeMatcher(fieldId, value)
+            floatParser.makeMatcher(factory, fieldId, value)
           case EventValueType.DATETIME =>
-            datetimeParser.makeMatcher(fieldId, value)
+            datetimeParser.makeMatcher(factory, fieldId, value)
           case EventValueType.HOSTNAME =>
-            hostnameParser.makeMatcher(fieldId, value)
+            hostnameParser.makeMatcher(factory, fieldId, value)
           case EventValueType.ADDRESS =>
-            addressParser.makeMatcher(fieldId, value)
+            addressParser.makeMatcher(factory, fieldId, value)
           case unknown =>
             throw new Exception("unknown value type " + unknown.toString)
         })
@@ -176,12 +180,14 @@ object TickleParser {
   }
 
   /**
-   * Pull up the subtree if the group only has one matcher.
+   * Pull up the subtree if the group only has one matcher.  An implicit ActorRefFactory
+   * is expected to be in scope, because some Matchers may need to use Actors for processing
+   * results.
    *
    * @param matchers
    * @return
    */
-  def liftMatchers(matchers: Option[Matchers]): Option[Matchers] = {
+  def liftMatchers(matchers: Option[Matchers])(implicit factory: ActorRefFactory): Option[Matchers] = {
     matchers match {
       case andMatcher @ Some(AndMatcher(children)) =>
         if (children.isEmpty)

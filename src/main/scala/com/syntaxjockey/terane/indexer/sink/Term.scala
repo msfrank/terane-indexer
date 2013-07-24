@@ -11,7 +11,7 @@ import scala.collection.JavaConversions._
 import java.util.{Date, UUID}
 
 import com.syntaxjockey.terane.indexer.bier.{EventValueType, Matchers}
-import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches, MatchResult}
+import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches, MatchResult, NextPosting}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
@@ -31,11 +31,6 @@ case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field:
   def close() {
     factory.stop(iterator)
   }
-}
-
-object Term {
-  case object NextPosting
-  case class FindPosting(id: UUID)
 }
 
 class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging {

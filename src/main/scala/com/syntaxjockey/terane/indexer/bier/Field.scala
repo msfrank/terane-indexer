@@ -8,6 +8,7 @@ import java.net.InetAddress
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
+import akka.actor.ActorRefFactory
 
 abstract class Field
 
@@ -22,8 +23,8 @@ class TextField extends Field {
     }
     positions.toMap.toSeq
   }
-  def makeMatcher(fieldId: FieldIdentifier, text: String): Matchers = {
-    AndMatcher(parseValue(text).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, text: String): Matchers = {
+    AndMatcher(parseValue(text).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -37,8 +38,8 @@ class LiteralField extends Field {
     }
     positions.toMap.toSeq
   }
-  def makeMatcher(fieldId: FieldIdentifier, literal: String): Matchers = {
-    AndMatcher(parseValue(List(literal)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, literal: String): Matchers = {
+    AndMatcher(parseValue(List(literal)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -46,8 +47,8 @@ class IntegerField extends Field {
   def parseValue(long: Long): Seq[(Long,PostingMetadata)] = {
     Seq((long, PostingMetadata(None)))
   }
-  def makeMatcher(fieldId: FieldIdentifier, integer: String): Matchers = {
-    AndMatcher(parseValue(integer.toLong).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, integer: String): Matchers = {
+    AndMatcher(parseValue(integer.toLong).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -55,8 +56,8 @@ class FloatField extends Field {
   def parseValue(double: Double): Seq[(Double,PostingMetadata)] = {
     Seq((double, PostingMetadata(None)))
   }
-  def makeMatcher(fieldId: FieldIdentifier, float: String): Matchers = {
-    AndMatcher(parseValue(float.toDouble).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, float: String): Matchers = {
+    AndMatcher(parseValue(float.toDouble).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -67,8 +68,8 @@ class DatetimeField extends Field {
   def parseDatetimeString(s: String): DateTime = {
     DateTime.parse(s)
   }
-  def makeMatcher(fieldId: FieldIdentifier, datetime: String): Matchers = {
-    AndMatcher(parseValue(parseDatetimeString(datetime)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, datetime: String): Matchers = {
+    AndMatcher(parseValue(parseDatetimeString(datetime)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -79,8 +80,8 @@ class AddressField extends Field {
   def parseAddressString(s: String): InetAddress = {
     Address.getByAddress(s)
   }
-  def makeMatcher(fieldId: FieldIdentifier, address: String): Matchers = {
-    AndMatcher(parseValue(parseAddressString(address)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, address: String): Matchers = {
+    AndMatcher(parseValue(parseAddressString(address)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -98,8 +99,8 @@ class HostnameField extends Field {
   def parseHostnameString(s: String): Name = {
     Name.fromString(s)
   }
-  def makeMatcher(fieldId: FieldIdentifier, hostname: String): Matchers = {
-    AndMatcher(parseValue(parseHostnameString(hostname)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)
+  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, hostname: String): Matchers = {
+    AndMatcher(parseValue(parseHostnameString(hostname)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
