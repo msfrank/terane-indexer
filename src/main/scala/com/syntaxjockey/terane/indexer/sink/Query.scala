@@ -30,7 +30,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
   val created = DateTime.now(DateTimeZone.UTC)
   val limit = createQuery.limit.getOrElse(100)
-  val reapingInterval = 5.minutes
+  val reapingInterval = 30.seconds
   val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
 
   /* get term estimates and possibly reorder the query */
@@ -38,6 +38,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     case Some(matchers) =>
       buildTerms(matchers, fields, keyspace) match {
         case Some(query) =>
+          log.debug("parsed query '{}' => {}", createQuery.query, query)
           startWith(WaitingForRequest, WaitingForRequest(query, List.empty, 0))
           query.nextPosting pipeTo self
         case None =>

@@ -2,19 +2,21 @@ package com.syntaxjockey.terane.indexer.bier
 
 import org.scalatest.matchers.MustMatchers
 import org.scalatest.{BeforeAndAfterAll, WordSpec}
-import com.syntaxjockey.terane.indexer.bier.TickleParser._
+import org.scalatest.Inside._
+import akka.actor.ActorSystem
+import akka.testkit.{ImplicitSender, TestKit}
+import org.joda.time.{DateTimeZone, DateTime}
+import org.xbill.DNS.{Name, Address}
 import scala.Some
+import java.net.InetAddress
+
+import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import com.syntaxjockey.terane.indexer.bier.TickleParser.AndGroup
 import com.syntaxjockey.terane.indexer.bier.TickleParser.Query
 import com.syntaxjockey.terane.indexer.bier.TickleParser.Subject
 import com.syntaxjockey.terane.indexer.bier.TickleParser.OrGroup
 import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import org.joda.time.{DateTimeZone, DateTime}
-import org.xbill.DNS.{Name, Address}
-import java.net.InetAddress
-import akka.actor.ActorSystem
-import akka.testkit.{ImplicitSender, TestKit}
 
 class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfterAll {
 
@@ -171,18 +173,17 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a text value with multiple terms" in {
-      TickleParser.buildMatchers(
+      val matchers = TickleParser.buildMatchers(
         """
           |fieldname[text]="foo bar baz"
-        """.stripMargin) must be(
-        Some(
-          AndMatcher(List(
-            TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "foo"),
-            TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "bar"),
-            TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "baz")
-          ))
-        )
-      )
+        """.stripMargin)
+      inside(matchers) {
+        case Some(AndMatcher(children)) =>
+          children must have length(3)
+          children must contain(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "foo").asInstanceOf[Matchers])
+          children must contain(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "bar").asInstanceOf[Matchers])
+          children must contain(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "baz").asInstanceOf[Matchers])
+      }
     }
 
     "parse a literal value" in {
@@ -217,12 +218,14 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
 
     "parse a quoted datetime value" in {
       val datetime = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC)
-      TickleParser.buildMatchers(
+      val matchers = TickleParser.buildMatchers(
         """
           |fieldname[datetime]="1994-11-05T08:15:30Z"
-        """.stripMargin) must be(
-        Some(TermMatcher[DateTime](FieldIdentifier("fieldname", EventValueType.DATETIME), datetime))
-      )
+        """.stripMargin)
+      inside(matchers) {
+        case Some(TermMatcher(FieldIdentifier("fieldname", EventValueType.DATETIME), _datetime: DateTime)) =>
+          datetime must equal(_datetime)
+      }
     }
 
     "parse a quoted IPv4 address value" in {
