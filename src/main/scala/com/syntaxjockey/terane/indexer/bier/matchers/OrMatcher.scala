@@ -36,71 +36,84 @@ case class OrMatcher(children: List[Matchers])(implicit factory: ActorRefFactory
 class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import context.dispatcher
 
-  startWith(CacheEmpty, CacheEmpty(children, List.empty))
+  val _childStates: Map[Matchers,ChildState] = children.map { child =>
+    getChildPosting(child).pipeTo(self)
+    child -> ChildState(child, None)
+  }.toMap
 
-  when(CacheFull) {
+  startWith(Initializing, Initializing(_childStates, children.length, List.empty))
 
-    case Event(NextPosting, CacheFull(activeMatchers, cache)) =>
-      sender ! Right(cache.head)
-      val leftover = cache.tail
-      if (leftover.isEmpty) {
-        nextBatch(activeMatchers).pipeTo(self)
-        goto(CacheEmpty) using CacheEmpty(activeMatchers, List.empty)
-      } else stay() using CacheFull(activeMatchers, leftover)
+  when(Initializing) {
 
-    case Event(FindPosting(id), _) =>
+    case Event(childState: ChildState, Initializing(childStates, numWaiting, deferredRequests)) if numWaiting == 1 =>
+      self ! childState
+      goto(Active) using Active(childStates, inProgress = true, deferredRequests)
+
+    case Event(childState: ChildState, Initializing(childStates, numWaiting, deferredRequests)) if numWaiting > 1 =>
+      val currState = if (childState.result.isDefined) childStates ++ Map(childState.child -> childState) else childStates
+      stay() using Initializing(currState, numWaiting - 1, deferredRequests)
+
+    case Event(ChildState(child, None), Initializing(childStates, numWaiting, deferredRequests)) if numWaiting > 1 =>
+      stay() using Initializing(childStates, numWaiting - 1, deferredRequests)
+
+    case Event(NextPosting, Initializing(childStates, numWaiting, deferredRequests)) =>
+      stay() using Initializing(childStates, numWaiting, deferredRequests :+ sender)
+
+    case Event(FindPosting(id), initializing: Initializing) =>
       findPosting(id).pipeTo(sender)
       stay()
   }
 
-  when(CacheEmpty) {
+  when(Active) {
 
-    case Event(NextPosting, CacheEmpty(activeMatchers, _)) if activeMatchers.isEmpty =>
+    case Event(NextPosting, Active(childStates, _, _)) if childStates.isEmpty =>
       sender ! Left(NoMoreMatches)
       stay()
 
-    case Event(NextPosting, CacheEmpty(activeMatchers, deferredRequests)) =>
-      if (deferredRequests.isEmpty)
-        nextBatch(activeMatchers).pipeTo(self)
-      stay() using CacheEmpty(activeMatchers, deferredRequests :+ sender)
+    case Event(NextPosting, Active(childStates, true, deferredRequests)) =>
+      stay() using Active(childStates, inProgress = true, deferredRequests :+ sender)
 
-    case Event(ChildResults(results), CacheEmpty(_, deferredRequests)) if results.isEmpty =>
-      deferredRequests.foreach { deferred: ActorRef => deferred ! Left(NoMoreMatches) }
-      stay() using CacheEmpty(List.empty, List.empty)
+    case Event(NextPosting, Active(childStates, false, deferredRequests)) =>
+      val updatedRequests = deferredRequests :+ sender
+      // send smallest posting
+      val smallest = getSmallestPosting(childStates)
+      updatedRequests.head ! Right(smallest.result.get)
+      val updatedStates = childStates ++ Map(smallest.child -> ChildState(smallest.child, None))
+      // get next posting
+      getChildPosting(smallest.child).pipeTo(self)
+      stay() using Active(updatedStates, inProgress = true, updatedRequests.tail)
 
-    case Event(ChildResults(results), CacheEmpty(_, deferredRequests)) =>
-      // remove matchers from activeMatchers if they returned NoMoreMatches
-      val activeMatchers: List[Matchers] = results.map { result => result match {
-        case ChildResult(_, Left(NoMoreMatches)) =>
-          None
-        case ChildResult(child, Right(posting)) =>
-          Some(child)
-      }}.flatten
-      // remove any Left(NoMoreMatches) results
-      var postings: List[Posting] = results.map { result => result match {
-        case ChildResult(_, Left(NoMoreMatches)) =>
-          None
-        case ChildResult(_, Right(posting)) =>
-          Some(posting)
-      }}.flatten
-      // if we have more results then pending requests, then fulfill the requests and move back to CacheFull
-      if (postings.length > deferredRequests.length) {
-        deferredRequests.foreach { request =>
-          request ! Right(postings.head)
-          postings = postings.tail
-        }
-        goto(CacheFull) using CacheFull(activeMatchers, postings)
-      }
-      // otherwise fulfill as many as we can, request a new batch, and stay in the CacheEmpty state
-      else {
-        var stillDeferred: List[ActorRef] = deferredRequests
-        postings.foreach { posting =>
-          stillDeferred.head ! Right(posting)
-          stillDeferred = stillDeferred.tail
-        }
-        nextBatch(activeMatchers).pipeTo(self)
-        stay() using CacheEmpty(activeMatchers, stillDeferred)
-      }
+    case Event(ChildState(_, None), Active(childStates, _, deferredRequests)) if childStates.size <= 1 =>
+      deferredRequests.foreach(_ ! Left(NoMoreMatches))
+      stay() using Active(childStates, inProgress = false, List.empty)
+
+    case Event(ChildState(child, None), Active(childStates, _, deferredRequests)) if deferredRequests.isEmpty =>
+      stay() using Active(childStates - child, inProgress = false, List.empty)
+
+    case Event(ChildState(child, None), Active(childStates, _, deferredRequests)) =>
+      // remove child
+      var updatedStates = childStates - child
+      // send smallest posting
+      val smallest = getSmallestPosting(updatedStates)
+      deferredRequests.head ! Right(smallest.result.get)
+      updatedStates = updatedStates ++ Map(smallest.child -> ChildState(smallest.child, None))
+      // get next posting
+      getChildPosting(smallest.child).pipeTo(self)
+      stay() using Active(updatedStates, inProgress = true, List.empty)
+
+    case Event(childState @ ChildState(child, Some(posting)), Active(childStates, _, deferredRequests)) if deferredRequests.isEmpty =>
+      stay() using Active(childStates ++ Map(childState.child -> childState), inProgress = false, deferredRequests)
+
+    case Event(childState @ ChildState(child, Some(posting)), Active(childStates, _, deferredRequests)) =>
+      // update child
+      var updatedStates = childStates ++ Map(childState.child -> childState)
+      // send smallest posting
+      val smallest = getSmallestPosting(updatedStates)
+      deferredRequests.head ! Right(smallest.result.get)
+      updatedStates = updatedStates ++ Map(smallest.child -> ChildState(smallest.child, None))
+      // get next posting
+      getChildPosting(smallest.child).pipeTo(self)
+      stay() using Active(updatedStates, inProgress = true, deferredRequests.tail)
 
     case Event(FindPosting(id), _) =>
       findPosting(id).pipeTo(sender)
@@ -111,15 +124,27 @@ class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with 
 
   /**
    *
-   * @param activeMatchers
+   * @param childStates
    * @return
    */
-  def nextBatch(activeMatchers: List[Matchers]): Future[ChildResults] = {
-    val futures = activeMatchers.map { matcher =>
-      matcher.nextPosting.map(result => ChildResult(matcher, result))
+  def getSmallestPosting(childStates: Map[Matchers,ChildState]): ChildState = {
+    val sorted = childStates.values.toSeq.sortWith {
+      case (ChildState(leftChild, Some(leftPosting)), ChildState(rightChild, Some(rightPosting))) =>
+        if (leftPosting.id.toString < rightPosting.id.toString) true else false
     }
-    // convert List[Future[ChildResult]] to Future[List[ChildResult]]
-    Future.sequence(futures).map(ChildResults)
+    sorted.head
+  }
+
+  /**
+   *
+   * @param child
+   * @return
+   */
+  def getChildPosting(child: Matchers): Future[ChildState] = child.nextPosting.map {
+    case Left(NoMoreMatches) =>
+      ChildState(child, None)
+    case Right(posting: Posting) =>
+      ChildState(child, Some(posting))
   }
 
   /**
@@ -132,10 +157,10 @@ class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with 
     val futures = children.map(_.findPosting(id))
     // convert List[Future[MatchResult]] to Future[List[MatchResult]]
     Future.sequence(futures).map { matchResults: List[MatchResult] =>
-      var noMatch = true
+      var finalResult: MatchResult = Left(NoMoreMatches)
       // if any of the finders do not return NoMoreMatches, then the union succeeded, otherwise return NoMoreMatches
-      for (matchResult <- matchResults if noMatch) { if (matchResult.isRight) noMatch = false }
-      if (noMatch) Left(NoMoreMatches) else matchResults.head
+      for (matchResult <- matchResults if finalResult.isLeft) { if (matchResult.isRight) finalResult = matchResult }
+      finalResult
     }
   }
 
@@ -145,14 +170,13 @@ class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with 
 }
 
 object OrIterator {
-  case class ChildResult(child: Matchers, result: MatchResult)
-  case class ChildResults(results: List[ChildResult])
+  case class ChildState(child: Matchers, result: Option[Posting])
 
   sealed trait State
-  case object CacheEmpty extends State
-  case object CacheFull extends State
+  case object Initializing extends State
+  case object Active extends State
 
   sealed trait Data
-  case class CacheEmpty(activeMatchers: List[Matchers], deferredRequests: List[ActorRef]) extends Data
-  case class CacheFull(activeMatchers: List[Matchers], cache: List[Posting]) extends Data
+  case class Initializing(childStates: Map[Matchers,ChildState], numWaiting: Int, deferredRequests: List[ActorRef]) extends Data
+  case class Active(childStates: Map[Matchers,ChildState], inProgress: Boolean, deferredRequests: List[ActorRef]) extends Data
 }

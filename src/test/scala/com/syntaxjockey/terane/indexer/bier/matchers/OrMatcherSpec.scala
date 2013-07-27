@@ -21,42 +21,46 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
     system.shutdown()
   }
 
-  val id01 = UUID.randomUUID()
-  val id02 = UUID.randomUUID()
-  val id03 = UUID.randomUUID()
-  val id04 = UUID.randomUUID()
-  val id05 = UUID.randomUUID()
-  val id06 = UUID.randomUUID()
-  val id07 = UUID.randomUUID()
+  val ids = Seq(
+    UUID.randomUUID(),
+    UUID.randomUUID(),
+    UUID.randomUUID(),
+    UUID.randomUUID(),
+    UUID.randomUUID(),
+    UUID.randomUUID(),
+    UUID.randomUUID()
+  ).sortWith { case (left: UUID, right: UUID) =>
+      if (left.toString < right.toString) true else false
+  }
 
   "An OrMatcher" must {
 
     "return the union" in {
       val orMatcher = OrMatcher(List(
         TestTermMatcher(List(
-          Posting(id01, PostingMetadata(None)),
-          Posting(id03, PostingMetadata(None))
+          Posting(ids(0), PostingMetadata(None)),
+          Posting(ids(2), PostingMetadata(None))
         )),
         TestTermMatcher(List(
-          Posting(id02, PostingMetadata(None)),
-          Posting(id05, PostingMetadata(None))
+          Posting(ids(1), PostingMetadata(None)),
+          Posting(ids(4), PostingMetadata(None))
         ))
       ))
       inside(Await.result(orMatcher.nextPosting, 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id01)
+          id must be(ids(0))
       }
       inside(Await.result(orMatcher.nextPosting, 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id02)
+          id must be(ids(1))
       }
       inside(Await.result(orMatcher.nextPosting, 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id03)
+          id must be(ids(2))
       }
       inside(Await.result(orMatcher.nextPosting, 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id05)
+          id must be(ids(4))
       }
       Await.result(orMatcher.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
@@ -64,38 +68,38 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
     "find a Posting if it is present in any child matchers" in {
       val orMatcher = OrMatcher(List(
         TestTermMatcher(List(
-          Posting(id01, PostingMetadata(None)),
-          Posting(id03, PostingMetadata(None))
+          Posting(ids(0), PostingMetadata(None)),
+          Posting(ids(2), PostingMetadata(None))
         )),
         TestTermMatcher(List(
-          Posting(id02, PostingMetadata(None)),
-          Posting(id03, PostingMetadata(None))
+          Posting(ids(1), PostingMetadata(None)),
+          Posting(ids(2), PostingMetadata(None))
         ))
       ))
-      inside(Await.result(orMatcher.findPosting(id01), 10 seconds)) {
+      inside(Await.result(orMatcher.findPosting(ids(0)), 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id01)
+          id must be(ids(0))
       }
-      inside(Await.result(orMatcher.findPosting(id02), 10 seconds)) {
+      inside(Await.result(orMatcher.findPosting(ids(1)), 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id02)
+          id must be(ids(1))
       }
-      inside(Await.result(orMatcher.findPosting(id03), 10 seconds)) {
+      inside(Await.result(orMatcher.findPosting(ids(2)), 10 seconds)) {
         case Right(Posting(id, _)) =>
-          id must be(id03)
+          id must be(ids(2))
       }
     }
 
     "not find a Posting if it is not present in any child matchers" in {
       val orMatcher = OrMatcher(List(
         TestTermMatcher(List(
-          Posting(id01, PostingMetadata(None))
+          Posting(ids(0), PostingMetadata(None))
         )),
         TestTermMatcher(List(
-          Posting(id02, PostingMetadata(None))
+          Posting(ids(1), PostingMetadata(None))
         ))
       ))
-      Await.result(orMatcher.findPosting(id03), 10 seconds) must be(Left(NoMoreMatches))
+      Await.result(orMatcher.findPosting(ids(2)), 10 seconds) must be(Left(NoMoreMatches))
     }
   }
 }
