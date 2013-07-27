@@ -47,7 +47,7 @@ class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with 
 
     case Event(childState: ChildState, Initializing(childStates, numWaiting, deferredRequests)) if numWaiting == 1 =>
       self ! childState
-      goto(Active) using Active(childStates, inProgress = true, deferredRequests)
+      goto(Active) using Active(childStates, inProgress = true, None, deferredRequests)
 
     case Event(childState: ChildState, Initializing(childStates, numWaiting, deferredRequests)) if numWaiting > 1 =>
       val currState = if (childState.result.isDefined) childStates ++ Map(childState.child -> childState) else childStates
@@ -66,55 +66,109 @@ class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with 
 
   when(Active) {
 
-    case Event(NextPosting, Active(childStates, _, _)) if childStates.isEmpty =>
+    /**
+     * The next posting has been requested, and there are no active children.  Send NoMoreMatches
+     * to the requestor.
+     */
+    case Event(NextPosting, Active(childStates, inProgress, last, deferredRequests)) if childStates.isEmpty && deferredRequests.isEmpty =>
       sender ! Left(NoMoreMatches)
-      stay()
+      stay() using Active(childStates, inProgress, last, deferredRequests)
 
-    case Event(NextPosting, Active(childStates, true, deferredRequests)) =>
-      stay() using Active(childStates, inProgress = true, deferredRequests :+ sender)
+    /**
+     * The next posting has been requested, and the FSM is in progress.  Add the request to the tail
+     * of the requests list.
+     */
+    case Event(NextPosting, Active(childStates, true, last, deferredRequests)) =>
+      stay() using Active(childStates, inProgress = true, last, deferredRequests :+ sender)
 
-    case Event(NextPosting, Active(childStates, false, deferredRequests)) =>
+    /**
+     * The next posting has been requested, and the FSM is not in progress.  If the current
+     * smallest posting has not already been seen, then send it to the first requestor and remove
+     * the request from our pending requests list.  Next, update the state to note that we have
+     * consumed the smallest posting.  Lastly, request the next posting and mark the FSM as in
+     * progress.
+     */
+    case Event(NextPosting, Active(childStates, false, last, deferredRequests)) =>
       val updatedRequests = deferredRequests :+ sender
       // send smallest posting
       val smallest = getSmallestPosting(childStates)
-      updatedRequests.head ! Right(smallest.result.get)
+      val smallestId = smallest.result.get.id
+      if (last.isEmpty || !smallestId.equals(last.get))
+        updatedRequests.head ! Right(smallest.result.get)
       val updatedStates = childStates ++ Map(smallest.child -> ChildState(smallest.child, None))
       // get next posting
       getChildPosting(smallest.child).pipeTo(self)
-      stay() using Active(updatedStates, inProgress = true, updatedRequests.tail)
+      stay() using Active(updatedStates, inProgress = true, Some(smallestId), updatedRequests.tail)
 
-    case Event(ChildState(_, None), Active(childStates, _, deferredRequests)) if childStates.size <= 1 =>
+    /**
+     * The currently updating child has no more postings, and all other children have already
+     * been exhausted.  Send NoMoreMatches to all pending requestors, remove the child from the
+     * map of child states, and mark the FSM as not in progress.
+     */
+    case Event(ChildState(child, None), Active(childStates, _, last, deferredRequests)) if childStates.size == 1 =>
       deferredRequests.foreach(_ ! Left(NoMoreMatches))
-      stay() using Active(childStates, inProgress = false, List.empty)
+      stay() using Active(childStates - child, inProgress = false, last, List.empty)
 
-    case Event(ChildState(child, None), Active(childStates, _, deferredRequests)) if deferredRequests.isEmpty =>
-      stay() using Active(childStates - child, inProgress = false, List.empty)
+    /**
+     * The currently updating child has no more postings, and there are no pending requests.
+     * Update our map of child states by removing the exhausted child, and mark the FSM as not
+     * in progress.
+     */
+    case Event(ChildState(child, None), Active(childStates, _, last, deferredRequests)) if deferredRequests.isEmpty =>
+      stay() using Active(childStates - child, inProgress = false, last, deferredRequests)
 
-    case Event(ChildState(child, None), Active(childStates, _, deferredRequests)) =>
+    /**
+     * The currently updating child has no more postings, and there are pending requests.  First
+     * update our map of child states by removing the exhausted child.  Next, if the current
+     * smallest posting has not already been seen, then send it to the first requestor and remove
+     * the request from our pending requests list.  Lastly, request the next posting, update our
+     * state again to note that we have consumed the smallest posting, and mark the FSM as in progress.
+     */
+    case Event(ChildState(child, None), Active(childStates, _, last, deferredRequests)) if !deferredRequests.isEmpty =>
       // remove child
       var updatedStates = childStates - child
       // send smallest posting
       val smallest = getSmallestPosting(updatedStates)
-      deferredRequests.head ! Right(smallest.result.get)
+      val smallestId = smallest.result.get.id
+      val updatedRequests = if (last.isEmpty || !smallestId.equals(last.get)) {
+        deferredRequests.head ! Right(smallest.result.get)
+        deferredRequests.tail
+      } else deferredRequests
       updatedStates = updatedStates ++ Map(smallest.child -> ChildState(smallest.child, None))
       // get next posting
       getChildPosting(smallest.child).pipeTo(self)
-      stay() using Active(updatedStates, inProgress = true, List.empty)
+      stay() using Active(updatedStates, inProgress = true, last, updatedRequests)
 
-    case Event(childState @ ChildState(child, Some(posting)), Active(childStates, _, deferredRequests)) if deferredRequests.isEmpty =>
-      stay() using Active(childStates ++ Map(childState.child -> childState), inProgress = false, deferredRequests)
+    /**
+     * we have received the child update and there are no pending requests.  Update our
+     * map of child states, and mark the FSM as not in progress anymore.
+     */
+    case Event(childState @ ChildState(child, Some(posting)), Active(childStates, _, last, deferredRequests)) if deferredRequests.isEmpty =>
+      stay() using Active(childStates ++ Map(childState.child -> childState), inProgress = false, last, deferredRequests)
 
-    case Event(childState @ ChildState(child, Some(posting)), Active(childStates, _, deferredRequests)) =>
+    /**
+     * we have received the child update and there are pending requests.  First, update our
+     * map of child states.  Next, if the current smallest posting has not already been seen,
+     * then send it to the first requestor and remove the request from our pending requests
+     * list.  Lastly, request the next posting, update our state again to note that we have
+     * consumed the smallest posting, and mark the FSM as in progress.
+     */
+    case Event(childState @ ChildState(child, Some(posting)), Active(childStates, _, last, deferredRequests)) if !deferredRequests.isEmpty =>
       // update child
       var updatedStates = childStates ++ Map(childState.child -> childState)
       // send smallest posting
       val smallest = getSmallestPosting(updatedStates)
-      deferredRequests.head ! Right(smallest.result.get)
+      val smallestId = smallest.result.get.id
+      val updatedRequests = if (last.isEmpty || !smallestId.equals(last.get)) {
+        deferredRequests.head ! Right(smallest.result.get)
+        deferredRequests.tail
+      } else deferredRequests
       updatedStates = updatedStates ++ Map(smallest.child -> ChildState(smallest.child, None))
       // get next posting
       getChildPosting(smallest.child).pipeTo(self)
-      stay() using Active(updatedStates, inProgress = true, deferredRequests.tail)
+      stay() using Active(updatedStates, inProgress = true, Some(smallestId), updatedRequests)
 
+    /* find the specified posting in any of the child matchers */
     case Event(FindPosting(id), _) =>
       findPosting(id).pipeTo(sender)
       stay()
@@ -178,5 +232,5 @@ object OrIterator {
 
   sealed trait Data
   case class Initializing(childStates: Map[Matchers,ChildState], numWaiting: Int, deferredRequests: List[ActorRef]) extends Data
-  case class Active(childStates: Map[Matchers,ChildState], inProgress: Boolean, deferredRequests: List[ActorRef]) extends Data
+  case class Active(childStates: Map[Matchers,ChildState], inProgress: Boolean, last: Option[UUID], deferredRequests: List[ActorRef]) extends Data
 }

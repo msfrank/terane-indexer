@@ -34,6 +34,7 @@ object TeraneIndexerBuild extends Build {
         "com.typesafe" %% "scalalogging-log4j" % "1.0.1",
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",
+        "com.github.nikita-volkov" % "sext" % "0.2.3",
         "org.scalatest" %% "scalatest" % "1.9.1" % "test",
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"
       )
