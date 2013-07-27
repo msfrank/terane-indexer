@@ -1,0 +1,4 @@
+The 'run-cluster.sh' script inside the scripts/ directory expects to find 
+ext/cassandra/bin/cassandra and ext/zookeeper/bin/zkServer.sh.  The easiest
+way to set up cassandra and zookeeper for testing is to symlink these services
+to ext/cassandra and ext/zookeeper.
