@@ -22,6 +22,7 @@ import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
+import akka.actor.FSM.Normal
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldsChanged) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import com.syntaxjockey.terane.indexer.bier.matchers._
@@ -50,50 +51,82 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
       scheduleDelete()
   }
 
+  /* waiting for a client request */
   when(WaitingForRequest) {
 
+    /**
+     * The client has requested a query description.  Send a QueryStatistics object back.
+     */
     case Event(DescribeQuery, _) =>
-      sender ! QueryStatistics(id, created, "Waiting for client request")
-      stay()
+      stay() replying QueryStatistics(id, created, "Waiting for client request")
 
+    /**
+     * The query has returned NoMoreMatches.
+     */
     case Event(Left(NoMoreMatches), WaitingForRequest(query, events, numFound)) =>
       query.close()
       stay() using FinishedRequest(events)
 
+    /**
+     * The query has returned a posting.  request the Event for this posting.
+     */
     case Event(Right(BierPosting(eventId, _)), WaitingForRequest(query, events, numFound)) =>
       getEvents(List(eventId)) pipeTo self
       stay()
 
+    /**
+     * The query has returned an event.  add the event to the events list.  if we haven't reached
+     * the results limit for the query, then request the next event.
+     */
     case Event(FoundEvents(foundEvents), WaitingForRequest(query, events, numFound)) =>
       if (numFound + foundEvents.length < limit)
         query.nextPosting pipeTo self
       stay() using WaitingForRequest(query, events ++ foundEvents, numFound + foundEvents.length)
 
+    /**
+     * The client has requested the events, and we are still retrieving events.
+     * transition to ProcessingRequest.
+     */
     case Event(GetEvents, WaitingForRequest(query, events, numFound)) =>
       goto(ProcessingRequest) using ProcessingRequest(sender, query, events, numFound)
 
+    /**
+     * the client has requested the events, and we have finished retrieving events.
+     * transition to SendingRequest
+     */
     case Event(GetEvents, FinishedRequest(events)) =>
-      self ! SendEvents
       goto(SendingRequest) using SendingRequest(sender, events)
 
+    /**
+     * the client has requested to delete the query, and we are still retrieving events.
+     * close the query and transition to FinishedQuery.
+     */
     case Event(DeleteQuery, WaitingForRequest(query, _, _)) =>
       query.close()
-      self forward DeleteQuery
       goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
 
+    /**
+     * the client has requested to delete the query, and we have finished retrieving events.
+     * transition to FinishedQuery.
+     */
     case Event(DeleteQuery, FinishedRequest(_)) =>
-      self forward DeleteQuery
       goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
+  }
+
+  onTransition {
+    case WaitingForRequest -> SendingRequest => self ! SendEvents
+    case WaitingForRequest -> FinishedQuery => setTimer("cancelling query", CancelQuery, reapingInterval, false)
   }
 
   when(ProcessingRequest) {
 
+    /**
+     * The client has requested a query description.  Send a QueryStatistics object back.
+     */
     case Event(DescribeQuery, _) =>
-      sender ! QueryStatistics(id, created, "Processing client request")
-      stay()
+      stay() replying QueryStatistics(id, created, "Processing client request")
 
     case Event(Left(NoMoreMatches), ProcessingRequest(client, query, events, numFound)) =>
-      self ! SendEvents
       query.close()
       goto(SendingRequest) using SendingRequest(client, events)
 
@@ -111,16 +144,22 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
     case Event(DeleteQuery, ProcessingRequest(_, query, _, _)) =>
       query.close()
-      self forward DeleteQuery
       goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
 
   }
 
+  onTransition {
+    case ProcessingRequest -> SendingRequest => self ! SendEvents
+    case ProcessingRequest -> FinishedQuery => setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+  }
+
   when(SendingRequest) {
 
+    /**
+     * The client has requested a query description.  Send a QueryStatistics object back.
+     */
     case Event(DescribeQuery, _) =>
-      sender ! QueryStatistics(id, created, "Sending request")
-      stay()
+      stay() replying QueryStatistics(id, created, "Sending request")
 
     case Event(SendEvents, SendingRequest(client, events)) =>
       client ! events
@@ -131,18 +170,31 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
       goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
   }
 
+  onTransition {
+    case SendingRequest -> FinishedQuery => setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+  }
+
   when(FinishedQuery) {
 
+    /**
+     * The client has requested a query description.  Send a QueryStatistics object back.
+     */
     case Event(DescribeQuery, _) =>
-      sender ! QueryStatistics(id, created, "Finished query")
-      stay()
+      stay() replying QueryStatistics(id, created, "Finished query")
 
     case Event(DeleteQuery, finishedQuery: FinishedQuery) =>
-      scheduleDelete()
       stay()
+
+    case Event(CancelQuery, finishedQuery: FinishedQuery) =>
+      stop(Normal)
   }
 
   initialize()
+
+  onTermination {
+    case StopEvent(_, state, data) =>
+      log.debug("deleted query {}", id)
+  }
 
   /**
    * Recursively descend the Matchers tree replacing TermMatchers with Terms and removing
@@ -255,6 +307,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   def scheduleDelete() {
     context.system.scheduler.scheduleOnce(reapingInterval, self, PoisonPill)
   }
+
 }
 
 object Query {
@@ -264,6 +317,7 @@ object Query {
   case object SendEvents
   case object DescribeQuery
   case object DeleteQuery
+  case object CancelQuery
   case class QueryStatistics(id: UUID, created: DateTime, state: String)
 
 
