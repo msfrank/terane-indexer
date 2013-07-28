@@ -11,6 +11,7 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.Matchers
 import com.syntaxjockey.terane.indexer.bier.Matchers._
 import com.syntaxjockey.terane.indexer.bier.Matchers.FindPosting
+import akka.event.LoggingReceive
 
 /**
  * Matches terms which are the intersection of all child matchers.
@@ -21,7 +22,7 @@ case class AndMatcher(children: List[Matchers])(implicit factory: ActorRefFactor
 
   implicit val timeout = Timeout(5 seconds)
 
-  val iterator = factory.actorOf(Props(new AndIterator(children.head, children.tail)))
+  lazy val iterator = factory.actorOf(Props(new AndIterator(children.head, children.tail)))
 
   def nextPosting = iterator.ask(NextPosting).mapTo[MatchResult]
 
@@ -39,7 +40,7 @@ class AndIterator(scanner: Matchers, finders: List[Matchers]) extends Actor with
   val children = scanner +: finders
   var deferredRequests: List[ActorRef] = List.empty
 
-  def receive = {
+  def receive = LoggingReceive {
 
     case NextPosting if deferredRequests.isEmpty =>
       self ! ScanToNext

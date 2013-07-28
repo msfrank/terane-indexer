@@ -22,7 +22,7 @@ case class OrMatcher(children: List[Matchers])(implicit factory: ActorRefFactory
 
   implicit val timeout = Timeout(5 seconds)
 
-  val iterator = factory.actorOf(Props(new OrIterator(children)))
+  lazy val iterator = factory.actorOf(Props(new OrIterator(children)))
 
   def nextPosting = iterator.ask(NextPosting).mapTo[MatchResult]
 
