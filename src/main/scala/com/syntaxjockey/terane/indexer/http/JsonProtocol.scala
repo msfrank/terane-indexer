@@ -6,7 +6,8 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.Event
 import org.joda.time.DateTime
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
-import com.syntaxjockey.terane.indexer.sink.Query.{QueryStatistics, DeleteQuery}
+import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, DeleteQuery}
+import com.syntaxjockey.terane.indexer.sink.Streamer.EventsBatch
 
 object JsonProtocol extends DefaultJsonProtocol {
   import EventRouter._
@@ -62,4 +63,6 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val CreateQueryFormat = jsonFormat5(CreateQuery.apply)
   implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
   implicit val QueryStatisticsFormat = jsonFormat3(QueryStatistics.apply)
+  implicit val GetEventsFormat = jsonFormat1(GetEvents.apply)
+  implicit val EventsBatchFormat = jsonFormat3(EventsBatch.apply)
 }

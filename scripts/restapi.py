@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, json, pprint, restkit.resource
+import os, sys, time, json, pprint, restkit.resource
 
 
 class TeraneServer(restkit.resource.Resource):
@@ -18,13 +18,22 @@ class TeraneServer(restkit.resource.Resource):
         return json.loads(resp.body_string())
 
     def retrieve_events(self, id):
-        resp = self.post('/1/queries/' + id, headers=TeraneServer.headers)
+        body = { 'limit': 5 }
+        resp = self.post('/1/queries/' + id, headers=TeraneServer.headers, payload=json.dumps(body))
         return json.loads(resp.body_string())
 
 
 if __name__ == "__main__":
     s = TeraneServer("http://localhost:8080")
-    created = s.create_query(' '.join(sys.argv[1:]), "main")
-    print "created: " + pprint.pformat(created)
-    events = s.retrieve_events(created['id'])
-    print "retrieved: " + pprint.pformat(events)
+    result = s.create_query(' '.join(sys.argv[1:]), "main")
+    id = result['id']
+    print "created:"
+    pprint.pprint(result)
+    print "retrieved:"
+    finished = False
+    while not finished:
+    	result = s.retrieve_events(id)
+        #pprint.pprint(result['events'])
+        pprint.pprint(result)
+        finished = result['finished']
+        time.sleep(1)

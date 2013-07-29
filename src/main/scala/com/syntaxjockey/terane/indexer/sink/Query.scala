@@ -1,15 +1,17 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import scala.Some
-import scala.collection.JavaConversions._
 import akka.actor._
+import akka.actor.FSM.Normal
 import akka.pattern.pipe
 import com.netflix.astyanax.Keyspace
-import org.joda.time.{DateTimeZone, DateTime}
 import com.netflix.astyanax.model.ColumnList
+import org.joda.time.{DateTimeZone, DateTime}
 import org.xbill.DNS.Name
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
+import scala.Some
+import scala.collection.JavaConversions._
 import java.util.{Date, UUID}
 import java.net.InetAddress
 
@@ -22,7 +24,7 @@ import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import akka.actor.FSM.Normal
+import com.syntaxjockey.terane.indexer.sink.Streamer.NoMoreEvents
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldsChanged) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import com.syntaxjockey.terane.indexer.bier.matchers._
@@ -34,25 +36,29 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   val reapingInterval = 30.seconds
   val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
 
+  // FIXME: if sorting is specified, using SortingStreamer
+  val streamer = context.actorOf(Props(new Streamer(id)))
+
   /* get term estimates and possibly reorder the query */
   maybeMatchers match {
     case Some(matchers) =>
       buildTerms(matchers, fields, keyspace) match {
         case Some(query) =>
           log.debug("parsed query '{}' => {}", createQuery.query, query)
-          startWith(WaitingForRequest, WaitingForRequest(query, List.empty, 0))
+          startWith(ReadingResults, ReadingResults(query, 0))
           query.nextPosting pipeTo self
         case None =>
-          startWith(FinishedQuery, EmptyQuery)
-          scheduleDelete()
+          streamer ! NoMoreEvents
+          setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+          startWith(FinishedQuery, FinishedQuery(DateTime.now(DateTimeZone.UTC), 0))
       }
     case None =>
-      startWith(FinishedQuery, EmptyQuery)
-      scheduleDelete()
+      streamer ! NoMoreEvents
+      setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+      startWith(FinishedQuery, FinishedQuery(DateTime.now(DateTimeZone.UTC), 0))
   }
 
-  /* waiting for a client request */
-  when(WaitingForRequest) {
+  when(ReadingResults) {
 
     /**
      * The client has requested a query description.  Send a QueryStatistics object back.
@@ -60,118 +66,64 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     case Event(DescribeQuery, _) =>
       stay() replying QueryStatistics(id, created, "Waiting for client request")
 
+    case Event(NextEvent, ReadingResults(query, numRead)) =>
+      query.nextPosting pipeTo self
+      stay()
+
     /**
      * The query has returned NoMoreMatches.
      */
-    case Event(Left(NoMoreMatches), WaitingForRequest(query, events, numFound)) =>
-      query.close()
-      stay() using FinishedRequest(events)
+    case Event(Left(NoMoreMatches), ReadingResults(query, numRead)) =>
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), numRead)
 
     /**
      * The query has returned a posting.  request the Event for this posting.
      */
-    case Event(Right(BierPosting(eventId, _)), WaitingForRequest(query, events, numFound)) =>
-      getEvents(List(eventId)) pipeTo self
+    case Event(Right(BierPosting(eventId, _)), ReadingResults(query, numRead)) =>
+      getEvent(eventId) pipeTo self
       stay()
 
     /**
      * The query has returned an event.  add the event to the events list.  if we haven't reached
      * the results limit for the query, then request the next event.
      */
-    case Event(FoundEvents(foundEvents), WaitingForRequest(query, events, numFound)) =>
-      if (numFound + foundEvents.length < limit)
-        query.nextPosting pipeTo self
-      stay() using WaitingForRequest(query, events ++ foundEvents, numFound + foundEvents.length)
+    case Event(Success(event: BierEvent), ReadingResults(query, numRead)) =>
+      streamer ! event
+      stay() using ReadingResults(query, numRead + 1)
+
+    /**
+     *
+     */
+    case Event(Failure(ex), ReadingResults(query, numRead)) =>
+      log.debug("failed to get event: {}", ex.getMessage)
+      stay()
 
     /**
      * The client has requested the events, and we are still retrieving events.
      * transition to ProcessingRequest.
      */
-    case Event(GetEvents, WaitingForRequest(query, events, numFound)) =>
-      goto(ProcessingRequest) using ProcessingRequest(sender, query, events, numFound)
-
-    /**
-     * the client has requested the events, and we have finished retrieving events.
-     * transition to SendingRequest
-     */
-    case Event(GetEvents, FinishedRequest(events)) =>
-      goto(SendingRequest) using SendingRequest(sender, events)
+    case Event(getEvents: GetEvents, ReadingResults(query, numRead)) =>
+      streamer forward getEvents
+      stay()
 
     /**
      * the client has requested to delete the query, and we are still retrieving events.
      * close the query and transition to FinishedQuery.
      */
-    case Event(DeleteQuery, WaitingForRequest(query, _, _)) =>
-      query.close()
-      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
-
-    /**
-     * the client has requested to delete the query, and we have finished retrieving events.
-     * transition to FinishedQuery.
-     */
-    case Event(DeleteQuery, FinishedRequest(_)) =>
-      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
+    case Event(DeleteQuery, ReadingResults(query, numRead)) =>
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), numRead)
   }
 
   onTransition {
-    case WaitingForRequest -> SendingRequest => self ! SendEvents
-    case WaitingForRequest -> FinishedQuery => setTimer("cancelling query", CancelQuery, reapingInterval, false)
-  }
-
-  when(ProcessingRequest) {
-
-    /**
-     * The client has requested a query description.  Send a QueryStatistics object back.
-     */
-    case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Processing client request")
-
-    case Event(Left(NoMoreMatches), ProcessingRequest(client, query, events, numFound)) =>
-      query.close()
-      goto(SendingRequest) using SendingRequest(client, events)
-
-    case Event(Right(BierPosting(eventId, _)), ProcessingRequest(client, query, events, numFound)) =>
-      getEvents(List(eventId)) pipeTo self
-      stay()
-
-    case Event(FoundEvents(foundEvents), ProcessingRequest(client, query, events, numFound)) =>
-      if (numFound + foundEvents.length < limit)
-        query.nextPosting pipeTo self
-      stay() using ProcessingRequest(client, query, events ++ foundEvents, numFound + foundEvents.length)
-
-    case Event(GetEvents, ProcessingRequest(client, query, events, numFound)) =>
-      stay()
-
-    case Event(DeleteQuery, ProcessingRequest(_, query, _, _)) =>
-      query.close()
-      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
-
-  }
-
-  onTransition {
-    case ProcessingRequest -> SendingRequest => self ! SendEvents
-    case ProcessingRequest -> FinishedQuery => setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
-  }
-
-  when(SendingRequest) {
-
-    /**
-     * The client has requested a query description.  Send a QueryStatistics object back.
-     */
-    case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Sending request")
-
-    case Event(SendEvents, SendingRequest(client, events)) =>
-      client ! events
-      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), events.length)
-
-    case Event(DeleteQuery, _) =>
-      self forward DeleteQuery
-      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), 0)
-  }
-
-  onTransition {
-    case SendingRequest -> FinishedQuery => setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+    case ReadingResults -> FinishedQuery => stateData match {
+      case ReadingResults(query, _) =>
+        streamer ! NoMoreEvents
+        query.close()
+        setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+      case _ =>
+        streamer ! NoMoreEvents
+        setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
+    }
   }
 
   when(FinishedQuery) {
@@ -181,6 +133,10 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
      */
     case Event(DescribeQuery, _) =>
       stay() replying QueryStatistics(id, created, "Finished query")
+
+    case Event(getEvents: GetEvents, _) =>
+      streamer forward getEvents
+      stay()
 
     case Event(DeleteQuery, finishedQuery: FinishedQuery) =>
       stay()
@@ -255,14 +211,18 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   /**
    * Asynchronously retrieve the specified events from cassandra.
    *
-   * @param eventIds
+   * @param eventId
    * @return
    */
-  def getEvents(eventIds: List[UUID]) = Future[FoundEvents] {
-    if (!eventIds.isEmpty) {
-      val result = keyspace.prepareQuery(CassandraSink.CF_EVENTS).getKeySlice(eventIds).execute()
-      FoundEvents(result.getResult.filter(!_.getColumns.isEmpty).map(row => readEvent(row.getKey, row.getColumns)).toList)
-    } else FoundEvents(List.empty)
+  def getEvent(eventId: UUID) = Future[Try[BierEvent]] {
+    try {
+      val result = keyspace.prepareQuery(CassandraSink.CF_EVENTS).getKey(eventId).execute()
+      val columnList = result.getResult
+      val event = readEvent(eventId, columnList)
+      Success(event)
+    } catch {
+      case ex: Exception => Failure(ex)
+    }
   }
 
   /**
@@ -300,20 +260,12 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     }
     event
   }
-
-  /**
-   * Schedule the query to be destroyed at some point in the future
-   */
-  def scheduleDelete() {
-    context.system.scheduler.scheduleOnce(reapingInterval, self, PoisonPill)
-  }
-
 }
 
 object Query {
   /* query case classes */
-  case object GetEvents
-  case class FoundEvents(events: List[BierEvent])
+  case class GetEvents(limit: Option[Int])
+  case object NextEvent
   case object SendEvents
   case object DescribeQuery
   case object DeleteQuery
@@ -324,16 +276,10 @@ object Query {
   /* our FSM states */
   sealed trait State
   case object WaitingForMatcherEstimates extends State
-  case object WaitingForRequest extends State
-  case object ProcessingRequest extends State
-  case object SendingRequest extends State
+  case object ReadingResults extends State
   case object FinishedQuery extends State
 
   sealed trait Data
-  case object EmptyQuery extends Data
-  case class WaitingForRequest(matchers: Matchers, events: List[BierEvent], numFound: Int) extends Data
-  case class ProcessingRequest(client: ActorRef, matchers: Matchers, events: List[BierEvent], numFound: Int) extends Data
-  case class SendingRequest(client: ActorRef, events: List[BierEvent]) extends Data
-  case class FinishedRequest(events: List[BierEvent]) extends Data
-  case class FinishedQuery(finished: DateTime, numSent: Int) extends Data
+  case class ReadingResults(matchers: Matchers, numRead: Int) extends Data
+  case class FinishedQuery(finished: DateTime, numRead: Int) extends Data
 }

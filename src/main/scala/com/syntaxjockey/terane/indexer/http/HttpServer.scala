@@ -17,6 +17,8 @@ import com.typesafe.config.Config
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{DeleteQuery, GetEvents, QueryStatistics, DescribeQuery}
 import java.util.concurrent.TimeUnit
+import java.util.UUID
+import com.syntaxjockey.terane.indexer.sink.Streamer.EventsBatch
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -76,7 +78,9 @@ trait ApiService extends HttpService {
         complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).mapTo[QueryStatistics] }
       } ~
       post {
-        complete { actorRefFactory.actorSelection("/user/query-" + id).ask(GetEvents).mapTo[List[Event]] }
+        entity(as[GetEvents]) { getEvents =>
+          complete { actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).mapTo[EventsBatch] }
+        }
       } ~
       delete {
         complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DeleteQuery).map(result => StatusCodes.Accepted) }
