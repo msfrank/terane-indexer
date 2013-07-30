@@ -24,7 +24,6 @@ import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import com.syntaxjockey.terane.indexer.sink.Streamer.NoMoreEvents
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldsChanged) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import com.syntaxjockey.terane.indexer.bier.matchers._
@@ -32,12 +31,11 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   import context.dispatcher
 
   val created = DateTime.now(DateTimeZone.UTC)
-  val limit = createQuery.limit.getOrElse(100)
   val reapingInterval = 30.seconds
   val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
 
   // FIXME: if sorting is specified, using SortingStreamer
-  val streamer = context.actorOf(Props(new Streamer(id)))
+  val streamer = context.actorOf(Props(new DirectStreamer(id, createQuery, store)))
 
   /* get term estimates and possibly reorder the query */
   maybeMatchers match {
@@ -64,7 +62,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
      * The client has requested a query description.  Send a QueryStatistics object back.
      */
     case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Waiting for client request")
+      stay() replying QueryStatistics(id, created, "Waiting for client request", 0, 0)
 
     case Event(NextEvent, ReadingResults(query, numRead)) =>
       query.nextPosting pipeTo self
@@ -132,7 +130,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
      * The client has requested a query description.  Send a QueryStatistics object back.
      */
     case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Finished query")
+      stay() replying QueryStatistics(id, created, "Finished query", 0, 0)
 
     case Event(getEvents: GetEvents, _) =>
       streamer forward getEvents
@@ -270,8 +268,10 @@ object Query {
   case object DescribeQuery
   case object DeleteQuery
   case object CancelQuery
-  case class QueryStatistics(id: UUID, created: DateTime, state: String)
-
+  case class EventsBatch(sequence: Int, events: List[BierEvent], finished: Boolean)
+  case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int)
+  case object NoMoreEvents
+  case object FinishedReading
 
   /* our FSM states */
   sealed trait State

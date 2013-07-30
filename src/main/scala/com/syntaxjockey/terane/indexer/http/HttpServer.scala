@@ -1,24 +1,21 @@
 package com.syntaxjockey.terane.indexer.http
 
-import spray.routing.HttpService
-import akka.actor.{ActorRef, Actor, ActorLogging}
 import akka.io.IO
+import akka.actor.{ActorRef, Actor, ActorLogging}
 import akka.pattern.ask
-import spray.can.Http
-import scala.concurrent.duration._
 import akka.util.Timeout
-import com.syntaxjockey.terane.indexer.EventRouter
 import akka.event.LoggingAdapter
+import com.typesafe.config.Config
+import spray.routing.HttpService
+import spray.can.Http
 import spray.http._
-import com.syntaxjockey.terane.indexer.bier.Event
 import spray.http.HttpResponse
 import spray.http.HttpHeaders.Location
-import com.typesafe.config.Config
+import java.util.concurrent.TimeUnit
+
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{DeleteQuery, GetEvents, QueryStatistics, DescribeQuery}
-import java.util.concurrent.TimeUnit
-import java.util.UUID
-import com.syntaxjockey.terane.indexer.sink.Streamer.EventsBatch
+import com.syntaxjockey.terane.indexer.sink.Query.EventsBatch
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag

@@ -1,13 +1,14 @@
 package com.syntaxjockey.terane.indexer.http
 
-import com.syntaxjockey.terane.indexer.EventRouter
 import spray.json._
-import java.util.UUID
-import com.syntaxjockey.terane.indexer.bier.Event
 import org.joda.time.DateTime
+import java.util.UUID
+
+import com.syntaxjockey.terane.indexer.EventRouter
+import com.syntaxjockey.terane.indexer.bier.Event
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
-import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, DeleteQuery}
-import com.syntaxjockey.terane.indexer.sink.Streamer.EventsBatch
+import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics}
+import com.syntaxjockey.terane.indexer.sink.Query.EventsBatch
 
 object JsonProtocol extends DefaultJsonProtocol {
   import EventRouter._
@@ -62,7 +63,7 @@ object JsonProtocol extends DefaultJsonProtocol {
   //implicit val ListQueriesResponseFormat = jsonFormat1(ListQueriesResponse.apply)
   implicit val CreateQueryFormat = jsonFormat5(CreateQuery.apply)
   implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
-  implicit val QueryStatisticsFormat = jsonFormat3(QueryStatistics.apply)
+  implicit val QueryStatisticsFormat = jsonFormat5(QueryStatistics.apply)
   implicit val GetEventsFormat = jsonFormat1(GetEvents.apply)
   implicit val EventsBatchFormat = jsonFormat3(EventsBatch.apply)
 }
