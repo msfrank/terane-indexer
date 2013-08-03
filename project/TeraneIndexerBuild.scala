@@ -1,4 +1,6 @@
 import com.github.retronym.SbtOneJar
+import com.typesafe.sbt.SbtSite
+import com.typesafe.sbt.SbtGhPages
 import sbt._
 import Keys._
 
@@ -27,6 +29,7 @@ object TeraneIndexerBuild extends Build {
         "io.spray" % "spray-can" % sprayVersion,
         "io.spray" % "spray-routing" % sprayVersion,
         "io.spray" %% "spray-json" % "1.2.4",
+        "org.mapdb" % "mapdb" % "0.9.3",
         "joda-time" % "joda-time" % "2.2",
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",
@@ -39,5 +42,7 @@ object TeraneIndexerBuild extends Build {
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"
       )
     ) ++ SbtOneJar.oneJarSettings
+      ++ SbtSite.site.settings
+      ++ SbtSite.site.sphinxSupport()
   )
 }

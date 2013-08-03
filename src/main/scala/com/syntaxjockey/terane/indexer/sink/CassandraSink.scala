@@ -12,6 +12,7 @@ import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
 /**
  *
@@ -107,7 +108,7 @@ object CassandraSink {
   case class WroteEvent(event: BierEvent)
   case class WriteFailed(event: BierEvent)
   case object FlushRetries
-  case class CreateQuery(query: String, store: String, fields: Option[Set[String]], limit: Option[Int], reverse: Option[Boolean])
+  case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean])
   case class CreatedQuery(id: UUID)
 
   sealed trait State

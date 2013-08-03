@@ -5,7 +5,8 @@ import org.joda.time.DateTime
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.EventRouter
-import com.syntaxjockey.terane.indexer.bier.Event
+import com.syntaxjockey.terane.indexer.bier.{EventValueType, Event}
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics}
 import com.syntaxjockey.terane.indexer.sink.Query.EventsBatch
@@ -22,25 +23,34 @@ object JsonProtocol extends DefaultJsonProtocol {
     }
   }
 
+  /* convert FieldIdentifier class */
+  implicit object FieldIdentifierFormat extends RootJsonFormat[FieldIdentifier] {
+    def write(ident: FieldIdentifier) = JsArray(JsString(ident.fieldType.toString), JsString(ident.fieldName))
+    def read(value: JsValue) = value match {
+      case JsArray(List(JsString(fieldTypeName), JsString(fieldName))) =>
+        FieldIdentifier(fieldName, EventValueType.withName(fieldTypeName))
+    }
+  }
+
   /* convert Event class */
   implicit object EventFormat extends RootJsonFormat[Event] {
     def write(event: Event) = {
-      val fields: List[JsField] = for ((name, value) <- event.toList) yield {
+      val fields: List[JsField] = for ((FieldIdentifier(name, _), value) <- event.values.toList) yield {
         val values = scala.collection.mutable.HashMap[String,JsValue]()
         for (text <- value.text)
-          values("text") = JsString(text)
+          values(EventValueType.TEXT.toString) = JsString(text)
         for (literal <- value.literal)
-          values("literal") = JsArray(literal.map(JsString(_)))
+          values(EventValueType.LITERAL.toString) = JsArray(literal.map(JsString(_)))
         for (integer <- value.integer)
-          values("integer") = JsNumber(integer)
+          values(EventValueType.INTEGER.toString) = JsNumber(integer)
         for (float <- value.float)
-          values("float") = JsNumber(float)
+          values(EventValueType.FLOAT.toString) = JsNumber(float)
         for (datetime <- value.datetime)
-          values("datetime") = JsNumber(datetime.getMillis)
+          values(EventValueType.DATETIME.toString) = JsNumber(datetime.getMillis)
         for (address <- value.address)
-          values("address") = JsString(address.getHostAddress)
+          values(EventValueType.ADDRESS.toString) = JsString(address.getHostAddress)
         for (hostname <- value.hostname)
-          values("hostname") = JsString(hostname.toString)
+          values(EventValueType.HOSTNAME.toString) = JsString(hostname.toString)
         name -> JsObject(values.toMap)
       }
       JsArray(event.id.toJson, JsObject(fields))
@@ -61,7 +71,7 @@ object JsonProtocol extends DefaultJsonProtocol {
 
   /* convert query case classes */
   //implicit val ListQueriesResponseFormat = jsonFormat1(ListQueriesResponse.apply)
-  implicit val CreateQueryFormat = jsonFormat5(CreateQuery.apply)
+  implicit val CreateQueryFormat = jsonFormat6(CreateQuery.apply)
   implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
   implicit val QueryStatisticsFormat = jsonFormat5(QueryStatistics.apply)
   implicit val GetEventsFormat = jsonFormat1(GetEvents.apply)

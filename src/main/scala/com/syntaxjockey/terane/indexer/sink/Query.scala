@@ -231,32 +231,27 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    * @return
    */
   def readEvent(id: UUID, columnList: ColumnList[String]): BierEvent = {
-    val event = new BierEvent(id)
-    columnList foreach { column =>
-      fields.fieldsByCf.get(column.getName) match {
-        case Some(field: Field) =>
-          field.fieldId match {
-            case FieldIdentifier(fieldName, EventValueType.TEXT) =>
-              event.set(fieldName, column.getStringValue)
-            case FieldIdentifier(fieldName, EventValueType.LITERAL) =>
-              val literal: List[String] = column.getValue(CassandraSink.SER_LITERAL).toList
-              event.set(fieldName, literal)
-            case FieldIdentifier(fieldName, EventValueType.INTEGER) =>
-              event.set(fieldName, column.getLongValue)
-            case FieldIdentifier(fieldName, EventValueType.FLOAT) =>
-              event.set(fieldName, column.getDoubleValue)
-            case FieldIdentifier(fieldName, EventValueType.DATETIME) =>
-              event.set(fieldName, new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))
-            case FieldIdentifier(fieldName, EventValueType.ADDRESS) =>
-              event.set(fieldName, InetAddress.getByAddress(column.getByteArrayValue))
-            case FieldIdentifier(fieldName, EventValueType.HOSTNAME) =>
-              event.set(field.fieldId.fieldName, Name.fromString(column.getStringValue))
-            }
-        case None =>
-          log.error("failed to read column {} from event {}; no such field", column.getName, id)
+    import BierEvent._
+    val values: Map[FieldIdentifier,BierEvent.Value] = columnList.filter(column => fields.fieldsByCf.contains(column.getName)).map { column =>
+      fields.fieldsByCf(column.getName).fieldId match {
+        case ident @ FieldIdentifier(_, EventValueType.TEXT) =>
+          ident -> Value(text = Some(column.getStringValue))
+        case ident @ FieldIdentifier(_, EventValueType.LITERAL) =>
+          val literal: List[String] = column.getValue(CassandraSink.SER_LITERAL).toList
+          ident -> Value(literal = Some(literal))
+        case ident @ FieldIdentifier(_, EventValueType.INTEGER) =>
+          ident -> Value(integer = Some(column.getLongValue))
+        case ident @ FieldIdentifier(_, EventValueType.FLOAT) =>
+          ident -> Value(float = Some(column.getDoubleValue))
+        case ident @ FieldIdentifier(_, EventValueType.DATETIME) =>
+          ident -> Value(datetime = Some(new DateTime(column.getDateValue.getTime, DateTimeZone.UTC)))
+        case ident @ FieldIdentifier(_, EventValueType.ADDRESS) =>
+          ident -> Value(address = Some(InetAddress.getByAddress(column.getByteArrayValue)))
+        case ident @ FieldIdentifier(_, EventValueType.HOSTNAME) =>
+          ident -> Value(hostname = Some(Name.fromString(column.getStringValue)))
       }
-    }
-    event
+    }.toMap
+    new BierEvent(id, values)
   }
 }
 

@@ -60,12 +60,11 @@ trait ApiService extends HttpService {
       post {
         entity(as[CreateQuery]) { createQuery =>
           complete {
-            eventRouter.ask(createQuery).map({
-              case result: CreatedQuery =>
-                HttpResponse(StatusCodes.Accepted,
-                  HttpEntity(MediaTypes.`application/json`, result.toJson.toString()),
-                  List(Location("http://localhost:8080/1/queries/" + result.id)))
-            })
+            eventRouter.ask(createQuery).map { case result: CreatedQuery =>
+              HttpResponse(StatusCodes.Accepted,
+                HttpEntity(MediaTypes.`application/json`, result.toJson.toString()),
+                List(Location("http://localhost:8080/1/queries/" + result.id)))
+            }
           }
         }
       }

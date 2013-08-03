@@ -1,59 +1,33 @@
 package com.syntaxjockey.terane.indexer.bier
 
-import java.util.UUID
 import org.joda.time.DateTime
-import java.net.InetAddress
-import scala.collection.mutable.MapProxy
-import scala.collection.mutable
-import org.xbill.DNS.Name
 import com.netflix.astyanax.util.TimeUUIDUtils
+import org.xbill.DNS.Name
+import java.net.InetAddress
+import java.util.UUID
 
-/**
- *
- */
-class Event(val id: UUID) extends MapProxy[String,Event.Value] {
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.Event.Value
+import com.syntaxjockey.terane.indexer.bier.Event.KeyValue
 
-  val self = new mutable.HashMap[String,Event.Value]()
+class Event(val id: UUID, val values: Map[FieldIdentifier,Value]) {
 
-  def set(name: String, text: Event.Text): Event = {
-    val value = getOrElse(name, Event.Value()).copy(text = Some(text))
-    this.+=((name, value))
+  def +(kv: KeyValue): Event = {
+    new Event(id, values + kv)
   }
 
-  def set(name: String, literal: Event.Literal): Event = {
-    val value = getOrElse(name, Event.Value()).copy(literal = Some(literal))
-    this.+=((name, value))
+  def ++(xs: Traversable[KeyValue]): Event = {
+    new Event(id, values ++ xs)
   }
 
-  def set(name: String, integer: Event.Integer): Event = {
-    val value = getOrElse(name, Event.Value()).copy(integer = Some(integer))
-    this.+=((name, value))
+  def -(key: FieldIdentifier): Event = {
+    new Event(id, values - key)
   }
 
-  def set(name: String, float: Event.Float): Event = {
-    val value = getOrElse(name, Event.Value()).copy(float = Some(float))
-    this.+=((name, value))
-  }
-
-  def set(name: String, datetime: Event.Datetime): Event = {
-    val value = getOrElse(name, Event.Value()).copy(datetime = Some(datetime))
-    this.+=((name, value))
-  }
-
-  def set(name: String, address: Event.Address): Event = {
-    val value = getOrElse(name, Event.Value()).copy(address = Some(address))
-    this.+=((name, value))
-  }
-
-  def set(name: String, hostname: Event.Hostname): Event = {
-    val value = getOrElse(name, Event.Value()).copy(hostname = Some(hostname))
-    this.+=((name, value))
-  }
-
-  override def toString(): String = {
+  override def toString: String = {
     val sb = new StringBuilder()
     sb.append(id.toString + ":")
-    for ((k,v) <- this) {
+    for ((k,v) <- values) {
       if (v.text.isDefined)
         sb.append(" %s:text='%s'".format(k, v.text.get))
       if (v.literal.isDefined)
@@ -96,10 +70,20 @@ object Event {
     address: Option[Address] = None,
     hostname: Option[Hostname] = None)
 
-  def apply(uuid: Option[UUID] = None): Event = {
+  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,Value] = Map.empty): Event = {
     if (uuid.isDefined)
-      new Event(uuid.get)
+      new Event(uuid.get, values)
     else
-      new Event(TimeUUIDUtils.getUniqueTimeUUIDinMicros)
+      new Event(TimeUUIDUtils.getUniqueTimeUUIDinMicros, values)
   }
+
+  type KeyValue = (FieldIdentifier,Value)
+
+  implicit def text2keyValue(kv: (String, Text)): KeyValue = (FieldIdentifier(kv._1, EventValueType.TEXT), Value(text = Some(kv._2)))
+  implicit def literal2keyValue(kv: (String, Literal)): KeyValue = (FieldIdentifier(kv._1, EventValueType.LITERAL), Value(literal = Some(kv._2)))
+  implicit def integer2keyValue(kv: (String, Integer)): KeyValue = (FieldIdentifier(kv._1, EventValueType.INTEGER), Value(integer = Some(kv._2)))
+  implicit def float2keyValue(kv: (String, Float)): KeyValue = (FieldIdentifier(kv._1, EventValueType.FLOAT), Value(float = Some(kv._2)))
+  implicit def datetime2keyValue(kv: (String, Datetime)): KeyValue = (FieldIdentifier(kv._1, EventValueType.DATETIME), Value(datetime = Some(kv._2)))
+  implicit def address2keyValue(kv: (String, Address)): KeyValue = (FieldIdentifier(kv._1, EventValueType.ADDRESS), Value(address = Some(kv._2)))
+  implicit def hostname2keyValue(kv: (String, Hostname)): KeyValue = (FieldIdentifier(kv._1, EventValueType.HOSTNAME), Value(hostname = Some(kv._2)))
 }

@@ -13,6 +13,7 @@ import com.syntaxjockey.terane.indexer.{UUIDLike, TestCluster}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.{GetFields, FieldsChanged}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.bier.Event
+import com.syntaxjockey.terane.indexer.bier.Event._
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{StoreEvent, WroteEvent}
 import java.net.InetAddress
 import org.xbill.DNS.Name
@@ -56,7 +57,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, textField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(textField.fieldId -> textField), Map(textField.text.get.id -> textField))
-      val event = Event().set("text_field", "foo")
+      val event = Event(values = Map("text_field" -> "foo"))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -65,7 +66,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, literalField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(literalField.fieldId -> literalField), Map(literalField.literal.get.id -> literalField))
-      val event = Event().set("literal_field", List("foo", "bar", "baz"))
+      val event = Event(values = Map("literal_field" -> List("foo", "bar", "baz")))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -74,7 +75,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, integerField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(integerField.fieldId -> integerField), Map(integerField.integer.get.id -> integerField))
-      val event = Event().set("integer_field", 42 toLong)
+      val event = Event(values = Map("integer_field" -> 42L))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -83,7 +84,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, floatField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(floatField.fieldId -> floatField), Map(floatField.float.get.id -> floatField))
-      val event = Event().set("float_field", 3.14)
+      val event = Event(values = Map("float_field" -> 3.14))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -92,7 +93,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, datetimeField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(datetimeField.fieldId -> datetimeField), Map(datetimeField.datetime.get.id -> datetimeField))
-      val event = Event().set("datetime_field", DateTime.now())
+      val event = Event(values = Map("datetime_field" -> DateTime.now()))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -101,7 +102,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, addressField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(addressField.fieldId -> addressField), Map(addressField.address.get.id -> addressField))
-      val event = Event().set("address_field", InetAddress.getLocalHost)
+      val event = Event(values = Map("address_field" -> InetAddress.getLocalHost))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -110,7 +111,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       createColumnFamily(keyspace, hostnameField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(hostnameField.fieldId -> hostnameField), Map(hostnameField.hostname.get.id -> hostnameField))
-      val event = Event().set("hostname_field", Name.fromString("syntaxjockey.com"))
+      val event = Event(values = Map("hostname_field" -> Name.fromString("syntaxjockey.com")))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }

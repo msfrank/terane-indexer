@@ -62,76 +62,76 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
     val row = eventMutation.withRow(CassandraSink.CF_EVENTS, event.id)
     /* build the postings */
     var missingFields = Seq.empty[CreateField]
-    for ((name,value) <- event) {
+    for ((ident,value) <- event.values) {
       for (text <- value.text) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.TEXT)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.text.get.id, text)
             writeTextPosting(postingsMutation, field.text.get, text, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.TEXT))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
       for (literal <- value.literal) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.LITERAL)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             val javaLiteral: java.util.List[java.lang.String] = literal
             row.putColumn(field.literal.get.id, javaLiteral, CassandraSink.SER_LITERAL, new java.lang.Integer(0))
             writeLiteralPosting(postingsMutation, field.literal.get, literal, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.LITERAL))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
       for (integer <- value.integer) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.INTEGER)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.integer.get.id, integer)
             writeIntegerPosting(postingsMutation, field.integer.get, integer, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.LITERAL))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
       for (float <- value.float) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.FLOAT)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.float.get.id, float)
             writeFloatPosting(postingsMutation, field.float.get, float, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.LITERAL))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
       for (datetime <- value.datetime) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.DATETIME)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.datetime.get.id, datetime.toDate)
             writeDatetimePosting(postingsMutation, field.datetime.get, datetime, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.DATETIME))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
       for (address <- value.address) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.ADDRESS)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.address.get.id, address.getAddress)
             writeAddressPosting(postingsMutation, field.address.get, address, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.ADDRESS))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
       for (hostname <- value.hostname) {
-        fieldsById.get(FieldIdentifier(name, EventValueType.HOSTNAME)) match {
+        fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
             row.putColumn(field.hostname.get.id, hostname.toString)
             writeHostnamePosting(postingsMutation, field.hostname.get, hostname, event.id)
           case Some(field) => // do nothing
           case None =>
-            missingFields = missingFields :+ CreateField(FieldIdentifier(name, EventValueType.HOSTNAME))
+            missingFields = missingFields :+ CreateField(ident)
         }
       }
     }
