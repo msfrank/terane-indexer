@@ -82,5 +82,60 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
       batch.finished must be(true)
       batch.events must be(List(event1, event2, event3, event4, event5))
     }
+
+    "return events sorted by integer field" in {
+      val createQuery = CreateQuery("", "", None, Some(List(integerId)), None, None)
+      val sortingStreamer = createSortingStreamer(createQuery)
+      val event1 = Event(values = Map(integerId -> Value(integer = Some(1))))
+      val event2 = Event(values = Map(integerId -> Value(integer = Some(2))))
+      val event3 = Event(values = Map(integerId -> Value(integer = Some(3))))
+      val event4 = Event(values = Map(integerId -> Value(integer = Some(4))))
+      val event5 = Event(values = Map(integerId -> Value(integer = Some(5))))
+      sortingStreamer ! event1
+      expectMsg(NextEvent)
+      sortingStreamer ! event4
+      expectMsg(NextEvent)
+      sortingStreamer ! event3
+      expectMsg(NextEvent)
+      sortingStreamer ! event5
+      expectMsg(NextEvent)
+      sortingStreamer ! event2
+      expectMsg(NextEvent)
+      sortingStreamer ! NoMoreEvents
+      expectMsg(FinishedReading)
+      sortingStreamer ! GetEvents(None)
+      val batch = expectMsgClass(classOf[EventsBatch])
+      batch.sequence must be(0)
+      batch.finished must be(true)
+      batch.events must be(List(event1, event2, event3, event4, event5))
+    }
+
+    "return events sorted by float field" in {
+      val createQuery = CreateQuery("", "", None, Some(List(floatId)), None, None)
+      val sortingStreamer = createSortingStreamer(createQuery)
+      val event1 = Event(values = Map(floatId -> Value(float = Some(0.1))))
+      val event2 = Event(values = Map(floatId -> Value(float = Some(0.2))))
+      val event3 = Event(values = Map(floatId -> Value(float = Some(0.3))))
+      val event4 = Event(values = Map(floatId -> Value(float = Some(0.4))))
+      val event5 = Event(values = Map(floatId -> Value(float = Some(0.5))))
+      sortingStreamer ! event1
+      expectMsg(NextEvent)
+      sortingStreamer ! event4
+      expectMsg(NextEvent)
+      sortingStreamer ! event3
+      expectMsg(NextEvent)
+      sortingStreamer ! event5
+      expectMsg(NextEvent)
+      sortingStreamer ! event2
+      expectMsg(NextEvent)
+      sortingStreamer ! NoMoreEvents
+      expectMsg(FinishedReading)
+      sortingStreamer ! GetEvents(None)
+      val batch = expectMsgClass(classOf[EventsBatch])
+      batch.sequence must be(0)
+      batch.finished must be(true)
+      batch.events must be(List(event1, event2, event3, event4, event5))
+    }
+
   }
 }

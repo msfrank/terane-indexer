@@ -35,7 +35,11 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
 
   // FIXME: if sorting is specified, using SortingStreamer
-  val streamer = context.actorOf(Props(new DirectStreamer(id, createQuery, store)))
+  val streamer = if (createQuery.sortBy.isDefined)
+    context.actorOf(Props(new SortingStreamer(id, createQuery, fields)))
+  else
+    context.actorOf(Props(new DirectStreamer(id, createQuery, store)))
+
 
   /* get term estimates and possibly reorder the query */
   maybeMatchers match {
@@ -64,9 +68,18 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     case Event(DescribeQuery, _) =>
       stay() replying QueryStatistics(id, created, "Waiting for client request", 0, 0)
 
+    /**
+     * The streamer is asking for the next event.  Request the next posting.
+     */
     case Event(NextEvent, ReadingResults(query, numRead)) =>
       query.nextPosting pipeTo self
       stay()
+
+    /**
+     * The streamer has reached the query limit.
+     */
+    case Event(FinishedReading, ReadingResults(query, numRead)) =>
+      goto(FinishedQuery) using FinishedQuery(DateTime.now(DateTimeZone.UTC), numRead)
 
     /**
      * The query has returned NoMoreMatches.
@@ -134,6 +147,9 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
     case Event(getEvents: GetEvents, _) =>
       streamer forward getEvents
+      stay()
+
+    case Event(FinishedReading, _) =>
       stay()
 
     case Event(DeleteQuery, finishedQuery: FinishedQuery) =>

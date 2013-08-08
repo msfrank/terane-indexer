@@ -28,7 +28,7 @@ object JsonProtocol extends DefaultJsonProtocol {
     def write(ident: FieldIdentifier) = JsArray(JsString(ident.fieldType.toString), JsString(ident.fieldName))
     def read(value: JsValue) = value match {
       case JsArray(List(JsString(fieldTypeName), JsString(fieldName))) =>
-        FieldIdentifier(fieldName, EventValueType.withName(fieldTypeName))
+        FieldIdentifier(fieldName, EventValueType.withName(fieldTypeName.toUpperCase))
     }
   }
 

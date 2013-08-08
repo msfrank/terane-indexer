@@ -90,7 +90,8 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 
   onTermination {
     case StopEvent(_, _, _) =>
-      sortedEvents.close()
+      //sortedEvents.close()
+      db.close()
       dbfile.delete()
       log.debug("deleted sort file " + dbfile.getAbsolutePath)
   }
@@ -187,11 +188,11 @@ class EventKeySerializer(sortFields: Array[FieldIdentifier]) extends BTreeKeySer
     var keysLeft = eventKey.keyvalues.drop(8)
     while (keysTaken.length > 0) {
       var bitmap: Int = 0
-      0 to 7 foreach { i => if (keysTaken(i).isDefined) bitmap = bitmap | (1 << i) }
+      0 until keysTaken.length foreach { i => if (keysTaken(i) != Value()) bitmap = bitmap | (1 << i) }
       out.writeByte(bitmap)
       eventKey.keyvalues.foreach {
         case Some((ident: FieldIdentifier, value: BierEvent.Value)) =>
-          ident.fieldType match {
+          if (value != Value()) ident.fieldType match {
             case EventValueType.TEXT =>
               out.writeUTF(value.text.get)
             case EventValueType.LITERAL =>
@@ -210,7 +211,8 @@ class EventKeySerializer(sortFields: Array[FieldIdentifier]) extends BTreeKeySer
             case EventValueType.HOSTNAME =>
               out.writeUTF(value.hostname.get.toString)
           }
-        case None =>
+        case _ =>
+          throw new Exception("unexpected empty keyvalue")
       }
       keysTaken = keysLeft.take(8)
       keysLeft = keysLeft.drop(8)
