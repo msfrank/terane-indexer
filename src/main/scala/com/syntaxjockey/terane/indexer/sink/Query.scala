@@ -279,9 +279,8 @@ object Query {
   case object DescribeQuery
   case object DeleteQuery
   case object CancelQuery
-  case class EventSet(sequence: Int, events: List[BierEvent], finished: Boolean)
+  case class EventSet(events: List[BierEvent], finished: Boolean)
   case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int)
-  case class QueryError(code: Int, description: String, retry: Boolean)
   case object NoMoreEvents
   case object FinishedReading
 

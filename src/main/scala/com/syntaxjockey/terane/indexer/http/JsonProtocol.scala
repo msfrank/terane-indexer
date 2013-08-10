@@ -8,7 +8,7 @@ import com.syntaxjockey.terane.indexer.EventRouter
 import com.syntaxjockey.terane.indexer.bier.{EventValueType, Event}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
-import com.syntaxjockey.terane.indexer.sink.Query.{QueryError, GetEvents, QueryStatistics, EventSet}
+import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, EventSet}
 
 object JsonProtocol extends DefaultJsonProtocol {
   import EventRouter._
@@ -69,11 +69,9 @@ object JsonProtocol extends DefaultJsonProtocol {
   }
 
   /* convert query case classes */
-  //implicit val ListQueriesResponseFormat = jsonFormat1(ListQueriesResponse.apply)
   implicit val CreateQueryFormat = jsonFormat6(CreateQuery.apply)
   implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
   implicit val QueryStatisticsFormat = jsonFormat5(QueryStatistics.apply)
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
-  implicit val EventSetFormat = jsonFormat3(EventSet.apply)
-  implicit val QueryErrorFormat = jsonFormat3(QueryError.apply)
+  implicit val EventSetFormat = jsonFormat2(EventSet.apply)
 }
