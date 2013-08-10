@@ -31,16 +31,16 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, store: Store) extends L
     case Event(NoMoreEvents, ReceivingEvents(events, sequence, numRead, numSent)) =>
       goto(ReceivedEvents) using ReceivedEvents(events, sequence, numRead, numSent)
 
-    case Event(GetEvents(Some(limit)), ReceivingEvents(events, sequence, numRead, numSent)) =>
+    case Event(GetEvents(_, Some(limit)), ReceivingEvents(events, sequence, numRead, numSent)) =>
       val _limit = getBatchSize(numSent, limit)
       val toSend = events.take(_limit)
-      val batch = EventsBatch(sequence, toSend, finished = false)
+      val batch = EventSet(sequence, toSend, finished = false)
       stay() using ReceivingEvents(events.drop(_limit), sequence + 1, numRead, numSent + toSend.length) replying batch
 
-    case Event(GetEvents(None), ReceivingEvents(events, sequence, numRead, numSent)) =>
+    case Event(GetEvents(_, None), ReceivingEvents(events, sequence, numRead, numSent)) =>
       val _limit = getBatchSize(numSent, defaultBatchSize)
       val toSend = events.take(_limit)
-      val batch = EventsBatch(sequence, toSend, finished = false)
+      val batch = EventSet(sequence, toSend, finished = false)
       stay() using ReceivingEvents(events.drop(_limit), sequence + 1, numRead, numSent + toSend.length) replying batch
 
     case Event(QueryStatistics(_, created, _, _, _), receivingEvents: ReceivingEvents) =>
@@ -53,21 +53,21 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, store: Store) extends L
 
   when(ReceivedEvents) {
 
-    case Event(GetEvents(_), ReceivedEvents(events, sequence, numRead, numSent)) if events.isEmpty =>
-      stay() using ReceivedEvents(events, sequence + 1, numRead, numSent) replying EventsBatch(sequence, events, finished = true)
+    case Event(GetEvents(_, _), ReceivedEvents(events, sequence, numRead, numSent)) if events.isEmpty =>
+      stay() using ReceivedEvents(events, sequence + 1, numRead, numSent) replying EventSet(sequence, events, finished = true)
 
-    case Event(GetEvents(Some(limit)), ReceivedEvents(events, sequence, numRead, numSent)) =>
+    case Event(GetEvents(_, Some(limit)), ReceivedEvents(events, sequence, numRead, numSent)) =>
       val _limit = getBatchSize(numSent, limit)
       val toSend = events.take(_limit)
       val eventsLeft = events.drop(_limit)
-      val batch = EventsBatch(sequence, toSend, if (eventsLeft.isEmpty) true else false)
+      val batch = EventSet(sequence, toSend, if (eventsLeft.isEmpty) true else false)
       stay() using ReceivedEvents(eventsLeft, sequence + 1, numRead, numSent + toSend.length) replying batch
 
-    case Event(GetEvents(None), ReceivedEvents(events, sequence, numRead, numSent)) =>
+    case Event(GetEvents(_, None), ReceivedEvents(events, sequence, numRead, numSent)) =>
       val _limit = getBatchSize(numSent, defaultBatchSize)
       val toSend = events.take(_limit)
       val eventsLeft = events.drop(_limit)
-      val batch = EventsBatch(sequence, toSend, if (eventsLeft.isEmpty) true else false)
+      val batch = EventSet(sequence, toSend, if (eventsLeft.isEmpty) true else false)
       stay() using ReceivedEvents(eventsLeft, sequence + 1, numRead, numSent + toSend.length) replying batch
 
     case Event(QueryStatistics(_, created, _, _, _), receivedEvents: ReceivedEvents) =>

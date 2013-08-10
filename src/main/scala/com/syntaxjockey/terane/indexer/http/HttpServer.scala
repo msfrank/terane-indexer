@@ -9,13 +9,12 @@ import com.typesafe.config.Config
 import spray.routing.HttpService
 import spray.can.Http
 import spray.http._
-import spray.http.HttpResponse
 import spray.http.HttpHeaders.Location
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
-import com.syntaxjockey.terane.indexer.sink.Query.{DeleteQuery, GetEvents, QueryStatistics, DescribeQuery}
-import com.syntaxjockey.terane.indexer.sink.Query.EventsBatch
+import com.syntaxjockey.terane.indexer.sink.CassandraSink._
+import com.syntaxjockey.terane.indexer.sink.Query._
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -54,9 +53,6 @@ trait ApiService extends HttpService {
 
   val routes = {
     path("1" / "queries") {
-      //get {
-      //  complete { eventRouter.ask(ListQueries).mapTo[ListQueriesResponse] }
-      //} ~
       post {
         entity(as[CreateQuery]) { createQuery =>
           complete {
@@ -69,17 +65,23 @@ trait ApiService extends HttpService {
         }
       }
     } ~
-    path("1" / "queries" / JavaUUID) { id =>
-      get {
-        complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).mapTo[QueryStatistics] }
-      } ~
-      post {
-        entity(as[GetEvents]) { getEvents =>
-          complete { actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).mapTo[EventsBatch] }
+    pathPrefix("1" / "queries" / JavaUUID) { case id: UUID =>
+      path("") {
+        get {
+          complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).mapTo[Either[QueryError,QueryStatistics]] }
+        } ~
+        delete {
+          complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DeleteQuery).map(result => StatusCodes.Accepted) }
         }
       } ~
-      delete {
-        complete { actorRefFactory.actorSelection("/user/query-" + id).ask(DeleteQuery).map(result => StatusCodes.Accepted) }
+      path("events") {
+        get {
+          parameter('offset.as[Int] ?) { offset =>
+          parameter('limit.as[Int] ?) { limit =>
+            val getEvents = GetEvents(offset, limit)
+            complete { actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).mapTo[Either[QueryError,EventSet]] }
+          }}
+        }
       }
     }
   }

@@ -273,14 +273,15 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
 object Query {
   /* query case classes */
-  case class GetEvents(limit: Option[Int])
+  case class GetEvents(offset: Option[Int] = None, limit: Option[Int] = None)
   case object NextEvent
   case object SendEvents
   case object DescribeQuery
   case object DeleteQuery
   case object CancelQuery
-  case class EventsBatch(sequence: Int, events: List[BierEvent], finished: Boolean)
+  case class EventSet(sequence: Int, events: List[BierEvent], finished: Boolean)
   case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int)
+  case class QueryError(code: Int, description: String, retry: Boolean)
   case object NoMoreEvents
   case object FinishedReading
 

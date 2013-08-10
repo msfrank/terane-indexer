@@ -49,7 +49,7 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
     case Event(NoMoreEvents, ReceivingEvents(numRead, deferredRequests)) =>
       goto(ReceivedEvents) using ReceivedEvents(0, sortedEvents.entrySet().iterator(), numRead, 0)
 
-    case Event(GetEvents(_), ReceivingEvents(numRead, deferredRequests)) =>
+    case Event(GetEvents(_, _), ReceivingEvents(numRead, deferredRequests)) =>
       stay() using ReceivingEvents(numRead, deferredRequests :+ sender)
 
     case Event(QueryStatistics(_, created, _, _, _), receivingEvents: ReceivingEvents) =>
@@ -62,24 +62,24 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 
   when(ReceivedEvents) {
 
-    case Event(GetEvents(_), ReceivedEvents(sequence, iterator, numRead, numSent)) if createQuery.limit == Some(numSent) =>
-      stay() using ReceivedEvents(sequence + 1, iterator, numRead, numSent) replying EventsBatch(sequence, List.empty, finished = true)
+    case Event(GetEvents(_, _), ReceivedEvents(sequence, iterator, numRead, numSent)) if createQuery.limit == Some(numSent) =>
+      stay() using ReceivedEvents(sequence + 1, iterator, numRead, numSent) replying EventSet(sequence, List.empty, finished = true)
 
-    case Event(GetEvents(_), ReceivedEvents(sequence, iterator, numRead, numSent)) if !iterator.hasNext =>
-      stay() using ReceivedEvents(sequence + 1, iterator, numRead, numSent) replying EventsBatch(sequence, List.empty, finished = true)
+    case Event(GetEvents(_, _), ReceivedEvents(sequence, iterator, numRead, numSent)) if !iterator.hasNext =>
+      stay() using ReceivedEvents(sequence + 1, iterator, numRead, numSent) replying EventSet(sequence, List.empty, finished = true)
 
-    case Event(GetEvents(Some(limit)), ReceivedEvents(sequence, iterator, numRead, numSent)) =>
+    case Event(GetEvents(offset, Some(limit)), ReceivedEvents(sequence, iterator, numRead, numSent)) =>
       val _limit = getBatchSize(numSent, limit)
       val toSend = new mutable.MutableList[BierEvent]
       for (i <- 0.until(_limit) if iterator.hasNext) { toSend += iterator.next().getValue }
-      val batch = EventsBatch(sequence, toSend.toList, if (iterator.hasNext) false else true)
+      val batch = EventSet(sequence, toSend.toList, if (iterator.hasNext) false else true)
       stay() using ReceivedEvents(sequence + 1, iterator, numRead, numSent + toSend.length) replying batch
 
-    case Event(GetEvents(None), ReceivedEvents(sequence, iterator, numRead, numSent)) =>
+    case Event(GetEvents(offset, None), ReceivedEvents(sequence, iterator, numRead, numSent)) =>
       val _limit = getBatchSize(numSent, defaultBatchSize)
       val toSend = new mutable.MutableList[BierEvent]
       for (i <- 0.until(_limit) if iterator.hasNext) { toSend += iterator.next().getValue }
-      val batch = EventsBatch(sequence, toSend.toList, if (iterator.hasNext) false else true)
+      val batch = EventSet(sequence, toSend.toList, if (iterator.hasNext) false else true)
       stay() using ReceivedEvents(sequence + 1, iterator, numRead, numSent + toSend.length) replying batch
 
     case Event(QueryStatistics(_, created, _, _, _), receivedEvents: ReceivedEvents) =>

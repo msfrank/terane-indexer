@@ -77,7 +77,7 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
       sortingStreamer ! NoMoreEvents
       expectMsg(FinishedReading)
       sortingStreamer ! GetEvents(None)
-      val batch = expectMsgClass(classOf[EventsBatch])
+      val batch = expectMsgClass(classOf[EventSet])
       batch.sequence must be(0)
       batch.finished must be(true)
       batch.events must be(List(event1, event2, event3, event4, event5))
@@ -104,7 +104,7 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
       sortingStreamer ! NoMoreEvents
       expectMsg(FinishedReading)
       sortingStreamer ! GetEvents(None)
-      val batch = expectMsgClass(classOf[EventsBatch])
+      val batch = expectMsgClass(classOf[EventSet])
       batch.sequence must be(0)
       batch.finished must be(true)
       batch.events must be(List(event1, event2, event3, event4, event5))
@@ -131,7 +131,7 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
       sortingStreamer ! NoMoreEvents
       expectMsg(FinishedReading)
       sortingStreamer ! GetEvents(None)
-      val batch = expectMsgClass(classOf[EventsBatch])
+      val batch = expectMsgClass(classOf[EventSet])
       batch.sequence must be(0)
       batch.finished must be(true)
       batch.events must be(List(event1, event2, event3, event4, event5))
