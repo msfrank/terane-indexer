@@ -10,12 +10,12 @@ import java.io.{DataInput, DataOutput, File}
 import java.net.InetAddress
 import java.util.UUID
 
+import com.syntaxjockey.terane.indexer.http.RetryLater
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent, EventValueType}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.SortingStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
-import com.syntaxjockey.terane.indexer.http.RetryLater
 
 class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged) extends LoggingFSM[State,Data] {
   import SortingStreamer._
@@ -23,36 +23,39 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
   import BierEvent._
 
   val config = context.system.settings.config
-  val defaultBatchSize = config.getInt("terane.queries.default-batch-size")
-  val maxBatchSize = config.getInt("terane.queries.maximum-batch-size")
 
   // create the sorting table
   val sortFields: Array[FieldIdentifier] = createQuery.sortBy.get.toArray
   val ident2index: Map[FieldIdentifier,Int] = fields.fieldsByIdent.keys.zip(0 to fields.fieldsByIdent.size).toMap
   val keySerializer = new EventKeySerializer(sortFields)
   val valueSerializer = new EventSerializer(ident2index)
-  val dbfile = new File("sorted-" + id)
+  val dbfile = new File("sort-" + id)
   val db = DBMaker.newFileDB(dbfile)
             .compressionEnable()
             .writeAheadLogDisable()
             .make()
-  val sortedEvents = db.createTreeMap("events", 16, true, false, keySerializer, valueSerializer, null)
+  val events = db.createTreeMap("events", 16, true, false, keySerializer, valueSerializer, null)
   log.debug("created sort table " + dbfile.getAbsolutePath)
 
-  startWith(ReceivingEvents, ReceivingEvents(0))
+  startWith(ReceivingEvents, ReceivingEvents(0, 0))
 
   when(ReceivingEvents) {
 
-    case Event(event: BierEvent, ReceivingEvents(numRead)) =>
-      sortedEvents.put(makeKey(event), event)
-      // FIXME: remove events from the sort table if size is exceeded
-      stay() using ReceivingEvents(numRead + 1) replying NextEvent
+    case Event(event: BierEvent, ReceivingEvents(numRead, currentSize)) =>
+      events.put(makeKey(event), event)
+      val updatedSize = if (createQuery.limit.isDefined && createQuery.limit.get == currentSize) {
+        events.remove(events.lastKey())
+        currentSize
+      } else currentSize + 1
+      stay() using ReceivingEvents(numRead + 1, updatedSize) replying NextEvent
 
-    case Event(NoMoreEvents, ReceivingEvents(numRead)) =>
-      goto(ReceivedEvents) using ReceivedEvents(numRead, 0, 0)
+    case Event(NoMoreEvents, ReceivingEvents(numRead, _)) =>
+      val reverse = createQuery.reverse.getOrElse(false)
+      val entries = if (reverse) events.descendingMap().entrySet() else events.entrySet()
+      goto(ReceivedEvents) using ReceivedEvents(entries, numRead, 0, 0)
 
-    case Event(_: GetEvents, ReceivingEvents(numRead)) =>
-      stay() using ReceivingEvents(numRead) replying BusySortingResults
+    case Event(_: GetEvents, _: ReceivingEvents) =>
+      stay() replying RetryLater
 
     case Event(QueryStatistics(_, created, _, _, _), receivingEvents: ReceivingEvents) =>
       stay() replying QueryStatistics(id, created, "sorting events", receivingEvents.numRead, 0)
@@ -64,18 +67,19 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 
   when(ReceivedEvents) {
 
-    case Event(GetEvents(offset: Option[Int], limit: Option[Int]), ReceivedEvents(numRead, numQueries, numSent)) =>
-      val entries: java.util.Iterator[java.util.Map.Entry[EventKey,BierEvent]] = sortedEvents.entrySet().iterator()
+    case Event(GetEvents(offset: Option[Int], limit: Option[Int]), ReceivedEvents(entries, numRead, numQueries, numSent)) =>
+      val iterator: java.util.Iterator[java.util.Map.Entry[EventKey,BierEvent]] = entries.iterator()
+      // FIXME: cache iterators
       // move iterator to the specified offset
-      for (_offset <- offset; i <- 0.until(_offset) if entries.hasNext) { entries.next() }
+      for (_offset <- offset; i <- 0.until(_offset) if iterator.hasNext) { iterator.next() }
       // build event set
       val toSend = new mutable.MutableList[BierEvent]
       if (limit.isDefined)
-        for (i <- 0.until(limit.get) if entries.hasNext) { toSend += entries.next().getValue }
+        for (i <- 0.until(limit.get) if iterator.hasNext) { toSend += iterator.next().getValue }
       else
-        while (entries.hasNext) { toSend += entries.next().getValue }
-      val batch = EventSet(toSend.toList, if (entries.hasNext) false else true)
-      stay() using ReceivedEvents(numRead, numQueries + 1, numSent + toSend.length) replying batch
+        while (iterator.hasNext) { toSend += iterator.next().getValue }
+      val batch = EventSet(toSend.toList, if (iterator.hasNext) false else true)
+      stay() using ReceivedEvents(entries, numRead, numQueries + 1, numSent + toSend.length) replying batch
 
     case Event(QueryStatistics(_, created, _, _, _), receivedEvents: ReceivedEvents) =>
       stay() replying QueryStatistics(id, created, "received events", receivedEvents.numRead, receivedEvents.numSent)
@@ -85,7 +89,7 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 
   onTermination {
     case StopEvent(_, _, _) =>
-      sortedEvents.close()
+      events.close()
       db.close()
       dbfile.delete()
       log.debug("deleted sort file " + dbfile.getAbsolutePath)
@@ -110,16 +114,12 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 }
 
 object SortingStreamer {
-
-  case object BusySortingResults extends RetryLater("sorting query results")
-
   sealed trait State
   case object ReceivingEvents extends State
   case object ReceivedEvents extends State
-
   sealed trait Data
-  case class ReceivingEvents(numRead: Int) extends Data
-  case class ReceivedEvents(numRead: Int, numQueries: Int, numSent: Int) extends Data
+  case class ReceivingEvents(numRead: Int, currentSize: Int) extends Data
+  case class ReceivedEvents(entries: java.util.Set[java.util.Map.Entry[EventKey,BierEvent]], numRead: Int, numQueries: Int, numSent: Int) extends Data
 }
 
 case class EventKey(keyvalues: Array[Option[BierEvent.KeyValue]]) extends Comparable[EventKey] {

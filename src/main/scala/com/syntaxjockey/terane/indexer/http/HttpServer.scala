@@ -10,19 +10,16 @@ import spray.routing.{ExceptionHandler, HttpService}
 import spray.can.Http
 import spray.http._
 import spray.http.HttpHeaders.Location
+import spray.util.LoggingContext
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import com.syntaxjockey.terane.indexer.sink.CassandraSink._
 import com.syntaxjockey.terane.indexer.sink.Query._
-import spray.json._
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
 import com.syntaxjockey.terane.indexer.sink.Query.EventSet
-import spray.http.HttpResponse
 import com.syntaxjockey.terane.indexer.sink.Query.QueryStatistics
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreatedQuery
-import spray.util.LoggingContext
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -137,7 +134,10 @@ trait ApiService extends HttpService {
 }
 
 abstract class ApiFailure(val description: String)
-abstract class RetryLater(_description: String) extends ApiFailure(_description)
-abstract class BadRequest(_description: String) extends ApiFailure(_description)
+trait RetryLater
+trait BadRequest
+
+case object RetryLater extends ApiFailure("retry operation later") with RetryLater
+case object BadRequest extends ApiFailure("bad request") with BadRequest
 
 class ApiException(val failure: ApiFailure) extends Exception(failure.description)
