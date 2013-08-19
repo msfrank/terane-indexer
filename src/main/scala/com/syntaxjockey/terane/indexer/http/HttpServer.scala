@@ -43,7 +43,9 @@ class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with A
     IO(Http) ! Http.Bind(self, httpInterface, port = httpPort, backlog = httpBacklog)
   }
 
-  def receive = runRoute(routes)
+  def receive = runRoute(routes) orElse {
+    case bound: Http.Bound => log.debug("bound HTTP listener to {}", bound.localAddress)
+  }
 }
 
 trait ApiService extends HttpService {
@@ -60,33 +62,34 @@ trait ApiService extends HttpService {
 
   implicit def exceptionHandler(implicit log: LoggingContext) = ExceptionHandler {
     case ex: ApiException => ctx =>
-      val entity = throwableToJson(ex).toString()
+      log.error(ex, "caught exception in spray routing")
       ex.failure match {
         case failure: RetryLater =>
-          ctx.complete(HttpResponse(StatusCodes.Accepted, HttpEntity(MediaTypes.`application/json`, entity)))
+          ctx.complete(HttpResponse(StatusCodes.Accepted, JsonBody(throwableToJson(ex))))
         case failure: BadRequest =>
-          ctx.complete(HttpResponse(StatusCodes.BadRequest, HttpEntity(MediaTypes.`application/json`, entity)))
+          ctx.complete(HttpResponse(StatusCodes.BadRequest, JsonBody(throwableToJson(ex))))
         case _ =>
-          ctx.complete(HttpResponse(StatusCodes.InternalServerError, HttpEntity(MediaTypes.`application/json`, entity)))
+          ctx.complete(HttpResponse(StatusCodes.InternalServerError, JsonBody(throwableToJson(ex))))
       }
     case ex: Throwable => ctx =>
       log.error(ex, "caught exception in spray routing")
-      ctx.complete(HttpResponse(StatusCodes.InternalServerError, HttpEntity(MediaTypes.`application/json`, "internal server error")))
+      ctx.complete(HttpResponse(StatusCodes.InternalServerError, JsonBody(throwableToJson(new Exception("internal server error")))))
   }
 
   val routes = {
     path("1" / "queries") {
       post {
-        entity(as[CreateQuery]) { createQuery =>
+        entity(as[CreateQuery]) { case createQuery: CreateQuery =>
           complete {
             eventRouter.ask(createQuery).map {
               case createdQuery: CreatedQuery =>
                 HttpResponse(StatusCodes.Created,
-                  HttpEntity(MediaTypes.`application/json`, createdQuery.toJson.toString()),
-                  List(Location("http://localhost:8080/1/queries/" + createdQuery.id)))
+                  JsonBody(createdQuery.toJson),
+                  List(Location("http://localhost:8080/1/queries" + createdQuery.id)))
               case failure: ApiFailure =>
+                log.info("error creating query")
                 throw new ApiException(failure)
-            }
+            }.mapTo[HttpResponse]
           }
         }
       }
@@ -100,7 +103,7 @@ trait ApiService extends HttpService {
                   queryStatistics
                 case failure: ApiFailure =>
                   throw new ApiException(failure)
-              }
+              }.mapTo[QueryStatistics]
           }
         } ~
         delete {
@@ -109,7 +112,7 @@ trait ApiService extends HttpService {
               case failure: ApiFailure =>
                 throw new ApiException(failure)
               case _ => StatusCodes.Accepted
-            }
+            }.mapTo[HttpResponse]
           }
         }
       } ~
@@ -124,7 +127,7 @@ trait ApiService extends HttpService {
                     eventSet
                   case failure: ApiFailure =>
                     throw new ApiException(failure)
-                }
+                }.mapTo[EventSet]
             }
           }}
         }
@@ -141,3 +144,5 @@ case object RetryLater extends ApiFailure("retry operation later") with RetryLat
 case object BadRequest extends ApiFailure("bad request") with BadRequest
 
 class ApiException(val failure: ApiFailure) extends Exception(failure.description)
+
+

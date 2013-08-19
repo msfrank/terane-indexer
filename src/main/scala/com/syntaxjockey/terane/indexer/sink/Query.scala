@@ -66,7 +66,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
      * The client has requested a query description.  Send a QueryStatistics object back.
      */
     case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Waiting for client request", 0, 0)
+      stay() replying QueryStatistics(id, created, "Reading results", 0, 0)
 
     /**
      * The streamer is asking for the next event.  Request the next posting.

@@ -13,6 +13,7 @@ import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.http.RetryLater
 
 /**
  *
@@ -61,6 +62,9 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
     // FIXME: add metric
     case Event(_: WroteEvent, _) =>
       stay()
+
+    case Event(_: CreateQuery, _) =>
+      stay() replying RetryLater
   }
 
   /* when connected we send events to the event writers */

@@ -1,7 +1,9 @@
 package com.syntaxjockey.terane.indexer.http
 
+import spray.http.{ContentTypes, HttpEntity}
 import spray.json._
 import org.joda.time.DateTime
+import java.nio.charset.Charset
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.EventRouter
@@ -74,4 +76,9 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val QueryStatisticsFormat = jsonFormat5(QueryStatistics.apply)
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
   implicit val EventSetFormat = jsonFormat2(EventSet.apply)
+}
+
+object JsonBody {
+  val charset = Charset.defaultCharset()
+  def apply(js: JsValue): HttpEntity = HttpEntity(ContentTypes.`application/json`, js.prettyPrint.getBytes(charset))
 }

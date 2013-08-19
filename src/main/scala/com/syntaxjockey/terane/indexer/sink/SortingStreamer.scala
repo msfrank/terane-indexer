@@ -1,6 +1,6 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.LoggingFSM
+import akka.actor.{ActorRef, LoggingFSM}
 import org.mapdb.{DBMaker, Serializer, BTreeKeySerializer}
 import org.joda.time.{DateTimeZone, DateTime}
 import org.xbill.DNS.Name
@@ -16,6 +16,7 @@ import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.SortingStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
+import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
 
 class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged) extends LoggingFSM[State,Data] {
   import SortingStreamer._
@@ -37,32 +38,40 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
   val events = db.createTreeMap("events", 16, true, false, keySerializer, valueSerializer, null)
   log.debug("created sort table " + dbfile.getAbsolutePath)
 
-  startWith(ReceivingEvents, ReceivingEvents(0, 0))
+  startWith(ReceivingEvents, ReceivingEvents(0, 0, Seq.empty))
 
   when(ReceivingEvents) {
 
-    case Event(event: BierEvent, ReceivingEvents(numRead, currentSize)) =>
+    case Event(event: BierEvent, ReceivingEvents(numRead, currentSize, deferredGetEvents)) =>
       events.put(makeKey(event), event)
       val updatedSize = if (createQuery.limit.isDefined && createQuery.limit.get == currentSize) {
         events.remove(events.lastKey())
         currentSize
       } else currentSize + 1
-      stay() using ReceivingEvents(numRead + 1, updatedSize) replying NextEvent
+      stay() using ReceivingEvents(numRead + 1, updatedSize, deferredGetEvents) replying NextEvent
 
-    case Event(NoMoreEvents, ReceivingEvents(numRead, _)) =>
+    case Event(NoMoreEvents, ReceivingEvents(numRead, _, _)) =>
       val reverse = createQuery.reverse.getOrElse(false)
       val entries = if (reverse) events.descendingMap().entrySet() else events.entrySet()
       goto(ReceivedEvents) using ReceivedEvents(entries, numRead, 0, 0)
 
-    case Event(_: GetEvents, _: ReceivingEvents) =>
-      stay() replying RetryLater
+    case Event(getEvents: GetEvents, ReceivingEvents(numRead, currentSize, deferredGetEvents)) =>
+      stay() using ReceivingEvents(numRead, currentSize, deferredGetEvents :+ DeferredGetEvents(sender, getEvents))
 
     case Event(QueryStatistics(_, created, _, _, _), receivingEvents: ReceivingEvents) =>
       stay() replying QueryStatistics(id, created, "sorting events", receivingEvents.numRead, 0)
   }
 
   onTransition {
-    case ReceivingEvents -> ReceivedEvents => context.parent ! FinishedReading
+    case ReceivingEvents -> ReceivedEvents =>
+      context.parent ! FinishedReading
+      stateData match {
+        case ReceivingEvents(_, _, deferredGetEvents) =>
+          deferredGetEvents.foreach {
+            case DeferredGetEvents(_sender, getEvents) => self.tell(getEvents, _sender)
+          }
+        case _ =>
+      }
   }
 
   when(ReceivedEvents) {
@@ -101,24 +110,15 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
     }
     EventKey(keyvalues)
   }
-
-  def getBatchSize(numSent: Int, requestedSize: Int): Int = {
-    createQuery.limit match {
-      case Some(queryLimit) =>
-        min(if (requestedSize > maxBatchSize) maxBatchSize else requestedSize, queryLimit - numSent)
-      case None =>
-        if (requestedSize > maxBatchSize) maxBatchSize else requestedSize
-    }
-  }
-
 }
 
 object SortingStreamer {
+  case class DeferredGetEvents(sender: ActorRef, getEvents: GetEvents)
   sealed trait State
   case object ReceivingEvents extends State
   case object ReceivedEvents extends State
   sealed trait Data
-  case class ReceivingEvents(numRead: Int, currentSize: Int) extends Data
+  case class ReceivingEvents(numRead: Int, currentSize: Int, deferredGetEvents: Seq[DeferredGetEvents]) extends Data
   case class ReceivedEvents(entries: java.util.Set[java.util.Map.Entry[EventKey,BierEvent]], numRead: Int, numQueries: Int, numSent: Int) extends Data
 }
 
