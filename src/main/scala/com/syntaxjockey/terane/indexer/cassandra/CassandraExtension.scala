@@ -19,18 +19,38 @@
 
 package com.syntaxjockey.terane.indexer.cassandra
 
+import akka.actor._
 import org.slf4j.LoggerFactory
 import com.netflix.astyanax.impl.AstyanaxConfigurationImpl
 import com.netflix.astyanax.connectionpool.NodeDiscoveryType
 import com.netflix.astyanax.connectionpool.impl.{CountingConnectionPoolMonitor, ConnectionPoolConfigurationImpl}
-import com.netflix.astyanax.{Keyspace, AstyanaxContext}
+import com.netflix.astyanax.{Cluster, AstyanaxContext}
 import com.netflix.astyanax.thrift.ThriftFamilyFactory
-import com.typesafe.config.Config
 import scala.collection.JavaConversions._
 
-class CassandraClient(config: Config) extends CassandraKeyspaceOperations {
+class CassandraManager(_context: AstyanaxContext[Cluster]) extends Actor with ActorLogging {
 
-  private val log = LoggerFactory.getLogger(classOf[CassandraClient])
+  log.debug("started cassandra manager")
+
+  def receive = {
+    case _ =>
+  }
+
+  override def preRestart(reason: Throwable, message: Option[Any]) {
+    log.warning("restarted cassandra manager")
+  }
+
+  override def postStop() {
+    _context.shutdown()
+    log.debug("stopped cassandra manager")
+  }
+}
+
+class CassandraExtension(system: ActorSystem) extends Extension {
+
+  private val log = LoggerFactory.getLogger(classOf[CassandraExtension])
+
+  val config = system.settings.config.getConfig("terane.cassandra")
 
   val configuration = new AstyanaxConfigurationImpl()
     .setDiscoveryType(NodeDiscoveryType.RING_DESCRIBE)
@@ -47,14 +67,19 @@ class CassandraClient(config: Config) extends CassandraKeyspaceOperations {
     .withConnectionPoolConfiguration(poolConfiguration)
     .withConnectionPoolMonitor(connectionPoolMonitor)
     .buildCluster(ThriftFamilyFactory.getInstance())
+
   log.info("connecting to cluster {}", clusterName)
   context.start()
-  val cluster = context.getClient
 
-  /**
-   * close the client connection.
-   */
-  def close() {
-    context.shutdown()
-  }
+  val manager = system.actorOf(Props(new CassandraManager(context)))
+  val cluster = context.getClient
+}
+
+object Cassandra extends ExtensionId[CassandraExtension] with ExtensionIdProvider {
+
+  override def lookup() = Cassandra
+  override def createExtension(system: ExtendedActorSystem) = new CassandraExtension(system)
+
+  def manager(implicit system: ActorSystem): ActorRef = super.get(system).manager
+  def cluster(implicit system: ActorSystem): Cluster = super.get(system).cluster
 }

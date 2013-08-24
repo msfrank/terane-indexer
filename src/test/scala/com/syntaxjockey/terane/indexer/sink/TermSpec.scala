@@ -48,7 +48,6 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       runTest(keyspace)
     } finally {
       keyspace.dropKeyspace().getResult
-      client.close()
     }
   }
 

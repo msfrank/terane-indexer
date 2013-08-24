@@ -19,10 +19,10 @@
 
 package com.syntaxjockey.terane.indexer.cassandra
 
+import akka.event.EventStream
 import com.netflix.astyanax.connectionpool.{HostConnectionPool, HostStats, Host, ConnectionPoolMonitor}
 import scala.collection.JavaConversions._
 import java.util
-import akka.event.EventStream
 
 class CassandraPoolMonitor(eventStream: EventStream) extends ConnectionPoolMonitor {
 

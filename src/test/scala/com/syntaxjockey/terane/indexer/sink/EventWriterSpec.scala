@@ -64,7 +64,6 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
     }), "proxy_" + id)
     runTest(keyspace, writer)
     keyspace.dropKeyspace().getResult
-    client.close()
   }
 
   "An EventWriter" must {

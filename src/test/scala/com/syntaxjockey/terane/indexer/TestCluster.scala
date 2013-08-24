@@ -31,7 +31,7 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.TypedFieldColumnFamily
-import com.syntaxjockey.terane.indexer.cassandra.{CassandraRowOperations, CassandraCFOperations, CassandraKeyspaceOperations, CassandraClient}
+import com.syntaxjockey.terane.indexer.cassandra.{Cassandra, CassandraRowOperations, CassandraCFOperations, CassandraKeyspaceOperations}
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import org.scalatest.Tag
@@ -91,17 +91,17 @@ abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with I
 
   def getZookeeperClient = Zookeeper(_system).client
 
-  def getCassandraClient = new CassandraClient(_system.settings.config.getConfig("terane.cassandra"))
+  def getCassandraClient = Cassandra(_system).cluster
 
   /**
    *
-   * @param client
+   * @param cluster
    * @param keyspaceName
    * @return
    */
-  def createKeyspace(client: CassandraClient, keyspaceName: String): Keyspace = {
-    client.createKeyspace(keyspaceName).getResult
-    val _keyspace = new KeyspaceWithCFOperations(client.getKeyspace(keyspaceName))
+  def createKeyspace(cluster: Cluster, keyspaceName: String): Keyspace = {
+    cluster.createKeyspace(keyspaceName).getResult
+    val _keyspace = new KeyspaceWithCFOperations(cluster.getKeyspace(keyspaceName))
     _keyspace.keyspace
   }
 

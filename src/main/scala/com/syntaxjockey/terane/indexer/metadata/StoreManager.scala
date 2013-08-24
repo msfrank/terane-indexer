@@ -30,7 +30,7 @@ import scala.concurrent.Future
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
-import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
+import com.syntaxjockey.terane.indexer.cassandra.Cassandra
 import com.syntaxjockey.terane.indexer.UUIDLike
 
 /**
@@ -41,11 +41,12 @@ import com.syntaxjockey.terane.indexer.UUIDLike
  *      - "count" -> UUID
  *      + "fields"
  */
-class StoreManager(cs: CassandraClient) extends Actor with ActorLogging {
+class StoreManager extends Actor with ActorLogging {
   import StoreManager._
   import context.dispatcher
 
-  var zk = Zookeeper(context.system).client
+  val zk = Zookeeper(context.system).client
+  val cs = Cassandra(context.system).cluster
 
   var stores: StoresChanged = StoresChanged(Map.empty, Map.empty)
   getStores pipeTo self
@@ -126,19 +127,19 @@ class StoreManager(cs: CassandraClient) extends Actor with ActorLogging {
           /* create the keyspace in cassandra */
           val opts = new java.util.HashMap[String,String]()
           opts.put("replication_factor", "1")
-          val ksDef = cs.cluster.makeKeyspaceDefinition()
+          val ksDef = cs.makeKeyspaceDefinition()
             .setName(id.toString)
             .setStrategyClass("SimpleStrategy")
             .setStrategyOptions(opts)
-            .addColumnFamily(cs.cluster.makeColumnFamilyDefinition()
+            .addColumnFamily(cs.makeColumnFamilyDefinition()
               .setName("events")
               .setKeyValidationClass("UUIDType")
               .setComparatorType("UTF8Type"))
-            .addColumnFamily(cs.cluster.makeColumnFamilyDefinition()
+            .addColumnFamily(cs.makeColumnFamilyDefinition()
               .setName("meta")
               .setKeyValidationClass("UUIDType")
               .setComparatorType("UTF8Type"))
-          val result = cs.cluster.addKeyspace(ksDef)
+          val result = cs.addKeyspace(ksDef)
           log.debug("added keyspace {} (schema result id {})", id.toString, result.getResult.getSchemaId)
           /* create the store in zookeeper */
           zk.inTransaction()

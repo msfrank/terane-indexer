@@ -20,30 +20,33 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor._
-import scala.concurrent.duration._
-import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.model.ColumnFamily
-import com.netflix.astyanax.serializers.{StringSerializer, ListSerializer, SetSerializer, UUIDSerializer}
-import org.apache.cassandra.db.marshal.{UTF8Type, Int32Type}
+import com.netflix.astyanax.serializers.{StringSerializer, SetSerializer, UUIDSerializer}
+import org.apache.cassandra.db.marshal.Int32Type
+import scala.concurrent.duration._
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.http.RetryLater
-import java.util.concurrent.TimeUnit
+import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
 
 /**
  *
  */
-class CassandraSink(store: Store, keyspace: Keyspace) extends Actor with FSM[State,Data] with ActorLogging {
+class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorLogging with CassandraKeyspaceOperations {
   import CassandraSink._
   import FieldManager._
   import context.dispatcher
 
   val config = context.system.settings.config.getConfig("terane.cassandra")
   val flushInterval = Duration(config.getMilliseconds("flush-interval"), TimeUnit.MILLISECONDS)
+
+  val cluster = Cassandra(context.system).cluster
+  val keyspace = getKeyspace(store.id)
 
   var currentFields = FieldsChanged(Map.empty, Map.empty)
   val fieldBus = new FieldBus()
