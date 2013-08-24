@@ -30,7 +30,7 @@ import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
 import akka.actor.Status.Failure
 import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
-import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZookeeperClient}
 
 /**
  * + namespace: String
@@ -40,11 +40,11 @@ import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
  *      - "count" -> UUID
  *      + "fields"
  */
-class StoreManager(zk: ZookeeperClient, cs: CassandraClient) extends Actor with ActorLogging {
+class StoreManager(cs: CassandraClient) extends Actor with ActorLogging {
   import StoreManager._
-
-  val config = context.system.settings.config.getConfig("terane.zookeeper")
   import context.dispatcher
+
+  var zk = Zookeeper(context.system).client
 
   var stores: StoresChanged = StoresChanged(Map.empty, Map.empty)
   getStores pipeTo self
@@ -76,15 +76,15 @@ class StoreManager(zk: ZookeeperClient, cs: CassandraClient) extends Actor with 
    * @return
    */
   def getStores = Future[StoresChanged] {
-    zk.client.checkExists().forPath("/stores") match {
+    zk.checkExists().forPath("/stores") match {
       case stat: Stat =>
-        val znodes = zk.client.getChildren.forPath("/stores")
+        val znodes = zk.getChildren.forPath("/stores")
         log.debug("found {} stores in /stores", znodes.length)
         val storesById: Map[String,Store] = znodes.map { storeNode =>
           val storePath = "/stores/" + storeNode
           val name = storeNode
-          val id = new String(zk.client.getData.forPath(storePath), ZookeeperClient.UTF_8_CHARSET)
-          val createdString = new String(zk.client.getData.forPath(storePath + "/created"), ZookeeperClient.UTF_8_CHARSET)
+          val id = new String(zk.getData.forPath(storePath), Zookeeper.UTF_8_CHARSET)
+          val createdString = new String(zk.getData.forPath(storePath + "/created"), Zookeeper.UTF_8_CHARSET)
           val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
           val store = Store(id, name, created)
           log.debug("found store {}", store)
@@ -107,15 +107,15 @@ class StoreManager(zk: ZookeeperClient, cs: CassandraClient) extends Actor with 
   def createStore(name: String) = Future[CreatedStore] {
     val path = "/stores/" + name
     /* lock store */
-    val lock = new InterProcessReadWriteLock(zk.client, "/lock" + path)
+    val lock = new InterProcessReadWriteLock(zk, "/lock" + path)
     val writeLock = lock.writeLock()
     writeLock.acquire()
     try {
       /* check whether store exists */
-      zk.client.checkExists().forPath(path) match {
+      zk.checkExists().forPath(path) match {
         case stat: Stat =>
-          val id = new String(zk.client.getData.forPath(path), ZookeeperClient.UTF_8_CHARSET)
-          val createdString = new String(zk.client.getData.forPath(path + "/created"), ZookeeperClient.UTF_8_CHARSET)
+          val id = new String(zk.getData.forPath(path), Zookeeper.UTF_8_CHARSET)
+          val createdString = new String(zk.getData.forPath(path + "/created"), Zookeeper.UTF_8_CHARSET)
           val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
           log.debug("found store {} => {}", name, id)
           CreatedStore(Store(id, name, created))
@@ -140,7 +140,7 @@ class StoreManager(zk: ZookeeperClient, cs: CassandraClient) extends Actor with 
           val result = cs.cluster.addKeyspace(ksDef)
           log.debug("added keyspace {} (schema result id {})", id.toString, result.getResult.getSchemaId)
           /* create the store in zookeeper */
-          zk.client.inTransaction()
+          zk.inTransaction()
             .create().forPath("/stores")
               .and()
             .create().forPath(path, id.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit
 /**
  *
  */
-class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) extends Actor with FSM[State,Data] with ActorLogging {
+class CassandraSink(store: Store, keyspace: Keyspace) extends Actor with FSM[State,Data] with ActorLogging {
   import CassandraSink._
   import FieldManager._
   import context.dispatcher
@@ -50,7 +50,7 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
   val fieldBus = new FieldBus()
   fieldBus.subscribe(self, classOf[FieldNotification])
 
-  val fieldManager = context.actorOf(Props(new FieldManager(store, keyspace, zk, fieldBus)), "field-manager")
+  val fieldManager = context.actorOf(Props(new FieldManager(store, keyspace, fieldBus)), "field-manager")
 
   val writers = context.actorOf(Props(new EventWriter(store, keyspace, fieldManager)), "writer")
   fieldBus.subscribe(writers, classOf[FieldNotification])

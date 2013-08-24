@@ -35,7 +35,7 @@ import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 
-class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with ActorLogging {
+class EventRouter(cs: CassandraClient) extends Actor with ActorLogging {
   import EventRouter._
   import StoreManager._
 
@@ -43,7 +43,7 @@ class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with A
   var storesByName = Map.empty[String,Store]
   val sinksByName = scala.collection.mutable.HashMap[String,ActorRef]()
 
-  val storeManager = context.actorOf(Props(new StoreManager(zk, cs)), "store-manager")
+  val storeManager = context.actorOf(Props(new StoreManager(cs)), "store-manager")
 
   /* make sure all specified sinks have been created */
   if (context.system.settings.config.hasPath("terane.sinks"))
@@ -67,7 +67,7 @@ class EventRouter(zk: ZookeeperClient, cs: CassandraClient) extends Actor with A
       // add any created stores
       _storesById.values.filter(store => !storesById.contains(store.id)).foreach { store =>
         val keyspace = cs.getKeyspace(store.id)
-        val sink = context.actorOf(Props(new CassandraSink(store, keyspace, zk)), "sink-" + store.id)
+        val sink = context.actorOf(Props(new CassandraSink(store, keyspace)), "sink-" + store.id)
         sinksByName.put(store.name, sink)
         log.debug("creating sink {} for store {}", sink.path.name, store.name)
       }

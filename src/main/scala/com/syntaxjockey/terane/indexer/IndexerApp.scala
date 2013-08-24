@@ -42,7 +42,7 @@ object IndexerApp extends App {
   val cassandra = new CassandraClient(config.getConfig("terane.cassandra"))
 
   /* start the sinks */
-  val eventRouter = system.actorOf(Props(new EventRouter(zookeeper, cassandra)), "event-router")
+  val eventRouter = system.actorOf(Props(new EventRouter(cassandra)), "event-router")
 
   /* start the sources */
   val sources: Seq[ActorRef] = if (config.hasPath("terane.sources"))

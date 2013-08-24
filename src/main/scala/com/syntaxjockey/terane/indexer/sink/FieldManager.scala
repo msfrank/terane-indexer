@@ -39,7 +39,7 @@ import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.cassandra.CassandraCFOperations
-import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZookeeperClient}
 import com.syntaxjockey.terane.indexer.UUIDLike
 import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
@@ -56,11 +56,13 @@ import org.apache.zookeeper.data.Stat
  *          - "frequency" -> UUID
  *
  */
-class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fieldBus: FieldBus) extends Actor with ActorLogging with CassandraCFOperations {
+class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) extends Actor with ActorLogging with CassandraCFOperations {
   import FieldManager._
   import UUIDLike._
 
   import context.dispatcher
+
+  val zk = Zookeeper(context.system).client
 
   val shardingFactor = 3
   var currentFields = FieldsChanged(Map.empty, Map.empty)
@@ -109,17 +111,17 @@ class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fi
    */
   def getFields = Future[FieldsChanged] {
     val basepath = "/stores/" + store.name + "/fields"
-    val znodes = zk.client.getChildren.forPath(basepath)
+    val znodes = zk.getChildren.forPath(basepath)
     log.debug("found {} fields in {}", znodes.length, basepath)
     znodes.foldLeft(FieldsChanged(Map.empty, Map.empty)) {
       (fieldsChanged, fieldNode) =>
       val FieldsChanged(fieldsByIdent, fieldsByCf) = fieldsChanged
       val fieldPath = basepath + "/" + fieldNode
-      val id = new String(zk.client.getData.forPath(fieldPath), ZookeeperClient.UTF_8_CHARSET)
+      val id = new String(zk.getData.forPath(fieldPath), ZookeeperClient.UTF_8_CHARSET)
       val fieldNodeParts = fieldNode.split(":", 2)
       val fieldType = DataType.withName(fieldNodeParts(0))
       val fieldName = fieldNodeParts(1)
-      val createdString = new String(zk.client.getData.forPath(fieldPath + "/created"), ZookeeperClient.UTF_8_CHARSET)
+      val createdString = new String(zk.getData.forPath(fieldPath + "/created"), ZookeeperClient.UTF_8_CHARSET)
       val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
       val fieldId = FieldIdentifier(fieldName, fieldType)
       if (fieldsByIdent.contains(fieldId))
@@ -178,12 +180,12 @@ class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fi
     val id: UUIDLike = UUID.randomUUID()
     val created = DateTime.now(DateTimeZone.UTC)
     /* lock field */
-    val lock = new InterProcessReadWriteLock(zk.client, "/lock" + path)
+    val lock = new InterProcessReadWriteLock(zk, "/lock" + path)
     val writeLock = lock.writeLock()
     writeLock.acquire()
     try {
       /* check whether field already exists */
-      zk.client.checkExists().forPath(path) match {
+      zk.checkExists().forPath(path) match {
         case stat: Stat =>
           // FIXME: return field if it already exists
           throw new Exception("field already exists")
@@ -227,7 +229,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fi
               CreatedField(fieldId, field, fcf, createHostnameField(id).getResult)
           }
           /* create the field in zookeeper */
-          zk.client.inTransaction()
+          zk.inTransaction()
             .create().forPath(path, id.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
             .and()
             .create().forPath(path + "/created", created.getMillis.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
