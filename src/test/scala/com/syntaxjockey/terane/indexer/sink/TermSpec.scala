@@ -33,7 +33,7 @@ import scala.concurrent.Await
 import java.net.InetAddress
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.{TestCluster, UUIDLike}
+import com.syntaxjockey.terane.indexer.{RequiresTestCluster, TestCluster, UUIDLike}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
 
@@ -57,7 +57,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
 
   "A Term" must {
 
-    "return a UUID for a Text value" in withKeyspace { keyspace =>
+    "return a UUID for a Text value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, textField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
@@ -71,7 +71,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       Await.result(term.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
-    "return a UUID for a Literal value" in withKeyspace { keyspace =>
+    "return a UUID for a Literal value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, literalField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
@@ -85,7 +85,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       Await.result(term.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
-    "return a UUID for an Integer value" in withKeyspace { keyspace =>
+    "return a UUID for an Integer value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, integerField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
@@ -99,7 +99,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       Await.result(term.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
-    "return a UUID for a Float value" in withKeyspace { keyspace =>
+    "return a UUID for a Float value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, floatField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
@@ -113,7 +113,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       Await.result(term.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
-    "return a UUID for an Datetime value" in withKeyspace { keyspace =>
+    "return a UUID for an Datetime value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, datetimeField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
@@ -128,7 +128,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       Await.result(term.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
-    "return a UUID for an Address value" in withKeyspace { keyspace =>
+    "return a UUID for an Address value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, addressField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
@@ -143,7 +143,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       Await.result(term.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
-    "return a UUID for an Hostname value" in withKeyspace { keyspace =>
+    "return a UUID for an Hostname value" taggedAs RequiresTestCluster in withKeyspace { keyspace =>
       createColumnFamily(keyspace, hostnameField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros

@@ -30,7 +30,7 @@ import scala.concurrent.duration._
 import java.net.InetAddress
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.{UUIDLike, TestCluster}
+import com.syntaxjockey.terane.indexer.{RequiresTestCluster, UUIDLike, TestCluster}
 import com.syntaxjockey.terane.indexer.bier.Event
 import com.syntaxjockey.terane.indexer.bier.Event._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
@@ -72,7 +72,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
 
   "An EventWriter" must {
 
-    "write an event with a text field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with a text field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, textField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(textField.fieldId -> textField), Map(textField.text.get.id -> textField))
@@ -81,7 +81,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
 
-    "write an event with a literal field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with a literal field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, literalField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(literalField.fieldId -> literalField), Map(literalField.literal.get.id -> literalField))
@@ -90,7 +90,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
 
-    "write an event with an integer field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with an integer field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, integerField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(integerField.fieldId -> integerField), Map(integerField.integer.get.id -> integerField))
@@ -99,7 +99,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
 
-    "write an event with a float field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with a float field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, floatField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(floatField.fieldId -> floatField), Map(floatField.float.get.id -> floatField))
@@ -108,7 +108,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
 
-    "write an event with a datetime field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with a datetime field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, datetimeField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(datetimeField.fieldId -> datetimeField), Map(datetimeField.datetime.get.id -> datetimeField))
@@ -117,7 +117,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
 
-    "write an event with an address field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with an address field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, addressField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(addressField.fieldId -> addressField), Map(addressField.address.get.id -> addressField))
@@ -126,7 +126,7 @@ with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with Bef
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
 
-    "write an event with a hostname field to the store" in withWriter { (keyspace, writer) =>
+    "write an event with a hostname field to the store" taggedAs RequiresTestCluster in withWriter { (keyspace, writer) =>
       createColumnFamily(keyspace, hostnameField)
       expectMsg(GetFields)
       writer ! FieldsChanged(Map(hostnameField.fieldId -> hostnameField), Map(hostnameField.hostname.get.id -> hostnameField))

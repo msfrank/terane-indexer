@@ -34,6 +34,7 @@ import com.syntaxjockey.terane.indexer.sink.FieldManager.TypedFieldColumnFamily
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraRowOperations, CassandraCFOperations, CassandraKeyspaceOperations, CassandraClient}
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
+import org.scalatest.Tag
 
 trait TestCluster {
   import TestCluster._
@@ -136,3 +137,5 @@ object TestCluster {
   implicit def keyspace2CFOperations(keyspace: Keyspace): KeyspaceWithCFOperations = new KeyspaceWithCFOperations(keyspace)
   implicit def keyspace2RowOperations(keyspace: Keyspace): KeyspaceWithRowOperations = new KeyspaceWithRowOperations(keyspace)
 }
+
+object RequiresTestCluster extends Tag("Requires TestCluster")
