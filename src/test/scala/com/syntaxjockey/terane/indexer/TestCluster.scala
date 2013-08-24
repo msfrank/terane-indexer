@@ -35,15 +35,13 @@ import com.syntaxjockey.terane.indexer.cassandra.{CassandraRowOperations, Cassan
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import org.scalatest.Tag
+import akka.testkit.{ImplicitSender, TestKit}
+import akka.actor.ActorSystem
 
-trait TestCluster {
+abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with ImplicitSender {
   import TestCluster._
 
-  def getZookeeperClient = new ZookeeperClient(config.getConfig("terane.zookeeper"))
-
-  def getCassandraClient = new CassandraClient(config.getConfig("terane.cassandra"))
-
-  val config = ConfigFactory.parseString(
+  def this(actorSystemName: String) = this(ActorSystem(actorSystemName, ConfigFactory.parseString(
     """
       |terane {
       |  cassandra {
@@ -54,7 +52,7 @@ trait TestCluster {
       |    cluster-name = "Default Cluster"
       |  }
       |}
-    """.stripMargin)
+    """.stripMargin)))
 
   val textId = FieldIdentifier("text_field", DataType.TEXT)
   val textCf = new TypedFieldColumnFamily(textId.fieldName, "text_field", 0, new TextField(),
@@ -90,6 +88,10 @@ trait TestCluster {
   val hostnameCf = new TypedFieldColumnFamily(hostnameId.fieldName, "hostname_field", 0, new HostnameField(),
     new ColumnFamily[java.lang.Long,StringPosting]("hostname_field", LongSerializer.get, FieldSerializers.Hostname))
   val hostnameField = Field(hostnameId, DateTime.now(), hostname = Some(hostnameCf))
+
+  def getZookeeperClient = Zookeeper(_system).client
+
+  def getCassandraClient = new CassandraClient(_system.settings.config.getConfig("terane.cassandra"))
 
   /**
    *

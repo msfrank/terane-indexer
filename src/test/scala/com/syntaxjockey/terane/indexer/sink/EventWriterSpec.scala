@@ -38,10 +38,7 @@ import com.syntaxjockey.terane.indexer.sink.CassandraSink.{StoreEvent, WroteEven
 import com.syntaxjockey.terane.indexer.sink.FieldManager.{GetFields, FieldsChanged}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 
-class EventWriterSpec(_system: ActorSystem) extends TestKit(_system)
-with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfter with BeforeAndAfterAll with TestCluster {
-
-  def this() = this(ActorSystem("EventWriterSpec"))
+class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with MustMatchers with BeforeAndAfter with BeforeAndAfterAll {
 
   // shutdown the actor system
   override def afterAll() {

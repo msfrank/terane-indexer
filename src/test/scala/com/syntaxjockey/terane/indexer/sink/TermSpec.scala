@@ -37,11 +37,8 @@ import com.syntaxjockey.terane.indexer.{RequiresTestCluster, TestCluster, UUIDLi
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
 
-class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with TestCluster {
+class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
   import TestCluster._
-
-  // magic
-  def this() = this(ActorSystem("TermSpec"))
 
   def withKeyspace(runTest: Keyspace => Any) {
     val client = getCassandraClient
