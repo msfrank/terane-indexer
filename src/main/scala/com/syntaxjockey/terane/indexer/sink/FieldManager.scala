@@ -28,6 +28,8 @@ import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.ddl.SchemaChangeResult
+import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
+import org.apache.zookeeper.data.Stat
 import org.joda.time.{DateTimeZone, DateTime}
 import scala.concurrent.Future
 import scala.collection.JavaConversions._
@@ -39,10 +41,8 @@ import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.cassandra.CassandraCFOperations
-import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZookeeperClient}
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.UUIDLike
-import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
-import org.apache.zookeeper.data.Stat
 
 /**
  *
@@ -117,11 +117,11 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
       (fieldsChanged, fieldNode) =>
       val FieldsChanged(fieldsByIdent, fieldsByCf) = fieldsChanged
       val fieldPath = basepath + "/" + fieldNode
-      val id = new String(zk.getData.forPath(fieldPath), ZookeeperClient.UTF_8_CHARSET)
+      val id = new String(zk.getData.forPath(fieldPath), Zookeeper.UTF_8_CHARSET)
       val fieldNodeParts = fieldNode.split(":", 2)
       val fieldType = DataType.withName(fieldNodeParts(0))
       val fieldName = fieldNodeParts(1)
-      val createdString = new String(zk.getData.forPath(fieldPath + "/created"), ZookeeperClient.UTF_8_CHARSET)
+      val createdString = new String(zk.getData.forPath(fieldPath + "/created"), Zookeeper.UTF_8_CHARSET)
       val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
       val fieldId = FieldIdentifier(fieldName, fieldType)
       if (fieldsByIdent.contains(fieldId))
@@ -230,9 +230,9 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
           }
           /* create the field in zookeeper */
           zk.inTransaction()
-            .create().forPath(path, id.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
+            .create().forPath(path, id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
             .and()
-            .create().forPath(path + "/created", created.getMillis.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
+            .create().forPath(path + "/created", created.getMillis.toString.getBytes(Zookeeper.UTF_8_CHARSET))
             .and()
             .commit()
           log.debug("created field {}:{} in store {} (schema change id is {})",

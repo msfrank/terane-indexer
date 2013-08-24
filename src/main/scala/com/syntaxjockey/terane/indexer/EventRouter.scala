@@ -20,20 +20,15 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
-import akka.pattern.ask
-import akka.pattern.pipe
-import java.util.UUID
-import org.joda.time.DateTime
+import com.typesafe.config.ConfigValueType
 import scala.Some
 import scala.collection.JavaConversions._
 
-import com.syntaxjockey.terane.indexer.metadata.{StoreManager}
-import com.syntaxjockey.terane.indexer.sink.{CassandraSink}
 import com.syntaxjockey.terane.indexer.bier.Event
-import com.typesafe.config.ConfigValueType
+import com.syntaxjockey.terane.indexer.metadata.StoreManager
+import com.syntaxjockey.terane.indexer.sink.CassandraSink
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
-import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 
 class EventRouter(cs: CassandraClient) extends Actor with ActorLogging {
   import EventRouter._

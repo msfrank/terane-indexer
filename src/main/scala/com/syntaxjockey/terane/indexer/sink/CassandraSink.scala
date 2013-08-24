@@ -30,7 +30,6 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
-import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.http.RetryLater
 import java.util.concurrent.TimeUnit

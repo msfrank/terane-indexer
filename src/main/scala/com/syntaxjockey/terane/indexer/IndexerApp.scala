@@ -22,12 +22,11 @@ package com.syntaxjockey.terane.indexer
 import akka.actor.{ActorRef, Props, ActorSystem}
 import com.typesafe.config._
 import scala.collection.JavaConversions._
-
-import com.syntaxjockey.terane.indexer.http.HttpServer
-import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
 import scala.Some
+
+import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
 import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
-import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.http.HttpServer
 
 /**
  * Indexer application entry point
@@ -38,7 +37,6 @@ object IndexerApp extends App {
   val system = ActorSystem("terane-indexer")
 
   /* synchronously connect to zookeeper and cassandra before starting actors */
-  val zookeeper = new ZookeeperClient(config.getConfig("terane.zookeeper"))
   val cassandra = new CassandraClient(config.getConfig("terane.cassandra"))
 
   /* start the sinks */

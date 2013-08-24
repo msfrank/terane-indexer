@@ -20,17 +20,18 @@
 package com.syntaxjockey.terane.indexer.metadata
 
 import akka.actor.{Actor, ActorLogging}
-import java.util.UUID
-import scala.collection.JavaConversions._
-import org.joda.time.{DateTimeZone, DateTime}
-import scala.concurrent.Future
 import akka.pattern.pipe
-import com.syntaxjockey.terane.indexer.UUIDLike
+import akka.actor.Status.Failure
 import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
-import akka.actor.Status.Failure
+import org.joda.time.{DateTimeZone, DateTime}
+import scala.collection.JavaConversions._
+import scala.concurrent.Future
+import java.util.UUID
+
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.cassandra.CassandraClient
-import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZookeeperClient}
+import com.syntaxjockey.terane.indexer.UUIDLike
 
 /**
  * + namespace: String
@@ -143,11 +144,11 @@ class StoreManager(cs: CassandraClient) extends Actor with ActorLogging {
           zk.inTransaction()
             .create().forPath("/stores")
               .and()
-            .create().forPath(path, id.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
+            .create().forPath(path, id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
               .and()
             .create().forPath(path + "/fields")
               .and()
-            .create().forPath(path + "/created", created.getMillis.toString.getBytes(ZookeeperClient.UTF_8_CHARSET))
+            .create().forPath(path + "/created", created.getMillis.toString.getBytes(Zookeeper.UTF_8_CHARSET))
               .and()
             .commit()
           log.debug("created store {} => {}", name, id)

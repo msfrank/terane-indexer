@@ -32,7 +32,7 @@ import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.TypedFieldColumnFamily
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraRowOperations, CassandraCFOperations, CassandraKeyspaceOperations, CassandraClient}
-import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import org.scalatest.Tag
 
