@@ -66,7 +66,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (text <- value.text) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            row.putColumn(field.text.get.id, text)
+            row.putColumn(field.text.get.id, text.underlying)
             writeTextPosting(postingsMutation, field.text.get, text, event.id)
           case Some(field) => // do nothing
           case None =>
@@ -76,8 +76,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (literal <- value.literal) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            val javaLiteral: java.util.List[java.lang.String] = literal
-            row.putColumn(field.literal.get.id, javaLiteral, CassandraSink.SER_LITERAL, new java.lang.Integer(0))
+            row.putColumn(field.literal.get.id, literal.underlying)
             writeLiteralPosting(postingsMutation, field.literal.get, literal, event.id)
           case Some(field) => // do nothing
           case None =>
@@ -87,7 +86,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (integer <- value.integer) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            row.putColumn(field.integer.get.id, integer)
+            row.putColumn(field.integer.get.id, integer.underlying)
             writeIntegerPosting(postingsMutation, field.integer.get, integer, event.id)
           case Some(field) => // do nothing
           case None =>
@@ -97,7 +96,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (float <- value.float) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            row.putColumn(field.float.get.id, float)
+            row.putColumn(field.float.get.id, float.underlying)
             writeFloatPosting(postingsMutation, field.float.get, float, event.id)
           case Some(field) => // do nothing
           case None =>
@@ -107,7 +106,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (datetime <- value.datetime) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            row.putColumn(field.datetime.get.id, datetime.toDate)
+            row.putColumn(field.datetime.get.id, datetime.underlying.toDate)
             writeDatetimePosting(postingsMutation, field.datetime.get, datetime, event.id)
           case Some(field) => // do nothing
           case None =>
@@ -117,7 +116,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (address <- value.address) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            row.putColumn(field.address.get.id, address.getAddress)
+            row.putColumn(field.address.get.id, address.underlying.getAddress)
             writeAddressPosting(postingsMutation, field.address.get, address, event.id)
           case Some(field) => // do nothing
           case None =>
@@ -127,7 +126,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       for (hostname <- value.hostname) {
         fieldsById.get(ident) match {
           case Some(field) if missingFields.isEmpty =>
-            row.putColumn(field.hostname.get.id, hostname.toString)
+            row.putColumn(field.hostname.get.id, hostname.underlying.toString)
             writeHostnamePosting(postingsMutation, field.hostname.get, hostname, event.id)
           case Some(field) => // do nothing
           case None =>

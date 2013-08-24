@@ -7,7 +7,8 @@ import java.nio.charset.Charset
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.EventRouter
-import com.syntaxjockey.terane.indexer.bier.{EventValueType, Event}
+import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
+import com.syntaxjockey.terane.indexer.bier.Event
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, EventSet}
@@ -29,7 +30,7 @@ object JsonProtocol extends DefaultJsonProtocol {
     def write(ident: FieldIdentifier) = JsArray(JsString(ident.fieldType.toString), JsString(ident.fieldName))
     def read(value: JsValue) = value match {
       case JsArray(List(JsString(fieldTypeName), JsString(fieldName))) =>
-        FieldIdentifier(fieldName, EventValueType.withName(fieldTypeName.toUpperCase))
+        FieldIdentifier(fieldName, DataType.withName(fieldTypeName.toUpperCase))
     }
   }
 
@@ -39,19 +40,19 @@ object JsonProtocol extends DefaultJsonProtocol {
       val fields: List[JsField] = for ((FieldIdentifier(name, _), value) <- event.values.toList) yield {
         val values = scala.collection.mutable.HashMap[String,JsValue]()
         for (text <- value.text)
-          values(EventValueType.TEXT.toString) = JsString(text)
+          values(DataType.TEXT.toString) = JsString(text.underlying)
         for (literal <- value.literal)
-          values(EventValueType.LITERAL.toString) = JsArray(literal.map(JsString(_)))
+          values(DataType.LITERAL.toString) = JsString(literal.underlying)
         for (integer <- value.integer)
-          values(EventValueType.INTEGER.toString) = JsNumber(integer)
+          values(DataType.INTEGER.toString) = JsNumber(integer.underlying)
         for (float <- value.float)
-          values(EventValueType.FLOAT.toString) = JsNumber(float)
+          values(DataType.FLOAT.toString) = JsNumber(float.underlying)
         for (datetime <- value.datetime)
-          values(EventValueType.DATETIME.toString) = JsNumber(datetime.getMillis)
+          values(DataType.DATETIME.toString) = JsNumber(datetime.underlying.getMillis)
         for (address <- value.address)
-          values(EventValueType.ADDRESS.toString) = JsString(address.getHostAddress)
+          values(DataType.ADDRESS.toString) = JsString(address.underlying.getHostAddress)
         for (hostname <- value.hostname)
-          values(EventValueType.HOSTNAME.toString) = JsString(hostname.toString)
+          values(DataType.HOSTNAME.toString) = JsString(hostname.underlying.toString)
         name -> JsObject(values.toMap)
       }
       JsArray(event.id.toJson, JsObject(fields))

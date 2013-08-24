@@ -3,8 +3,6 @@ package com.syntaxjockey.terane.indexer.cassandra
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.connectionpool.OperationResult
 import com.netflix.astyanax.ddl.SchemaChangeResult
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.EventValueType
 
 trait CassandraCFOperations {
 

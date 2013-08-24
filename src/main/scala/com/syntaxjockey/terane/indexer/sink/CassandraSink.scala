@@ -14,6 +14,7 @@ import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.http.RetryLater
+import java.util.concurrent.TimeUnit
 
 /**
  *
@@ -21,9 +22,10 @@ import com.syntaxjockey.terane.indexer.http.RetryLater
 class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) extends Actor with FSM[State,Data] with ActorLogging {
   import CassandraSink._
   import FieldManager._
-
   import context.dispatcher
+
   val config = context.system.settings.config.getConfig("terane.cassandra")
+  val flushInterval = Duration(config.getMilliseconds("flush-interval"), TimeUnit.MILLISECONDS)
 
   var currentFields = FieldsChanged(Map.empty, Map.empty)
   val fieldBus = new FieldBus()
@@ -83,7 +85,7 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
 
     case Event(FlushRetries, EventBuffer(retries, _)) =>
       retries.foreach(retry => writers ! StoreEvent(retry.event, retry.attempt))
-      val scheduledFlush = context.system.scheduler.scheduleOnce(FLUSH_INTERVAL, self, FlushRetries)
+      val scheduledFlush = context.system.scheduler.scheduleOnce(flushInterval, self, FlushRetries)
       stay() using EventBuffer(Seq.empty, Some(scheduledFlush))
 
     case Event(createQuery: CreateQuery, _) =>
@@ -101,11 +103,10 @@ class CassandraSink(store: Store, keyspace: Keyspace, zk: ZookeeperClient) exten
 }
 
 object CassandraSink {
-  val FLUSH_INTERVAL = 60.seconds
+
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
   val CF_META = new ColumnFamily[UUID,String]("meta", UUIDSerializer.get(), StringSerializer.get())
   val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
-  val SER_LITERAL = new ListSerializer[java.lang.String](UTF8Type.instance)
 
   case class StoreEvent(event: BierEvent, attempt: Int)
   case class RetryEvent(event: BierEvent, attempt: Int)

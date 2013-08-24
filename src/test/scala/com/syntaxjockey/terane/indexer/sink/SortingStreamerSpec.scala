@@ -8,8 +8,8 @@ import org.joda.time.DateTime
 import scala.Some
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.{Event, EventValueType}
-import com.syntaxjockey.terane.indexer.bier.Event.Value
+import com.syntaxjockey.terane.indexer.bier.{Event, Value}
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.Query._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
@@ -25,13 +25,13 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
 
   "A SortingStreamer" must {
 
-    val textId = FieldIdentifier("text", EventValueType.TEXT)
-    val literalId = FieldIdentifier("literal", EventValueType.LITERAL)
-    val integerId = FieldIdentifier("integer", EventValueType.INTEGER)
-    val floatId = FieldIdentifier("float", EventValueType.FLOAT)
-    val datetimeId = FieldIdentifier("datetime", EventValueType.DATETIME)
-    val addressId = FieldIdentifier("address", EventValueType.ADDRESS)
-    val hostnameId = FieldIdentifier("hostname", EventValueType.HOSTNAME)
+    val textId = FieldIdentifier("text", DataType.TEXT)
+    val literalId = FieldIdentifier("literal", DataType.LITERAL)
+    val integerId = FieldIdentifier("integer", DataType.INTEGER)
+    val floatId = FieldIdentifier("float", DataType.FLOAT)
+    val datetimeId = FieldIdentifier("datetime", DataType.DATETIME)
+    val addressId = FieldIdentifier("address", DataType.ADDRESS)
+    val hostnameId = FieldIdentifier("hostname", DataType.HOSTNAME)
     val fields = FieldsChanged(
       Map(
         textId -> Field(textId, DateTime.now()),
@@ -59,11 +59,11 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
     "return events sorted by text field" in {
       val createQuery = CreateQuery("", "", None, Some(List(textId)), None, None)
       val sortingStreamer = createSortingStreamer(createQuery)
-      val event1 = Event(values = Map(textId -> Value(text = Some("message 1"))))
-      val event2 = Event(values = Map(textId -> Value(text = Some("message 2"))))
-      val event3 = Event(values = Map(textId -> Value(text = Some("message 3"))))
-      val event4 = Event(values = Map(textId -> Value(text = Some("message 4"))))
-      val event5 = Event(values = Map(textId -> Value(text = Some("message 5"))))
+      val event1 = Event(values = Map(textId -> Value(text = Some(Text("message 1")))))
+      val event2 = Event(values = Map(textId -> Value(text = Some(Text("message 2")))))
+      val event3 = Event(values = Map(textId -> Value(text = Some(Text("message 3")))))
+      val event4 = Event(values = Map(textId -> Value(text = Some(Text("message 4")))))
+      val event5 = Event(values = Map(textId -> Value(text = Some(Text("message 5")))))
       sortingStreamer ! event1
       expectMsg(NextEvent)
       sortingStreamer ! event4
@@ -85,11 +85,11 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
     "return events sorted by integer field" in {
       val createQuery = CreateQuery("", "", None, Some(List(integerId)), None, None)
       val sortingStreamer = createSortingStreamer(createQuery)
-      val event1 = Event(values = Map(integerId -> Value(integer = Some(1))))
-      val event2 = Event(values = Map(integerId -> Value(integer = Some(2))))
-      val event3 = Event(values = Map(integerId -> Value(integer = Some(3))))
-      val event4 = Event(values = Map(integerId -> Value(integer = Some(4))))
-      val event5 = Event(values = Map(integerId -> Value(integer = Some(5))))
+      val event1 = Event(values = Map(integerId -> Value(integer = Some(Integer(1)))))
+      val event2 = Event(values = Map(integerId -> Value(integer = Some(Integer(2)))))
+      val event3 = Event(values = Map(integerId -> Value(integer = Some(Integer(3)))))
+      val event4 = Event(values = Map(integerId -> Value(integer = Some(Integer(4)))))
+      val event5 = Event(values = Map(integerId -> Value(integer = Some(Integer(5)))))
       sortingStreamer ! event1
       expectMsg(NextEvent)
       sortingStreamer ! event4
@@ -111,11 +111,11 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
     "return events sorted by float field" in {
       val createQuery = CreateQuery("", "", None, Some(List(floatId)), None, None)
       val sortingStreamer = createSortingStreamer(createQuery)
-      val event1 = Event(values = Map(floatId -> Value(float = Some(0.1))))
-      val event2 = Event(values = Map(floatId -> Value(float = Some(0.2))))
-      val event3 = Event(values = Map(floatId -> Value(float = Some(0.3))))
-      val event4 = Event(values = Map(floatId -> Value(float = Some(0.4))))
-      val event5 = Event(values = Map(floatId -> Value(float = Some(0.5))))
+      val event1 = Event(values = Map(floatId -> Value(float = Some(Float(0.1)))))
+      val event2 = Event(values = Map(floatId -> Value(float = Some(Float(0.2)))))
+      val event3 = Event(values = Map(floatId -> Value(float = Some(Float(0.3)))))
+      val event4 = Event(values = Map(floatId -> Value(float = Some(Float(0.4)))))
+      val event5 = Event(values = Map(floatId -> Value(float = Some(Float(0.5)))))
       sortingStreamer ! event1
       expectMsg(NextEvent)
       sortingStreamer ! event4

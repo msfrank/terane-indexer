@@ -4,16 +4,10 @@ import com.netflix.astyanax.{MutationBatch, Keyspace}
 import scala.collection.JavaConversions._
 import java.util.{Date, UUID}
 
-import com.syntaxjockey.terane.indexer.sink.FieldManager.{FieldColumnFamily, TypedFieldColumnFamily}
+import com.syntaxjockey.terane.indexer.sink.FieldManager.TypedFieldColumnFamily
 import com.syntaxjockey.terane.indexer.bier._
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import org.joda.time.DateTime
-import java.net.InetAddress
-import org.xbill.DNS.Name
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink._
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldColumnFamily
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldColumnFamily
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 
@@ -28,7 +22,7 @@ trait CassandraRowOperations {
    * @param text
    * @param id
    */
-  def writeTextPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[TextField,StringPosting], text: String, id: UUID) {
+  def writeTextPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[TextField,StringPosting], text: Text, id: UUID) {
     val postings: Seq[(String,PostingMetadata)] = fcf.field.parseValue(text)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
@@ -47,7 +41,7 @@ trait CassandraRowOperations {
    * @param literal
    * @param id
    */
-  def writeLiteralPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[LiteralField,StringPosting], literal: List[String], id: UUID) {
+  def writeLiteralPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[LiteralField,StringPosting], literal: Literal, id: UUID) {
     val postings: Seq[(String,PostingMetadata)] = fcf.field.parseValue(literal)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
@@ -66,7 +60,7 @@ trait CassandraRowOperations {
    * @param integer
    * @param id
    */
-  def writeIntegerPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[IntegerField,LongPosting], integer: Long, id: UUID) {
+  def writeIntegerPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[IntegerField,LongPosting], integer: Integer, id: UUID) {
     val postings: Seq[(Long,PostingMetadata)] = fcf.field.parseValue(integer)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
@@ -85,7 +79,7 @@ trait CassandraRowOperations {
    * @param float
    * @param id
    */
-  def writeFloatPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[FloatField,DoublePosting], float: Double, id: UUID) {
+  def writeFloatPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[FloatField,DoublePosting], float: Float, id: UUID) {
     val postings: Seq[(Double,PostingMetadata)] = fcf.field.parseValue(float)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
@@ -104,7 +98,7 @@ trait CassandraRowOperations {
    * @param datetime
    * @param id
    */
-  def writeDatetimePosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[DatetimeField,DatePosting], datetime: DateTime, id: UUID) {
+  def writeDatetimePosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[DatetimeField,DatePosting], datetime: Datetime, id: UUID) {
     val postings: Seq[(Date,PostingMetadata)] = fcf.field.parseValue(datetime)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
@@ -123,7 +117,7 @@ trait CassandraRowOperations {
    * @param address
    * @param id
    */
-  def writeAddressPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[AddressField,AddressPosting], address: InetAddress, id: UUID) {
+  def writeAddressPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[AddressField,AddressPosting], address: Address, id: UUID) {
     val postings: Seq[(Array[Byte],PostingMetadata)] = fcf.field.parseValue(address)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
@@ -142,7 +136,7 @@ trait CassandraRowOperations {
    * @param hostname
    * @param id
    */
-  def writeHostnamePosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[HostnameField,StringPosting], hostname: Name, id: UUID) {
+  def writeHostnamePosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[HostnameField,StringPosting], hostname: Hostname, id: UUID) {
     val postings: Seq[(String,PostingMetadata)] = fcf.field.parseValue(hostname)
     for ((term,postingMetadata) <- postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>

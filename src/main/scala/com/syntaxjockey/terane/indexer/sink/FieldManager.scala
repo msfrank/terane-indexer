@@ -1,26 +1,27 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import scala.concurrent.Future
-import scala.collection.JavaConversions._
 import akka.actor.{ActorRef, Actor, ActorLogging}
+import akka.actor.Status.Failure
 import akka.event.{ActorEventBus, SubchannelClassification}
 import akka.util.Subclassification
 import akka.pattern.pipe
-import org.joda.time.{DateTimeZone, DateTime}
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
+import com.netflix.astyanax.Keyspace
+import com.netflix.astyanax.ddl.SchemaChangeResult
+import org.joda.time.{DateTimeZone, DateTime}
+import scala.concurrent.Future
+import scala.collection.JavaConversions._
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
-import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
+import com.syntaxjockey.terane.indexer.bier._
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.UUIDLike
-import com.netflix.astyanax.Keyspace
-import com.netflix.astyanax.ddl.SchemaChangeResult
-import akka.actor.Status.Failure
 import com.syntaxjockey.terane.indexer.cassandra.CassandraCFOperations
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperClient
+import com.syntaxjockey.terane.indexer.UUIDLike
 
 /**
  *
@@ -95,7 +96,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fi
       val fieldPath = basepath + "/" + fieldNode
       val id = new String(zk.client.getData.forPath(fieldPath), ZookeeperClient.UTF_8_CHARSET)
       val fieldNodeParts = fieldNode.split(":", 2)
-      val fieldType = EventValueType.withName(fieldNodeParts(0))
+      val fieldType = DataType.withName(fieldNodeParts(0))
       val fieldName = fieldNodeParts(1)
       val createdString = new String(zk.client.getData.forPath(fieldPath + "/created"), ZookeeperClient.UTF_8_CHARSET)
       val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
@@ -104,37 +105,37 @@ class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fi
         throw new Exception("field %s:%s already exists".format(fieldType.toString, fieldName))
       /* create the new field column family and update the field maps */
       val _fieldsChanged = fieldType match {
-        case EventValueType.TEXT =>
+        case DataType.TEXT =>
           val fcf = new TypedFieldColumnFamily(fieldName, id, shardingFactor, new TextField(),
             new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Text))
           val field = Field(fieldId, created, text = Some(fcf))
           FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
-        case EventValueType.LITERAL =>
+        case DataType.LITERAL =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new LiteralField(),
             new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, FieldSerializers.Literal))
           val field = Field(fieldId, created, literal = Some(fcf))
           FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
-        case EventValueType.INTEGER =>
+        case DataType.INTEGER =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new IntegerField(),
             new ColumnFamily[java.lang.Long,LongPosting](id.toString, LongSerializer.get, FieldSerializers.Integer))
           val field = Field(fieldId, created, integer = Some(fcf))
           FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
-        case EventValueType.FLOAT =>
+        case DataType.FLOAT =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new FloatField(),
             new ColumnFamily[java.lang.Long,DoublePosting](id.toString, LongSerializer.get, FieldSerializers.Float))
           val field = Field(fieldId, created, float = Some(fcf))
           FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
-        case EventValueType.DATETIME =>
+        case DataType.DATETIME =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new DatetimeField(),
             new ColumnFamily[java.lang.Long,DatePosting](id.toString, LongSerializer.get, FieldSerializers.Datetime))
           val field = Field(fieldId, created, datetime = Some(fcf))
           FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
-        case EventValueType.ADDRESS =>
+        case DataType.ADDRESS =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new AddressField(),
             new ColumnFamily[java.lang.Long,AddressPosting](id.toString, LongSerializer.get, FieldSerializers.Address))
           val field = Field(fieldId, created, address = Some(fcf))
           FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
-        case EventValueType.HOSTNAME =>
+        case DataType.HOSTNAME =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new HostnameField(),
             new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, FieldSerializers.Hostname))
           val field = Field(fieldId, created, hostname = Some(fcf))
@@ -161,37 +162,37 @@ class FieldManager(store: Store, val keyspace: Keyspace, zk: ZookeeperClient, fi
 
     /* create the column family in cassandra */
     val createdField = fieldId.fieldType match {
-      case EventValueType.TEXT =>
+      case DataType.TEXT =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new TextField(),
           new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Text))
         val field = Field(fieldId, created, text = Some(fcf))
         CreatedField(fieldId, field, fcf, createTextField(id).getResult)
-      case EventValueType.LITERAL =>
+      case DataType.LITERAL =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new LiteralField(),
           new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Literal))
         val field = Field(fieldId, created, literal = Some(fcf))
         CreatedField(fieldId, field, fcf, createLiteralField(id).getResult)
-      case EventValueType.INTEGER =>
+      case DataType.INTEGER =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new IntegerField(),
           new ColumnFamily[java.lang.Long,LongPosting](id, LongSerializer.get, FieldSerializers.Integer))
         val field = Field(fieldId, created, integer = Some(fcf))
         CreatedField(fieldId, field, fcf, createIntegerField(id).getResult)
-      case EventValueType.FLOAT =>
+      case DataType.FLOAT =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new FloatField(),
           new ColumnFamily[java.lang.Long,DoublePosting](id, LongSerializer.get, FieldSerializers.Float))
         val field = Field(fieldId, created, float = Some(fcf))
         CreatedField(fieldId, field, fcf, createFloatField(id).getResult)
-      case EventValueType.DATETIME =>
+      case DataType.DATETIME =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new DatetimeField(),
           new ColumnFamily[java.lang.Long,DatePosting](id, LongSerializer.get, FieldSerializers.Datetime))
         val field = Field(fieldId, created, datetime = Some(fcf))
         CreatedField(fieldId, field, fcf, createDatetimeField(id).getResult)
-      case EventValueType.ADDRESS =>
+      case DataType.ADDRESS =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new AddressField(),
           new ColumnFamily[java.lang.Long,AddressPosting](id, LongSerializer.get, FieldSerializers.Address))
         val field = Field(fieldId, created, address = Some(fcf))
         CreatedField(fieldId, field, fcf, createAddressField(id).getResult)
-      case EventValueType.HOSTNAME =>
+      case DataType.HOSTNAME =>
         val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new HostnameField(),
           new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Hostname))
         val field = Field(fieldId, created, hostname = Some(fcf))

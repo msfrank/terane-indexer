@@ -6,16 +6,17 @@ import org.scalatest.Inside._
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import com.netflix.astyanax.Keyspace
+import com.netflix.astyanax.util.TimeUUIDUtils
+import org.xbill.DNS.Name
+import org.joda.time.DateTime
 import scala.concurrent.duration._
+import scala.concurrent.Await
+import java.net.InetAddress
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.{TestCluster, UUIDLike}
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
-import com.netflix.astyanax.util.TimeUUIDUtils
-import scala.concurrent.Await
-import org.joda.time.DateTime
-import java.net.InetAddress
-import org.xbill.DNS.Name
 
 class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with TestCluster {
   import TestCluster._
@@ -41,7 +42,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       createColumnFamily(keyspace, textField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
-      keyspace.writeTextPosting(mutation, textCf, "foo", id)
+      keyspace.writeTextPosting(mutation, textCf, Text("foo"), id)
       mutation.execute().getResult
       val term = Term(textId, "foo", keyspace, textField)
       inside(Await.result(term.nextPosting, 10 seconds)) {
@@ -55,7 +56,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       createColumnFamily(keyspace, literalField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
-      keyspace.writeLiteralPosting(mutation, literalCf, List("foo"), id)
+      keyspace.writeLiteralPosting(mutation, literalCf, Literal("foo"), id)
       mutation.execute().getResult
       val term = Term(literalId, "foo", keyspace, literalField)
       inside(Await.result(term.nextPosting, 10 seconds)) {
@@ -69,7 +70,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       createColumnFamily(keyspace, integerField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
-      keyspace.writeIntegerPosting(mutation, integerCf, 42L, id)
+      keyspace.writeIntegerPosting(mutation, integerCf, Integer(42), id)
       mutation.execute().getResult
       val term = Term(integerId, 42L, keyspace, integerField)
       inside(Await.result(term.nextPosting, 10 seconds)) {
@@ -83,7 +84,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       createColumnFamily(keyspace, floatField)
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
-      keyspace.writeFloatPosting(mutation, floatCf, 3.14159, id)
+      keyspace.writeFloatPosting(mutation, floatCf, Float(3.14159), id)
       mutation.execute().getResult
       val term = Term(floatId, 3.14159, keyspace, floatField)
       inside(Await.result(term.nextPosting, 10 seconds)) {
@@ -98,7 +99,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val now = DateTime.now()
-      keyspace.writeDatetimePosting(mutation, datetimeCf, now, id)
+      keyspace.writeDatetimePosting(mutation, datetimeCf, Datetime(now), id)
       mutation.execute().getResult
       val term = Term(datetimeId, now.toDate, keyspace, datetimeField)
       inside(Await.result(term.nextPosting, 10 seconds)) {
@@ -113,7 +114,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val addr = InetAddress.getLocalHost
-      keyspace.writeAddressPosting(mutation, addressCf, addr, id)
+      keyspace.writeAddressPosting(mutation, addressCf, Address(addr), id)
       mutation.execute().getResult
       val term = Term(addressId, addr.getAddress, keyspace, addressField)
       inside(Await.result(term.nextPosting, 10 seconds)) {
@@ -128,7 +129,7 @@ class TermSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSende
       val mutation = keyspace.prepareMutationBatch()
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val host = Name.fromString("com")
-      keyspace.writeHostnamePosting(mutation, hostnameCf, host, id)
+      keyspace.writeHostnamePosting(mutation, hostnameCf, Hostname(host), id)
       mutation.execute().getResult
       val term = Term(hostnameId, "com", keyspace, hostnameField)
       inside(Await.result(term.nextPosting, 10 seconds)) {

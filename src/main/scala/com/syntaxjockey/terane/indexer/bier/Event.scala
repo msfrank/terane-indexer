@@ -1,16 +1,13 @@
 package com.syntaxjockey.terane.indexer.bier
 
-import org.joda.time.DateTime
 import com.netflix.astyanax.util.TimeUUIDUtils
-import org.xbill.DNS.Name
-import java.net.InetAddress
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.Event.Value
-import com.syntaxjockey.terane.indexer.bier.Event.KeyValue
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 
 class Event(val id: UUID, val values: Map[FieldIdentifier,Value]) {
+  import Event._
 
   def +(kv: KeyValue): Event = {
     new Event(id, values + kv)
@@ -29,46 +26,25 @@ class Event(val id: UUID, val values: Map[FieldIdentifier,Value]) {
     sb.append(id.toString + ":")
     for ((k,v) <- values) {
       if (v.text.isDefined)
-        sb.append(" %s:text='%s'".format(k, v.text.get))
+        sb.append(" %s:text='%s'".format(k, v.text.get.underlying))
       if (v.literal.isDefined)
-        sb.append(" %s:literal=%s".format(k, v.literal.get))
+        sb.append(" %s:literal=%s".format(k, v.literal.get.underlying))
       if (v.integer.isDefined)
-        sb.append(" %s:integer=%d".format(k, v.integer.get))
+        sb.append(" %s:integer=%d".format(k, v.integer.get.underlying))
       if (v.float.isDefined)
-        sb.append(" %s:float=%f".format(k, v.float.get))
+        sb.append(" %s:float=%f".format(k, v.float.get.underlying))
       if (v.datetime.isDefined)
-        sb.append(" %s:datetime=%s".format(k, v.datetime.get))
+        sb.append(" %s:datetime=%s".format(k, v.datetime.get.underlying))
       if (v.address.isDefined)
-        sb.append(" %s:address=%s".format(k, v.address.get))
+        sb.append(" %s:address=%s".format(k, v.address.get.underlying))
       if (v.hostname.isDefined)
-        sb.append(" %s:hostname=%s".format(k, v.hostname.get))
+        sb.append(" %s:hostname=%s".format(k, v.hostname.get.underlying))
     }
     sb.mkString
   }
 }
 
-object EventValueType extends Enumeration {
-  type EventValueType = Value
-  val TEXT, LITERAL, INTEGER, FLOAT, DATETIME, ADDRESS, HOSTNAME = Value
-}
-
 object Event {
-  type Text = String
-  type Literal = List[String]
-  type Integer = Long
-  type Float = Double
-  type Datetime = DateTime
-  type Address = InetAddress
-  type Hostname = Name
-
-  case class Value(
-    text: Option[Text] = None,
-    literal: Option[Literal] = None,
-    integer: Option[Integer] = None,
-    float: Option[Float] = None,
-    datetime: Option[Datetime] = None,
-    address: Option[Address] = None,
-    hostname: Option[Hostname] = None)
 
   def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,Value] = Map.empty): Event = {
     if (uuid.isDefined)
@@ -79,11 +55,21 @@ object Event {
 
   type KeyValue = (FieldIdentifier,Value)
 
-  implicit def text2keyValue(kv: (String, Text)): KeyValue = (FieldIdentifier(kv._1, EventValueType.TEXT), Value(text = Some(kv._2)))
-  implicit def literal2keyValue(kv: (String, Literal)): KeyValue = (FieldIdentifier(kv._1, EventValueType.LITERAL), Value(literal = Some(kv._2)))
-  implicit def integer2keyValue(kv: (String, Integer)): KeyValue = (FieldIdentifier(kv._1, EventValueType.INTEGER), Value(integer = Some(kv._2)))
-  implicit def float2keyValue(kv: (String, Float)): KeyValue = (FieldIdentifier(kv._1, EventValueType.FLOAT), Value(float = Some(kv._2)))
-  implicit def datetime2keyValue(kv: (String, Datetime)): KeyValue = (FieldIdentifier(kv._1, EventValueType.DATETIME), Value(datetime = Some(kv._2)))
-  implicit def address2keyValue(kv: (String, Address)): KeyValue = (FieldIdentifier(kv._1, EventValueType.ADDRESS), Value(address = Some(kv._2)))
-  implicit def hostname2keyValue(kv: (String, Hostname)): KeyValue = (FieldIdentifier(kv._1, EventValueType.HOSTNAME), Value(hostname = Some(kv._2)))
+  implicit def text2keyValue(kv: (String, Text)): KeyValue = (FieldIdentifier(kv._1, DataType.TEXT), Value(text = Some(kv._2)))
+  implicit def literal2keyValue(kv: (String, Literal)): KeyValue = (FieldIdentifier(kv._1, DataType.LITERAL), Value(literal = Some(kv._2)))
+  implicit def integer2keyValue(kv: (String, Integer)): KeyValue = (FieldIdentifier(kv._1, DataType.INTEGER), Value(integer = Some(kv._2)))
+  implicit def float2keyValue(kv: (String, Float)): KeyValue = (FieldIdentifier(kv._1, DataType.FLOAT), Value(float = Some(kv._2)))
+  implicit def datetime2keyValue(kv: (String, Datetime)): KeyValue = (FieldIdentifier(kv._1, DataType.DATETIME), Value(datetime = Some(kv._2)))
+  implicit def address2keyValue(kv: (String, Address)): KeyValue = (FieldIdentifier(kv._1, DataType.ADDRESS), Value(address = Some(kv._2)))
+  implicit def hostname2keyValue(kv: (String, Hostname)): KeyValue = (FieldIdentifier(kv._1, DataType.HOSTNAME), Value(hostname = Some(kv._2)))
 }
+
+case class Value(
+  text: Option[Text] = None,
+  literal: Option[Literal] = None,
+  integer: Option[Integer] = None,
+  float: Option[Float] = None,
+  datetime: Option[Datetime] = None,
+  address: Option[Address] = None,
+  hostname: Option[Hostname] = None
+  )

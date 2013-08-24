@@ -1,10 +1,11 @@
 package com.syntaxjockey.terane.indexer.bier
 
 import org.joda.time.DateTime
-import org.xbill.DNS.{Address, Name}
+import org.xbill.DNS.{Name, Address => DNSAddress}
 import java.util.Date
 import java.net.InetAddress
 
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
@@ -13,8 +14,8 @@ import akka.actor.ActorRefFactory
 abstract class Field
 
 class TextField extends Field {
-  def parseValue(text: String): Seq[(String,PostingMetadata)] = {
-    val terms: Array[String] = text.toLowerCase.split("""\s+""")
+  def parseValue(text: Text): Seq[(String,PostingMetadata)] = {
+    val terms: Array[String] = text.underlying.toLowerCase.split("""\s+""")
     val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()
     0 until terms.size foreach { position =>
       val term = terms(position)
@@ -24,73 +25,67 @@ class TextField extends Field {
     positions.toMap.toSeq
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, text: String): Matchers = {
-    AndMatcher(parseValue(text).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Text(text)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
 class LiteralField extends Field {
-  def parseValue(literal: List[String]): Seq[(String,PostingMetadata)] = {
-    val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()
-    0 until literal.size foreach { position =>
-      val term = literal(position)
-      val postingMetadata = positions.getOrElseUpdate(term, PostingMetadata(Some(new scala.collection.mutable.HashSet[Int])))
-      postingMetadata.positions.get += position
-    }
-    positions.toMap.toSeq
+  def parseValue(literal: Literal): Seq[(String,PostingMetadata)] = {
+    Seq((literal.underlying, PostingMetadata(None)))
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, literal: String): Matchers = {
-    AndMatcher(parseValue(List(literal)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Literal(literal)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
 class IntegerField extends Field {
-  def parseValue(long: Long): Seq[(Long,PostingMetadata)] = {
-    Seq((long, PostingMetadata(None)))
+  def parseValue(long: Integer): Seq[(Long,PostingMetadata)] = {
+    Seq((long.underlying, PostingMetadata(None)))
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, integer: String): Matchers = {
-    AndMatcher(parseValue(integer.toLong).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Integer(integer.toLong)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
 class FloatField extends Field {
-  def parseValue(double: Double): Seq[(Double,PostingMetadata)] = {
-    Seq((double, PostingMetadata(None)))
+  def parseValue(double: Float): Seq[(Double,PostingMetadata)] = {
+    Seq((double.underlying, PostingMetadata(None)))
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, float: String): Matchers = {
-    AndMatcher(parseValue(float.toDouble).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Float(float.toDouble)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
 class DatetimeField extends Field {
-  def parseValue(datetime: DateTime): Seq[(Date,PostingMetadata)] = {
-    Seq((datetime.toDate, PostingMetadata(None)))
+  def parseValue(datetime: Datetime): Seq[(Date,PostingMetadata)] = {
+    Seq((datetime.underlying.toDate, PostingMetadata(None)))
   }
   def parseDatetimeString(s: String): DateTime = {
     DateTime.parse(s)
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, datetime: String): Matchers = {
-    AndMatcher(parseValue(parseDatetimeString(datetime)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Datetime(parseDatetimeString(datetime))).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
 class AddressField extends Field {
-  def parseValue(address: InetAddress): Seq[(Array[Byte],PostingMetadata)] = {
-    Seq((address.getAddress, PostingMetadata(None)))
+  def parseValue(address: Address): Seq[(Array[Byte],PostingMetadata)] = {
+    Seq((address.underlying.getAddress, PostingMetadata(None)))
   }
   def parseAddressString(s: String): InetAddress = {
-    Address.getByAddress(s)
+    DNSAddress.getByAddress(s)
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, address: String): Matchers = {
-    AndMatcher(parseValue(parseAddressString(address)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Address(parseAddressString(address))).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
 class HostnameField extends Field {
-  def parseValue(hostname: Name): Seq[(String,PostingMetadata)] = {
+  def parseValue(hostname: Hostname): Seq[(String,PostingMetadata)] = {
     val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()
-    val nlabels = hostname.labels
+    val nlabels = hostname.underlying.labels
     (0 until nlabels reverse) foreach { position =>
-      val label = hostname.getLabelString(position).toLowerCase
+      val label = hostname.underlying.getLabelString(position).toLowerCase
       val postingMetadata = positions.getOrElseUpdate(label, PostingMetadata(Some(new scala.collection.mutable.HashSet[Int])))
       postingMetadata.positions.get += position
     }
@@ -100,7 +95,7 @@ class HostnameField extends Field {
     Name.fromString(s)
   }
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, hostname: String): Matchers = {
-    AndMatcher(parseValue(parseHostnameString(hostname)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parseValue(Hostname(parseHostnameString(hostname))).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
 
@@ -108,19 +103,19 @@ object Field {
   case class PostingMetadata(positions: Option[scala.collection.mutable.Set[Int]])
 
   def apply(fieldId: FieldIdentifier): Field = fieldId.fieldType match {
-    case EventValueType.TEXT =>
+    case DataType.TEXT =>
       new TextField()
-    case EventValueType.LITERAL =>
+    case DataType.LITERAL =>
       new LiteralField()
-    case EventValueType.INTEGER =>
+    case DataType.INTEGER =>
       new IntegerField()
-    case EventValueType.FLOAT =>
+    case DataType.FLOAT =>
       new FloatField()
-    case EventValueType.DATETIME =>
+    case DataType.DATETIME =>
       new DatetimeField()
-    case EventValueType.ADDRESS =>
+    case DataType.ADDRESS =>
       new AddressField()
-    case EventValueType.HOSTNAME =>
+    case DataType.HOSTNAME =>
       new HostnameField()
   }
 }

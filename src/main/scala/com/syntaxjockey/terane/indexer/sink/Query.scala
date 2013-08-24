@@ -1,6 +1,6 @@
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor._
+import akka.actor.{Actor, ActorLogging, LoggingFSM, Props}
 import akka.actor.FSM.Normal
 import akka.pattern.pipe
 import com.netflix.astyanax.Keyspace
@@ -15,15 +15,14 @@ import scala.collection.JavaConversions._
 import java.util.{Date, UUID}
 import java.net.InetAddress
 
-import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
-import com.syntaxjockey.terane.indexer.bier.{TickleParser, EventValueType, Matchers}
+import com.syntaxjockey.terane.indexer.bier.datatypes._
+import com.syntaxjockey.terane.indexer.bier.{TickleParser, Matchers, Value, Event => BierEvent}
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
-import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
-import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldsChanged) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import com.syntaxjockey.terane.indexer.bier.matchers._
@@ -179,19 +178,19 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
             termMatcher match {
-              case TermMatcher(FieldIdentifier(_, EventValueType.TEXT), text: String) =>
+              case TermMatcher(FieldIdentifier(_, DataType.TEXT), text: String) =>
                 Some(new Term[String](fieldId, text, keyspace, field))
-              case TermMatcher(FieldIdentifier(_, EventValueType.LITERAL), literal: String) =>
+              case TermMatcher(FieldIdentifier(_, DataType.LITERAL), literal: String) =>
                 Some(new Term[String](fieldId, literal, keyspace, field))
-              case TermMatcher(FieldIdentifier(_, EventValueType.INTEGER), integer: Long) =>
+              case TermMatcher(FieldIdentifier(_, DataType.INTEGER), integer: Long) =>
                 Some(new Term[Long](fieldId, integer, keyspace, field))
-              case TermMatcher(FieldIdentifier(_, EventValueType.FLOAT), float: Double) =>
+              case TermMatcher(FieldIdentifier(_, DataType.FLOAT), float: Double) =>
                 Some(new Term[Double](fieldId, float, keyspace, field))
-              case TermMatcher(FieldIdentifier(_, EventValueType.DATETIME), datetime: Date) =>
+              case TermMatcher(FieldIdentifier(_, DataType.DATETIME), datetime: Date) =>
                 Some(new Term[Date](fieldId, datetime, keyspace, field))
-              case TermMatcher(FieldIdentifier(_, EventValueType.ADDRESS), address: Array[Byte]) =>
+              case TermMatcher(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte]) =>
                 Some(new Term[Array[Byte]](fieldId, address, keyspace, field))
-              case TermMatcher(FieldIdentifier(_, EventValueType.HOSTNAME), hostname: String) =>
+              case TermMatcher(FieldIdentifier(_, DataType.HOSTNAME), hostname: String) =>
                 Some(new Term[String](fieldId, hostname, keyspace, field))
               case unknown =>
                 throw new Exception("unknown field type or value type for " + termMatcher.toString)
@@ -248,23 +247,22 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    */
   def readEvent(id: UUID, columnList: ColumnList[String]): BierEvent = {
     import BierEvent._
-    val values: Map[FieldIdentifier,BierEvent.Value] = columnList.filter(column => fields.fieldsByCf.contains(column.getName)).map { column =>
+    val values: Map[FieldIdentifier,Value] = columnList.filter(column => fields.fieldsByCf.contains(column.getName)).map { column =>
       fields.fieldsByCf(column.getName).fieldId match {
-        case ident @ FieldIdentifier(_, EventValueType.TEXT) =>
-          ident -> Value(text = Some(column.getStringValue))
-        case ident @ FieldIdentifier(_, EventValueType.LITERAL) =>
-          val literal: List[String] = column.getValue(CassandraSink.SER_LITERAL).toList
-          ident -> Value(literal = Some(literal))
-        case ident @ FieldIdentifier(_, EventValueType.INTEGER) =>
-          ident -> Value(integer = Some(column.getLongValue))
-        case ident @ FieldIdentifier(_, EventValueType.FLOAT) =>
-          ident -> Value(float = Some(column.getDoubleValue))
-        case ident @ FieldIdentifier(_, EventValueType.DATETIME) =>
-          ident -> Value(datetime = Some(new DateTime(column.getDateValue.getTime, DateTimeZone.UTC)))
-        case ident @ FieldIdentifier(_, EventValueType.ADDRESS) =>
-          ident -> Value(address = Some(InetAddress.getByAddress(column.getByteArrayValue)))
-        case ident @ FieldIdentifier(_, EventValueType.HOSTNAME) =>
-          ident -> Value(hostname = Some(Name.fromString(column.getStringValue)))
+        case ident @ FieldIdentifier(_, DataType.TEXT) =>
+          ident -> Value(text = Some(Text(column.getStringValue)))
+        case ident @ FieldIdentifier(_, DataType.LITERAL) =>
+          ident -> Value(literal = Some(Literal(column.getStringValue)))
+        case ident @ FieldIdentifier(_, DataType.INTEGER) =>
+          ident -> Value(integer = Some(Integer(column.getLongValue)))
+        case ident @ FieldIdentifier(_, DataType.FLOAT) =>
+          ident -> Value(float = Some(Float(column.getDoubleValue)))
+        case ident @ FieldIdentifier(_, DataType.DATETIME) =>
+          ident -> Value(datetime = Some(Datetime(new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))))
+        case ident @ FieldIdentifier(_, DataType.ADDRESS) =>
+          ident -> Value(address = Some(Address(InetAddress.getByAddress(column.getByteArrayValue))))
+        case ident @ FieldIdentifier(_, DataType.HOSTNAME) =>
+          ident -> Value(hostname = Some(Hostname(Name.fromString(column.getStringValue))))
       }
     }.toMap
     new BierEvent(id, values)

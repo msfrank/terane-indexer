@@ -1,11 +1,11 @@
 package com.syntaxjockey.terane.indexer.bier
 
-import scala.util.parsing.combinator.syntactical._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher, TermMatcher}
-import java.util.Date
-import org.xbill.DNS.Name
 import akka.actor.ActorRefFactory
+import scala.util.parsing.combinator.syntactical._
+
+import com.syntaxjockey.terane.indexer.bier.datatypes._
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher}
 
 /**
  * Tickle EBNF Grammar is as follows:
@@ -32,7 +32,7 @@ class TickleParser extends StandardTokenParsers {
   val qualifiedSubject: Parser[Subject] = ident ~ opt("[" ~ ident ~ "]") ~ "=" ~ bareSubject ^^ {
     case fieldName ~ Some("[" ~ fieldType ~ "]") ~ "=" ~ s =>
       val fieldValueType = try {
-        Some(EventValueType.withName(fieldType.toUpperCase))
+        Some(DataType.withName(fieldType.toUpperCase))
       } catch { case ex: Exception => None }
       if (fieldValueType.isEmpty)
         failure("unknown field type " + fieldType)
@@ -149,21 +149,21 @@ object TickleParser {
   def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup)(implicit factory: ActorRefFactory): Option[Matchers] = {
     liftMatchers(subjectOrGroup match {
       case Left(Subject(value, fieldName, fieldType)) =>
-        val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(EventValueType.TEXT))
+        val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(DataType.TEXT))
         Some(fieldId.fieldType match {
-          case EventValueType.TEXT =>
+          case DataType.TEXT =>
             textParser.makeMatcher(factory, fieldId, value)
-          case EventValueType.LITERAL =>
+          case DataType.LITERAL =>
             literalParser.makeMatcher(factory, fieldId, value)
-          case EventValueType.INTEGER =>
+          case DataType.INTEGER =>
             integerParser.makeMatcher(factory, fieldId, value)
-          case EventValueType.FLOAT =>
+          case DataType.FLOAT =>
             floatParser.makeMatcher(factory, fieldId, value)
-          case EventValueType.DATETIME =>
+          case DataType.DATETIME =>
             datetimeParser.makeMatcher(factory, fieldId, value)
-          case EventValueType.HOSTNAME =>
+          case DataType.HOSTNAME =>
             hostnameParser.makeMatcher(factory, fieldId, value)
-          case EventValueType.ADDRESS =>
+          case DataType.ADDRESS =>
             addressParser.makeMatcher(factory, fieldId, value)
           case unknown =>
             throw new Exception("unknown value type " + unknown.toString)
@@ -211,5 +211,5 @@ object TickleParser {
   case class OrGroup(children: List[SubjectOrGroup]) extends Group
   case class NotGroup(children: List[SubjectOrGroup]) extends Group
   case class Query(query: Either[Subject,Group])
-  case class Subject(value: String, fieldName: Option[String], fieldType: Option[EventValueType.Value])
+  case class Subject(value: String, fieldName: Option[String], fieldType: Option[DataType.Value])
 }

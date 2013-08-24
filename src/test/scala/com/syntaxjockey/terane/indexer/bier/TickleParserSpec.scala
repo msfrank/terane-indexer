@@ -15,6 +15,7 @@ import com.syntaxjockey.terane.indexer.bier.TickleParser.AndGroup
 import com.syntaxjockey.terane.indexer.bier.TickleParser.Query
 import com.syntaxjockey.terane.indexer.bier.TickleParser.Subject
 import com.syntaxjockey.terane.indexer.bier.TickleParser.OrGroup
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
@@ -42,7 +43,7 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
 
     "parse a qualified subject with a field name and type" in {
       TickleParser.parseQueryString("fieldname[text]=foobar") must be(
-        Query(Left(Subject("foobar", Some("fieldname"), Some(EventValueType.TEXT)))))
+        Query(Left(Subject("foobar", Some("fieldname"), Some(DataType.TEXT)))))
     }
 
     "parse a bare quoted subject" in {
@@ -73,7 +74,7 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
           |fieldname[text]="hello, world!"
         """.stripMargin) must be(
         Query(
-          Left(Subject("hello, world!", Some("fieldname"), Some(EventValueType.TEXT)))
+          Left(Subject("hello, world!", Some("fieldname"), Some(DataType.TEXT)))
         )
       )
     }
@@ -168,7 +169,7 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
 
     "parse a text value with a single term" in {
       TickleParser.buildMatchers("fieldname[text]=foo") must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "foo"))
+        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo"))
       )
     }
 
@@ -180,9 +181,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       inside(matchers) {
         case Some(AndMatcher(children)) =>
           children must have length(3)
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "foo").asInstanceOf[Matchers])
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "bar").asInstanceOf[Matchers])
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.TEXT), "baz").asInstanceOf[Matchers])
+          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
+          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
+          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
       }
     }
 
@@ -191,13 +192,13 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         """
           |fieldname[literal]="foo bar baz"
         """.stripMargin) must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", EventValueType.LITERAL), "foo bar baz"))
+        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foo bar baz"))
       )
     }
 
     "parse an integer value" in {
       TickleParser.buildMatchers("fieldname[integer]=42") must be(
-        Some(TermMatcher[Long](FieldIdentifier("fieldname", EventValueType.INTEGER), 42L))
+        Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
       )
     }
 
@@ -206,13 +207,13 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         """
           |fieldname[float]="3.14159"
         """.stripMargin) must be(
-        Some(TermMatcher[Double](FieldIdentifier("fieldname", EventValueType.FLOAT), 3.14159))
+        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
       )
     }
 
     "parse an unquoted float value" in {
       TickleParser.buildMatchers("fieldname[float]=3.14159") must be(
-        Some(TermMatcher[Double](FieldIdentifier("fieldname", EventValueType.FLOAT), 3.14159))
+        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
       )
     }
 
@@ -223,7 +224,7 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
           |fieldname[datetime]="1994-11-05T08:15:30Z"
         """.stripMargin)
       inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", EventValueType.DATETIME), _datetime: DateTime)) =>
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), _datetime: DateTime)) =>
           datetime must equal(_datetime)
       }
     }
@@ -234,14 +235,14 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         """
           |fieldname[address]="127.0.0.1"
         """.stripMargin) must be(
-        Some(TermMatcher[InetAddress](FieldIdentifier("fieldname", EventValueType.ADDRESS), address))
+        Some(TermMatcher[InetAddress](FieldIdentifier("fieldname", DataType.ADDRESS), address))
       )
     }
 
     "parse a hostname value" in {
       val hostname = Name.fromString("com")
       TickleParser.buildMatchers("fieldname[hostname]=com") must be(
-        Some(TermMatcher[Name](FieldIdentifier("fieldname", EventValueType.HOSTNAME), hostname))
+        Some(TermMatcher[Name](FieldIdentifier("fieldname", DataType.HOSTNAME), hostname))
       )
     }
   }
