@@ -116,10 +116,10 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 
   onTermination {
     case StopEvent(_, _, _) =>
-      events.close()
+      log.debug("deleting sort file " + dbfile.getAbsolutePath)
+      //events.close()
       db.close()
       dbfile.delete()
-      log.debug("deleted sort file " + dbfile.getAbsolutePath)
   }
 
   def makeKey(event: BierEvent): EventKey = {
@@ -195,7 +195,7 @@ case class EventKey(keyvalues: Array[Option[BierEvent.KeyValue]]) extends Compar
 class EventKeySerializer(sortFields: Array[FieldIdentifier]) extends BTreeKeySerializer[EventKey] with java.io.Serializable {
 
   override def serialize(out: DataOutput, start: Int, end: Int, keys: Array[Object]) {
-    (start to end).foreach { index => serializeEventKey(out, keys(index).asInstanceOf[EventKey]) }
+    (start until end).foreach { index => serializeEventKey(out, keys(index).asInstanceOf[EventKey]) }
   }
 
   def serializeEventKey(out: DataOutput, eventKey: EventKey) {
@@ -235,7 +235,7 @@ class EventKeySerializer(sortFields: Array[FieldIdentifier]) extends BTreeKeySer
   }
 
   override def deserialize(in: DataInput, start: Int, end: Int, size: Int): Array[Object] = {
-    (start to end).map(_ => deserializeEventKey(in)).toArray
+    (start until end).map(_ => deserializeEventKey(in)).toArray
   }
 
   def deserializeEventKey(in: DataInput): EventKey = {

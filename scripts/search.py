@@ -101,7 +101,7 @@ if __name__ == "__main__":
   result = endpoint.create_query(args)
   id = result['id']
   result = endpoint.retrieve_events(id)
-  for event in result['events']:
+  for id,event in result['events']:
     fields = {}
     for name,typevals in event.items():
       for t,v in typevals.items():
