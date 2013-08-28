@@ -92,8 +92,7 @@ trait ApiService extends HttpService {
       }
     case ex: Throwable => ctx =>
       log.error(ex, "caught exception in spray routing")
-      //ctx.complete(HttpResponse(StatusCodes.InternalServerError, JsonBody(throwableToJson(new Exception("internal server error")))))
-      ctx.
+      ctx.complete(HttpResponse(StatusCodes.InternalServerError, JsonBody(throwableToJson(new Exception("internal server error")))))
   }
 
   val routes = {
