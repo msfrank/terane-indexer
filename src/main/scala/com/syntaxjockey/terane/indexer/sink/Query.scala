@@ -56,7 +56,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   val streamer = if (createQuery.sortBy.isDefined)
     context.actorOf(Props(new SortingStreamer(id, createQuery, fields)))
   else
-    context.actorOf(Props(new DirectStreamer(id, createQuery, store)))
+    context.actorOf(Props(new DirectStreamer(id, createQuery, fields)))
 
 
   /* get term estimates and possibly reorder the query */

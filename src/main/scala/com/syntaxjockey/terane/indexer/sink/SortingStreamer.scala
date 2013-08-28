@@ -20,7 +20,7 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor.{ActorRef, LoggingFSM}
-import org.mapdb.{DBMaker, Serializer, BTreeKeySerializer}
+import org.mapdb.{DB, DBMaker, Serializer, BTreeKeySerializer}
 import org.joda.time.{DateTimeZone, DateTime}
 import org.xbill.DNS.Name
 import scala.collection.mutable
@@ -39,7 +39,6 @@ import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
 class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged) extends LoggingFSM[State,Data] {
   import SortingStreamer._
   import Query._
-  import BierEvent._
 
   val config = context.system.settings.config
 
@@ -51,9 +50,15 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
   val dbfile = new File("sort-" + id)
   val db = DBMaker.newFileDB(dbfile)
             .compressionEnable()
-            .writeAheadLogDisable()
+            .transactionDisable()
             .make()
-  val events = db.createTreeMap("events", 16, true, false, keySerializer, valueSerializer, null)
+  val events = db.createTreeMap("events")
+    .nodeSize(16)
+    .valuesStoredOutsideNodes(true)
+    .keepCounter(false)
+    .keySerializer(keySerializer)
+    .valueSerializer(valueSerializer)
+    .make[EventKey,BierEvent]()
   log.debug("created sort table " + dbfile.getAbsolutePath)
 
   startWith(ReceivingEvents, ReceivingEvents(0, 0, Seq.empty))
@@ -117,7 +122,6 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
   onTermination {
     case StopEvent(_, _, _) =>
       log.debug("deleting sort file " + dbfile.getAbsolutePath)
-      //events.close()
       db.close()
       dbfile.delete()
   }
@@ -131,10 +135,13 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged)
 }
 
 object SortingStreamer {
+
   case class DeferredGetEvents(sender: ActorRef, getEvents: GetEvents)
+
   sealed trait State
   case object ReceivingEvents extends State
   case object ReceivedEvents extends State
+
   sealed trait Data
   case class ReceivingEvents(numRead: Int, currentSize: Int, deferredGetEvents: Seq[DeferredGetEvents]) extends Data
   case class ReceivedEvents(entries: java.util.Set[java.util.Map.Entry[EventKey,BierEvent]], numRead: Int, numQueries: Int, numSent: Int) extends Data
@@ -186,7 +193,7 @@ case class EventKey(keyvalues: Array[Option[BierEvent.KeyValue]]) extends Compar
         }
         if (comparison != 0) return comparison
     }
-    throw new Exception("fell off the end of the comparison")
+    0
   }
 }
 

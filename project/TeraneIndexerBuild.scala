@@ -29,7 +29,7 @@ object TeraneIndexerBuild extends Build {
         "io.spray" % "spray-can" % sprayVersion,
         "io.spray" % "spray-routing" % sprayVersion,
         "io.spray" %% "spray-json" % "1.2.4",
-        "org.mapdb" % "mapdb" % "0.9.3",
+        "org.mapdb" % "mapdb" % "0.9.5",
         "joda-time" % "joda-time" % "2.2",
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",
