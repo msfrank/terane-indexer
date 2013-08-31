@@ -21,8 +21,12 @@ package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor._
 import akka.pattern.ask
+import akka.event.LoggingReceive
 import akka.util.Timeout
 import com.netflix.astyanax.Keyspace
+import com.netflix.astyanax.model.Column
+import com.netflix.astyanax.query.ColumnQuery
+import com.netflix.astyanax.connectionpool.exceptions.NotFoundException
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.Some
@@ -30,16 +34,12 @@ import scala.collection.JavaConversions._
 import java.util.{Date, UUID}
 
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
-import com.syntaxjockey.terane.indexer.bier.Matchers
-import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, FindPosting, NoMoreMatches, MatchResult, NextPosting}
-import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.Matchers
+import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, MatchResult, NextPosting, FindPosting}
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import akka.event.LoggingReceive
-import com.netflix.astyanax.model.{Column, ColumnList}
-import com.netflix.astyanax.shallows.EmptyColumnList
-import com.netflix.astyanax.query.ColumnQuery
-import com.netflix.astyanax.connectionpool.exceptions.NotFoundException
+import com.syntaxjockey.terane.indexer.cassandra._
+import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
 
 case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: Field)(implicit val factory: ActorRefFactory) extends Matchers {
 
@@ -179,7 +179,7 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
         term.keyspace.prepareQuery(term.field.hostname.get.cf)
           .getKey(shard)
           .getColumn(new StringPosting(hostname, id))
-      case unknown => throw new Exception("can't make Term scanner for " + term.toString)
+      case unknown => throw new Exception("can't make Term finder for " + term.toString)
     }
   }
 

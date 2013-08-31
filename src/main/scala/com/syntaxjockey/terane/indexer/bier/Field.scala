@@ -19,6 +19,7 @@
 
 package com.syntaxjockey.terane.indexer.bier
 
+import akka.actor.ActorRefFactory
 import org.joda.time.DateTime
 import org.xbill.DNS.{Name, Address => DNSAddress}
 import java.util.Date
@@ -28,113 +29,164 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
-import akka.actor.ActorRefFactory
+import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
+import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
 
 abstract class Field
 
+object Field {
+  case class PostingMetadata(positions: Option[scala.collection.mutable.Set[Int]])
+}
+
+case class ParsedValue[T](postings: Seq[(T,PostingMetadata)], statistics: FieldStatistics)
+
+/**
+ * Parses a TEXT field.  The tokenizer is pretty stupid and simply splits the input Text
+ * value on runs of whitespace.
+ */
 class TextField extends Field {
-  def parseValue(text: Text): Seq[(String,PostingMetadata)] = {
-    val terms: Array[String] = text.underlying.toLowerCase.split("""\s+""")
+
+  def tokenizeValue(text: Text): Seq[String] = text.underlying.toLowerCase.split("""\s+""")
+
+  def parseValue(text: Text): ParsedValue[String] = {
+    val terms = tokenizeValue(text)
     val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()
-    0 until terms.size foreach { position =>
+    val stats: Seq[Analytical] = (0 until terms.size) map { position =>
       val term = terms(position)
+      val stat: Analytical = term
       val postingMetadata = positions.getOrElseUpdate(term, PostingMetadata(Some(new scala.collection.mutable.HashSet[Int])))
       postingMetadata.positions.get += position
+      stat
     }
-    positions.toMap.toSeq
+    ParsedValue(positions.toMap.toSeq, FieldStatistics(stats))
   }
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, text: String): Matchers = {
-    AndMatcher(parseValue(Text(text)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(tokenizeValue(Text(text)).map { case term => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
+object TextField extends TextField
 
+/**
+ * Parses a LITERAL field.  The tokenizer passes the supplied input Literal along as-is
+ * without any processing.  Useful for keyword fields where whitespace, capitalization, special
+ * characters, etc. must all be preserved exactly.
+ */
 class LiteralField extends Field {
-  def parseValue(literal: Literal): Seq[(String,PostingMetadata)] = {
-    Seq((literal.underlying, PostingMetadata(None)))
+
+  def tokenizeValue(literal: Literal): String = literal.underlying
+
+  def parseValue(literal: Literal): ParsedValue[String] = {
+    ParsedValue(Seq((literal.underlying, PostingMetadata(None))), FieldStatistics(Seq(literal.underlying)))
   }
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, literal: String): Matchers = {
-    AndMatcher(parseValue(Literal(literal)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    TermMatcher(fieldId, tokenizeValue(Literal(literal)))
   }
 }
+object LiteralField extends LiteralField
 
+/**
+ * Parses an INTEGER field.  The tokenizer passes the supplied input Integer (a 64-bit long)
+ * along as-is without any processing.
+ */
 class IntegerField extends Field {
-  def parseValue(long: Integer): Seq[(Long,PostingMetadata)] = {
-    Seq((long.underlying, PostingMetadata(None)))
+
+  def tokenizeValue(integer: Integer): Long = integer.underlying
+
+  def parseValue(integer: Integer): ParsedValue[Long] = {
+    ParsedValue(Seq((integer.underlying, PostingMetadata(None))), FieldStatistics(Seq(integer.underlying)))
   }
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, integer: String): Matchers = {
-    AndMatcher(parseValue(Integer(integer.toLong)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    TermMatcher(fieldId, tokenizeValue(Integer(integer.toLong)))
   }
 }
+object IntegerField extends IntegerField
 
+/**
+ * Parses a FLOAT field.  The tokenizer passes the supplied input Float (a 64-bit double) along
+ * as-is without any processing.
+ */
 class FloatField extends Field {
-  def parseValue(double: Float): Seq[(Double,PostingMetadata)] = {
-    Seq((double.underlying, PostingMetadata(None)))
+
+  def tokenizeValue(float: Float): Double = float.underlying
+
+  def parseValue(float: Float): ParsedValue[Double] = {
+    ParsedValue(Seq((float.underlying, PostingMetadata(None))), FieldStatistics(Seq(float.underlying)))
   }
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, float: String): Matchers = {
-    AndMatcher(parseValue(Float(float.toDouble)).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    TermMatcher(fieldId, tokenizeValue(Float(float.toDouble)))
   }
 }
+object FloatField extends FloatField
 
+/**
+ * Parses a DATETIME field.
+ */
 class DatetimeField extends Field {
-  def parseValue(datetime: Datetime): Seq[(Date,PostingMetadata)] = {
-    Seq((datetime.underlying.toDate, PostingMetadata(None)))
+
+  def tokenizeValue(datetime: Datetime): Date = datetime.underlying.toDate
+
+  def parseValue(datetime: Datetime): ParsedValue[Date] = {
+    ParsedValue(Seq((datetime.underlying.toDate, PostingMetadata(None))), FieldStatistics(Seq(datetime.underlying.toDate)))
   }
+
   def parseDatetimeString(s: String): DateTime = {
     DateTime.parse(s)
   }
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, datetime: String): Matchers = {
-    AndMatcher(parseValue(Datetime(parseDatetimeString(datetime))).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    TermMatcher(fieldId, parseValue(Datetime(parseDatetimeString(datetime))))
   }
 }
+object DatetimeField extends DatetimeField
 
+/**
+ * Parses an ADDRESS field.
+ */
 class AddressField extends Field {
-  def parseValue(address: Address): Seq[(Array[Byte],PostingMetadata)] = {
-    Seq((address.underlying.getAddress, PostingMetadata(None)))
+
+  def tokenizeValue(address: Address): Array[Byte] = address.underlying.getAddress
+
+  def parseValue(address: Address): ParsedValue[Array[Byte]] = {
+    ParsedValue(Seq((address.underlying.getAddress, PostingMetadata(None))), FieldStatistics(Seq(address.underlying.getAddress)))
   }
+
   def parseAddressString(s: String): InetAddress = {
     DNSAddress.getByAddress(s)
   }
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, address: String): Matchers = {
-    AndMatcher(parseValue(Address(parseAddressString(address))).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    TermMatcher(fieldId, parseValue(Address(parseAddressString(address))))
   }
 }
+object AddressField extends AddressField
 
+/**
+ * Parses a HOSTNAME field.
+ */
 class HostnameField extends Field {
-  def parseValue(hostname: Hostname): Seq[(String,PostingMetadata)] = {
+
+  def parseValue(hostname: Hostname): ParsedValue[String] = {
     val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()
     val nlabels = hostname.underlying.labels
-    (0 until nlabels reverse) foreach { position =>
+    val stats: Seq[Analytical] = (0 until nlabels reverse) map { position =>
       val label = hostname.underlying.getLabelString(position).toLowerCase
+      val stat: Analytical = label
       val postingMetadata = positions.getOrElseUpdate(label, PostingMetadata(Some(new scala.collection.mutable.HashSet[Int])))
       postingMetadata.positions.get += position
+      stat
     }
-    positions.toMap.toSeq
+    ParsedValue(positions.toMap.toSeq, FieldStatistics(stats))
   }
-  def parseHostnameString(s: String): Name = {
-    Name.fromString(s)
-  }
+
+  def parseHostnameString(s: String): Name = Name.fromString(s)
+
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, hostname: String): Matchers = {
-    AndMatcher(parseValue(Hostname(parseHostnameString(hostname))).map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    val parsed = parseValue(Hostname(parseHostnameString(hostname)))
+    AndMatcher(parsed.postings.map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
   }
 }
-
-object Field {
-  case class PostingMetadata(positions: Option[scala.collection.mutable.Set[Int]])
-
-  def apply(fieldId: FieldIdentifier): Field = fieldId.fieldType match {
-    case DataType.TEXT =>
-      new TextField()
-    case DataType.LITERAL =>
-      new LiteralField()
-    case DataType.INTEGER =>
-      new IntegerField()
-    case DataType.FLOAT =>
-      new FloatField()
-    case DataType.DATETIME =>
-      new DatetimeField()
-    case DataType.ADDRESS =>
-      new AddressField()
-    case DataType.HOSTNAME =>
-      new HostnameField()
-  }
-}
+object HostnameField extends HostnameField

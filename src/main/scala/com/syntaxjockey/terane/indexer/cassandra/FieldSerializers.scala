@@ -17,7 +17,7 @@
  * along with Terane.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.syntaxjockey.terane.indexer.sink
+package com.syntaxjockey.terane.indexer.cassandra
 
 import java.util.{Date, UUID}
 import com.netflix.astyanax.annotations.{Component => AstyanaxComponent}

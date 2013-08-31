@@ -125,13 +125,6 @@ class TickleParser extends StandardTokenParsers {
 object TickleParser {
 
   private val parser = new TickleParser()
-  private val textParser = new TextField()
-  private val literalParser = new LiteralField()
-  private val integerParser = new IntegerField()
-  private val floatParser = new FloatField()
-  private val datetimeParser = new DatetimeField()
-  private val addressParser = new AddressField()
-  private val hostnameParser = new HostnameField()
 
   /**
    * Given a raw query string, produce a syntax tree.
@@ -171,19 +164,19 @@ object TickleParser {
         val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(DataType.TEXT))
         Some(fieldId.fieldType match {
           case DataType.TEXT =>
-            textParser.makeMatcher(factory, fieldId, value)
+            TextField.makeMatcher(factory, fieldId, value)
           case DataType.LITERAL =>
-            literalParser.makeMatcher(factory, fieldId, value)
+            LiteralField.makeMatcher(factory, fieldId, value)
           case DataType.INTEGER =>
-            integerParser.makeMatcher(factory, fieldId, value)
+            IntegerField.makeMatcher(factory, fieldId, value)
           case DataType.FLOAT =>
-            floatParser.makeMatcher(factory, fieldId, value)
+            FloatField.makeMatcher(factory, fieldId, value)
           case DataType.DATETIME =>
-            datetimeParser.makeMatcher(factory, fieldId, value)
+            DatetimeField.makeMatcher(factory, fieldId, value)
           case DataType.HOSTNAME =>
-            hostnameParser.makeMatcher(factory, fieldId, value)
+            HostnameField.makeMatcher(factory, fieldId, value)
           case DataType.ADDRESS =>
-            addressParser.makeMatcher(factory, fieldId, value)
+            AddressField.makeMatcher(factory, fieldId, value)
           case unknown =>
             throw new Exception("unknown value type " + unknown.toString)
         })

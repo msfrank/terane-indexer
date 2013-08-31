@@ -40,9 +40,13 @@ import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.cassandra.CassandraCFOperations
+import com.syntaxjockey.terane.indexer.cassandra._
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.UUIDLike
+import akka.actor.Status.Failure
+import scala.Some
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
+import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
 /**
  *
@@ -247,14 +251,6 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
 }
 
 object FieldManager {
-
-  case class FieldColumnFamily(name: String, id: String, width: Long)
-  class TypedFieldColumnFamily[F,P](
-    override val name: String,
-    override val id: String,
-    override val width: Long,
-    val field: F,
-    val cf: ColumnFamily[java.lang.Long,P]) extends FieldColumnFamily(name, id, width)
 
   case class Field(
     fieldId: FieldIdentifier, created: DateTime,

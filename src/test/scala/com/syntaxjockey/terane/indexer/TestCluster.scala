@@ -19,6 +19,9 @@
 
 package com.syntaxjockey.terane.indexer
 
+import org.scalatest.Tag
+import akka.actor.ActorSystem
+import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.ConfigFactory
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
@@ -29,14 +32,9 @@ import scala.Some
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.sink._
-import com.syntaxjockey.terane.indexer.sink.FieldManager.TypedFieldColumnFamily
-import com.syntaxjockey.terane.indexer.cassandra.{Cassandra, CassandraRowOperations, CassandraCFOperations, CassandraKeyspaceOperations}
+import com.syntaxjockey.terane.indexer.cassandra._
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
-import org.scalatest.Tag
-import akka.testkit.{ImplicitSender, TestKit}
-import akka.actor.ActorSystem
 
 abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with ImplicitSender {
   import TestCluster._
