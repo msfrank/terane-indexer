@@ -27,12 +27,12 @@ import scala.concurrent.duration._
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.http.RetryLater
+import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
+import com.syntaxjockey.terane.indexer.http.RetryLater
 
 /**
  *
@@ -48,7 +48,7 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   val cluster = Cassandra(context.system).cluster
   val keyspace = getKeyspace(store.id)
 
-  var currentFields = FieldsChanged(Map.empty, Map.empty)
+  var currentFields = FieldMap(Map.empty, Map.empty)
   val fieldBus = new FieldBus()
   fieldBus.subscribe(self, classOf[FieldNotification])
 
@@ -65,7 +65,7 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   /* when unconnected we buffer events until reconnection occurs */
   when(Unconnected) {
 
-    case Event(fieldsChanged: FieldsChanged, _) =>
+    case Event(fieldsChanged: FieldMap, _) =>
       currentFields = fieldsChanged
       stay()
 
@@ -93,7 +93,7 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   /* when connected we send events to the event writers */
   when(Connected) {
 
-    case Event(fieldsChanged: FieldsChanged, _) =>
+    case Event(fieldsChanged: FieldMap, _) =>
       currentFields = fieldsChanged
       stay()
 

@@ -31,10 +31,9 @@ import scala.Some
 
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.cassandra._
-import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
-import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
+import com.syntaxjockey.terane.indexer.zookeeper._
+import com.syntaxjockey.terane.indexer.sink.CassandraField
 
 abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with ImplicitSender {
   import TestCluster._
@@ -55,37 +54,37 @@ abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with I
   val textId = FieldIdentifier("text_field", DataType.TEXT)
   val textCf = new TypedFieldColumnFamily(textId.fieldName, "text_field", 0, new TextField(),
     new ColumnFamily[java.lang.Long,StringPosting]("text_field", LongSerializer.get, FieldSerializers.Text))
-  val textField = Field(textId, DateTime.now(), text = Some(textCf))
+  val textField = CassandraField(textId, DateTime.now(), text = Some(textCf))
 
   val literalId = FieldIdentifier("literal_field", DataType.LITERAL)
   val literalCf = new TypedFieldColumnFamily(literalId.fieldName, "literal_field", 0, new LiteralField(),
     new ColumnFamily[java.lang.Long,StringPosting]("literal_field", LongSerializer.get, FieldSerializers.Literal))
-  val literalField = Field(literalId, DateTime.now(), literal = Some(literalCf))
+  val literalField = CassandraField(literalId, DateTime.now(), literal = Some(literalCf))
 
   val integerId = FieldIdentifier("integer_field", DataType.INTEGER)
   val integerCf = new TypedFieldColumnFamily(integerId.fieldName, "integer_field", 0, new IntegerField(),
     new ColumnFamily[java.lang.Long,LongPosting]("integer_field", LongSerializer.get, FieldSerializers.Integer))
-  val integerField = Field(integerId, DateTime.now(), integer = Some(integerCf))
+  val integerField = CassandraField(integerId, DateTime.now(), integer = Some(integerCf))
 
   val floatId = FieldIdentifier("float_field", DataType.FLOAT)
   val floatCf = new TypedFieldColumnFamily(floatId.fieldName, "float_field", 0, new FloatField(),
     new ColumnFamily[java.lang.Long,DoublePosting]("float_field", LongSerializer.get, FieldSerializers.Float))
-  val floatField = Field(floatId, DateTime.now(), float = Some(floatCf))
+  val floatField = CassandraField(floatId, DateTime.now(), float = Some(floatCf))
 
   val datetimeId = FieldIdentifier("datetime_field", DataType.DATETIME)
   val datetimeCf = new TypedFieldColumnFamily(datetimeId.fieldName, "datetime_field", 0, new DatetimeField(),
     new ColumnFamily[java.lang.Long,DatePosting]("datetime_field", LongSerializer.get, FieldSerializers.Datetime))
-  val datetimeField = Field(datetimeId, DateTime.now(), datetime = Some(datetimeCf))
+  val datetimeField = CassandraField(datetimeId, DateTime.now(), datetime = Some(datetimeCf))
 
   val addressId = FieldIdentifier("address_field", DataType.ADDRESS)
   val addressCf = new TypedFieldColumnFamily(addressId.fieldName, "address_field", 0, new AddressField(),
     new ColumnFamily[java.lang.Long,AddressPosting]("address_field", LongSerializer.get, FieldSerializers.Address))
-  val addressField = Field(addressId, DateTime.now(), address = Some(addressCf))
+  val addressField = CassandraField(addressId, DateTime.now(), address = Some(addressCf))
 
   val hostnameId = FieldIdentifier("hostname_field", DataType.HOSTNAME)
   val hostnameCf = new TypedFieldColumnFamily(hostnameId.fieldName, "hostname_field", 0, new HostnameField(),
     new ColumnFamily[java.lang.Long,StringPosting]("hostname_field", LongSerializer.get, FieldSerializers.Hostname))
-  val hostnameField = Field(hostnameId, DateTime.now(), hostname = Some(hostnameCf))
+  val hostnameField = CassandraField(hostnameId, DateTime.now(), hostname = Some(hostnameCf))
 
   def getZookeeperClient = Zookeeper(_system).client
 
@@ -108,7 +107,7 @@ abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with I
    * @param keyspace
    * @param field
    */
-  def createColumnFamily(keyspace: Keyspace, field: Field) {
+  def createColumnFamily(keyspace: Keyspace, field: CassandraField) {
     field.fieldId match {
       case FieldIdentifier(name, DataType.TEXT) =>
         keyspace.createTextField(name).getResult

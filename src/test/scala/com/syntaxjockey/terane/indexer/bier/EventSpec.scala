@@ -22,12 +22,11 @@ package com.syntaxjockey.terane.indexer.bier
 import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 import org.joda.time.DateTime
+import org.xbill.DNS.Name
 import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.Event._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import org.xbill.DNS.Name
 
 class EventSpec extends WordSpec with MustMatchers {
 

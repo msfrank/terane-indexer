@@ -27,12 +27,10 @@ import org.joda.time.DateTime
 import scala.Some
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.{Event, Value}
+import com.syntaxjockey.terane.indexer.bier.{Event, Value, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.Query._
-import com.syntaxjockey.terane.indexer.sink.FieldManager.Field
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 
 class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfterAll {
@@ -51,15 +49,15 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
     val datetimeId = FieldIdentifier("datetime", DataType.DATETIME)
     val addressId = FieldIdentifier("address", DataType.ADDRESS)
     val hostnameId = FieldIdentifier("hostname", DataType.HOSTNAME)
-    val fields = FieldsChanged(
+    val fields = FieldMap(
       Map(
-        textId -> Field(textId, DateTime.now()),
-        literalId -> Field(literalId, DateTime.now()),
-        integerId -> Field(integerId, DateTime.now()),
-        floatId -> Field(floatId, DateTime.now()),
-        datetimeId -> Field(datetimeId, DateTime.now()),
-        addressId -> Field(addressId, DateTime.now()),
-        hostnameId -> Field(hostnameId, DateTime.now())
+        textId -> CassandraField(textId, DateTime.now()),
+        literalId -> CassandraField(literalId, DateTime.now()),
+        integerId -> CassandraField(integerId, DateTime.now()),
+        floatId -> CassandraField(floatId, DateTime.now()),
+        datetimeId -> CassandraField(datetimeId, DateTime.now()),
+        addressId -> CassandraField(addressId, DateTime.now()),
+        hostnameId -> CassandraField(hostnameId, DateTime.now())
       ),
       Map.empty
     )

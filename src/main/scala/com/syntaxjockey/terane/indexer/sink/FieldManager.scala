@@ -20,10 +20,10 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor.{ActorRef, Actor, ActorLogging}
-import akka.actor.Status.Failure
 import akka.event.{ActorEventBus, SubchannelClassification}
-import akka.util.Subclassification
 import akka.pattern.pipe
+import akka.actor.Status.Failure
+import akka.util.Subclassification
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.netflix.astyanax.Keyspace
@@ -35,18 +35,13 @@ import scala.concurrent.Future
 import scala.collection.JavaConversions._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.cassandra._
-import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import com.syntaxjockey.terane.indexer.zookeeper._
+import com.syntaxjockey.terane.indexer.metadata.Store
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
 import com.syntaxjockey.terane.indexer.UUIDLike
-import akka.actor.Status.Failure
-import scala.Some
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
 /**
  *
@@ -69,7 +64,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
   val zk = Zookeeper(context.system).client
 
   val shardingFactor = 3
-  var currentFields = FieldsChanged(Map.empty, Map.empty)
+  var currentFields = FieldMap(Map.empty, Map.empty)
   var creatingFields: Set[FieldIdentifier] = Set.empty
   var changingFields: Set[FieldIdentifier] = Set.empty
   var removingFields: Set[FieldIdentifier] = Set.empty
@@ -81,7 +76,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
   def receive = {
 
     /* notify all subscribers that fields have changed */
-    case fieldsChanged: FieldsChanged =>
+    case fieldsChanged: FieldMap =>
       log.debug("fields have changed")
       currentFields = fieldsChanged
       fieldBus.publish(currentFields)
@@ -100,7 +95,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
     case CreatedField(fieldId, field, fcf, schemaChangeId) =>
       val fieldsByIdent = currentFields.fieldsByIdent
       val fieldsByCf = currentFields.fieldsByCf
-      currentFields = FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+      currentFields = FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
       creatingFields = creatingFields - fieldId
       fieldBus.publish(currentFields)
 
@@ -113,13 +108,13 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
    *
    * @return
    */
-  def getFields = Future[FieldsChanged] {
+  def getFields = Future[FieldMap] {
     val basepath = "/stores/" + store.name + "/fields"
     val znodes = zk.getChildren.forPath(basepath)
     log.debug("found {} fields in {}", znodes.length, basepath)
-    znodes.foldLeft(FieldsChanged(Map.empty, Map.empty)) {
+    znodes.foldLeft(FieldMap(Map.empty, Map.empty)) {
       (fieldsChanged, fieldNode) =>
-      val FieldsChanged(fieldsByIdent, fieldsByCf) = fieldsChanged
+      val FieldMap(fieldsByIdent, fieldsByCf) = fieldsChanged
       val fieldPath = basepath + "/" + fieldNode
       val id = new String(zk.getData.forPath(fieldPath), Zookeeper.UTF_8_CHARSET)
       val fieldNodeParts = fieldNode.split(":", 2)
@@ -135,38 +130,38 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
         case DataType.TEXT =>
           val fcf = new TypedFieldColumnFamily(fieldName, id, shardingFactor, new TextField(),
             new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Text))
-          val field = Field(fieldId, created, text = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, text = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.LITERAL =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new LiteralField(),
             new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, FieldSerializers.Literal))
-          val field = Field(fieldId, created, literal = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, literal = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.INTEGER =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new IntegerField(),
             new ColumnFamily[java.lang.Long,LongPosting](id.toString, LongSerializer.get, FieldSerializers.Integer))
-          val field = Field(fieldId, created, integer = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, integer = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.FLOAT =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new FloatField(),
             new ColumnFamily[java.lang.Long,DoublePosting](id.toString, LongSerializer.get, FieldSerializers.Float))
-          val field = Field(fieldId, created, float = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, float = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.DATETIME =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new DatetimeField(),
             new ColumnFamily[java.lang.Long,DatePosting](id.toString, LongSerializer.get, FieldSerializers.Datetime))
-          val field = Field(fieldId, created, datetime = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, datetime = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.ADDRESS =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new AddressField(),
             new ColumnFamily[java.lang.Long,AddressPosting](id.toString, LongSerializer.get, FieldSerializers.Address))
-          val field = Field(fieldId, created, address = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, address = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.HOSTNAME =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new HostnameField(),
             new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, FieldSerializers.Hostname))
-          val field = Field(fieldId, created, hostname = Some(fcf))
-          FieldsChanged(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
+          val field = CassandraField(fieldId, created, hostname = Some(fcf))
+          FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
       }
       log.debug("found field {}:{} with id {}", fieldType.toString, fieldName, id)
       _fieldsChanged
@@ -199,37 +194,37 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
             case DataType.TEXT =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new TextField(),
                 new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Text))
-              val field = Field(fieldId, created, text = Some(fcf))
+              val field = CassandraField(fieldId, created, text = Some(fcf))
               CreatedField(fieldId, field, fcf, createTextField(id).getResult)
             case DataType.LITERAL =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new LiteralField(),
                 new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Literal))
-              val field = Field(fieldId, created, literal = Some(fcf))
+              val field = CassandraField(fieldId, created, literal = Some(fcf))
               CreatedField(fieldId, field, fcf, createLiteralField(id).getResult)
             case DataType.INTEGER =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new IntegerField(),
                 new ColumnFamily[java.lang.Long,LongPosting](id, LongSerializer.get, FieldSerializers.Integer))
-              val field = Field(fieldId, created, integer = Some(fcf))
+              val field = CassandraField(fieldId, created, integer = Some(fcf))
               CreatedField(fieldId, field, fcf, createIntegerField(id).getResult)
             case DataType.FLOAT =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new FloatField(),
                 new ColumnFamily[java.lang.Long,DoublePosting](id, LongSerializer.get, FieldSerializers.Float))
-              val field = Field(fieldId, created, float = Some(fcf))
+              val field = CassandraField(fieldId, created, float = Some(fcf))
               CreatedField(fieldId, field, fcf, createFloatField(id).getResult)
             case DataType.DATETIME =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new DatetimeField(),
                 new ColumnFamily[java.lang.Long,DatePosting](id, LongSerializer.get, FieldSerializers.Datetime))
-              val field = Field(fieldId, created, datetime = Some(fcf))
+              val field = CassandraField(fieldId, created, datetime = Some(fcf))
               CreatedField(fieldId, field, fcf, createDatetimeField(id).getResult)
             case DataType.ADDRESS =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new AddressField(),
                 new ColumnFamily[java.lang.Long,AddressPosting](id, LongSerializer.get, FieldSerializers.Address))
-              val field = Field(fieldId, created, address = Some(fcf))
+              val field = CassandraField(fieldId, created, address = Some(fcf))
               CreatedField(fieldId, field, fcf, createAddressField(id).getResult)
             case DataType.HOSTNAME =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new HostnameField(),
                 new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Hostname))
-              val field = Field(fieldId, created, hostname = Some(fcf))
+              val field = CassandraField(fieldId, created, hostname = Some(fcf))
               CreatedField(fieldId, field, fcf, createHostnameField(id).getResult)
           }
           /* create the field in zookeeper */
@@ -252,21 +247,11 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
 
 object FieldManager {
 
-  case class Field(
-    fieldId: FieldIdentifier, created: DateTime,
-    text: Option[TypedFieldColumnFamily[TextField,StringPosting]] = None,
-    literal: Option[TypedFieldColumnFamily[LiteralField,StringPosting]] = None,
-    integer: Option[TypedFieldColumnFamily[IntegerField,LongPosting]] = None,
-    float: Option[TypedFieldColumnFamily[FloatField,DoublePosting]] = None,
-    datetime: Option[TypedFieldColumnFamily[DatetimeField,DatePosting]] = None,
-    address: Option[TypedFieldColumnFamily[AddressField,AddressPosting]] = None,
-    hostname: Option[TypedFieldColumnFamily[HostnameField,StringPosting]] = None)
-
   case object GetFields
   case class CreateField(fieldId: FieldIdentifier)
-  case class CreatedField(fieldId: FieldIdentifier, field: Field, fcf: FieldColumnFamily, schemaChangeId: SchemaChangeResult)
+  case class CreatedField(fieldId: FieldIdentifier, field: CassandraField, fcf: FieldColumnFamily, schemaChangeId: SchemaChangeResult)
   case class DeleteField(field: FieldIdentifier)
-  case class DeletedField(fieldId: FieldIdentifier, field: Field, schemaChangeId: SchemaChangeResult)
+  case class DeletedField(fieldId: FieldIdentifier, field: CassandraField, schemaChangeId: SchemaChangeResult)
 
   class FieldBus extends ActorEventBus with SubchannelClassification {
     type Event = FieldEvent
@@ -285,5 +270,15 @@ object FieldManager {
   sealed trait FieldEvent
 
   sealed trait FieldNotification extends FieldEvent
-  case class FieldsChanged(fieldsByIdent: Map[FieldIdentifier,Field], fieldsByCf: Map[String,Field]) extends FieldNotification
+  case class FieldMap(fieldsByIdent: Map[FieldIdentifier,CassandraField], fieldsByCf: Map[String,CassandraField]) extends FieldNotification
 }
+
+case class CassandraField(fieldId: FieldIdentifier,
+                          created: DateTime,
+                          text: Option[TypedFieldColumnFamily[TextField,StringPosting]] = None,
+                          literal: Option[TypedFieldColumnFamily[LiteralField,StringPosting]] = None,
+                          integer: Option[TypedFieldColumnFamily[IntegerField,LongPosting]] = None,
+                          float: Option[TypedFieldColumnFamily[FloatField,DoublePosting]] = None,
+                          datetime: Option[TypedFieldColumnFamily[DatetimeField,DatePosting]] = None,
+                          address: Option[TypedFieldColumnFamily[AddressField,AddressPosting]] = None,
+                          hostname: Option[TypedFieldColumnFamily[HostnameField,StringPosting]] = None)

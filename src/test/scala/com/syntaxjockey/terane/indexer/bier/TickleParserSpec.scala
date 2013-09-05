@@ -30,13 +30,8 @@ import scala.Some
 import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.TickleParser._
-import com.syntaxjockey.terane.indexer.bier.TickleParser.AndGroup
-import com.syntaxjockey.terane.indexer.bier.TickleParser.Query
-import com.syntaxjockey.terane.indexer.bier.TickleParser.Subject
-import com.syntaxjockey.terane.indexer.bier.TickleParser.OrGroup
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 
 class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfterAll {
 

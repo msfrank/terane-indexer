@@ -28,7 +28,7 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.EventRouter
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer.bier.Event
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, EventSet}
 

@@ -20,15 +20,13 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor.{ActorRef, Actor, ActorLogging}
-import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import com.netflix.astyanax.{Keyspace, MutationBatch}
+import scala.concurrent.duration.Duration
 import java.util.UUID
-import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.bier._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
+import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.cassandra.CassandraRowOperations
 
 class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) extends Actor with ActorLogging with CassandraRowOperations {
@@ -38,7 +36,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
 
   fieldManager ! GetFields
 
-  var fieldsById: Map[FieldIdentifier,Field] = Map.empty
+  var fieldsById: Map[FieldIdentifier,CassandraField] = Map.empty
 
   def receive = {
 
@@ -60,7 +58,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
       }
 
     /* update our cache of fields */
-    case FieldsChanged(_fieldsById, _) =>
+    case FieldMap(_fieldsById, _) =>
       fieldsById = _fieldsById
   }
 

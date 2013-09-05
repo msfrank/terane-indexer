@@ -25,7 +25,7 @@ import scala.Some
 import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.bier.Event
-import com.syntaxjockey.terane.indexer.metadata.StoreManager
+import com.syntaxjockey.terane.indexer.metadata.{Store, StoreManager}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 
@@ -50,7 +50,7 @@ class EventRouter extends Actor with ActorLogging {
   def receive = {
 
     /* a new store was created */
-    case StoresChanged(_storesById, _storesByName) =>
+    case StoreMap(_storesById, _storesByName) =>
       // remove any dropped stores
       storesById.values.filter(store => !_storesById.contains(store.id)).foreach { store =>
         for (sink <- sinksByName.remove(store.name)) {

@@ -22,7 +22,6 @@ package com.syntaxjockey.terane.indexer.bier
 import com.netflix.astyanax.util.TimeUUIDUtils
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 
 class Event(val id: UUID, val values: Map[FieldIdentifier,Value]) {

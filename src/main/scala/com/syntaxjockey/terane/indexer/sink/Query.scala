@@ -35,15 +35,15 @@ import java.util.{Date, UUID}
 import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
+import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.{TickleParser, Matchers, Value, Event => BierEvent}
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.Store
+import com.syntaxjockey.terane.indexer.metadata.Store
 
-class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldsChanged) extends Actor with ActorLogging with LoggingFSM[State,Data] {
+class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import com.syntaxjockey.terane.indexer.bier.matchers._
   import Query._
   import context.dispatcher
@@ -191,7 +191,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    * @param matchers
    * @return
    */
-  def buildTerms(matchers: Matchers, fields: FieldsChanged, keyspace: Keyspace): Option[Matchers] = {
+  def buildTerms(matchers: Matchers, fields: FieldMap, keyspace: Keyspace): Option[Matchers] = {
     matchers match {
       case termMatcher @ TermMatcher(fieldId: FieldIdentifier, _) =>
         fields.fieldsByIdent.get(fieldId) match {

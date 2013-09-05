@@ -26,13 +26,13 @@ import java.io.File
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.DirectStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldsChanged
+import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
 
-class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldsChanged) extends LoggingFSM[State,Data] {
+class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) extends LoggingFSM[State,Data] {
   import DirectStreamer._
   import Query._
 

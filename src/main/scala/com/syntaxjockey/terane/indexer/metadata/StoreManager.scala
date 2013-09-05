@@ -48,7 +48,7 @@ class StoreManager extends Actor with ActorLogging {
   val zk = Zookeeper(context.system).client
   val cs = Cassandra(context.system).cluster
 
-  var stores: StoresChanged = StoresChanged(Map.empty, Map.empty)
+  var stores: StoreMap = StoreMap(Map.empty, Map.empty)
   getStores pipeTo self
 
   log.debug("started {}", self.path.name)
@@ -56,7 +56,7 @@ class StoreManager extends Actor with ActorLogging {
   def receive = {
 
     /* the getStores future has returned with the current stores list */
-    case _stores: StoresChanged =>
+    case _stores: StoreMap =>
       stores = _stores
       context.parent ! _stores
 
@@ -66,7 +66,7 @@ class StoreManager extends Actor with ActorLogging {
     case CreatedStore(store) =>
       val storesById = stores.storesById ++ Map(store.id -> store)
       val storesByName = stores.storesByName ++ Map(store.name -> store)
-      self ! StoresChanged(storesById, storesByName)
+      self ! StoreMap(storesById, storesByName)
 
     case Failure(cause) =>
       log.debug("received failure: {}", cause.getMessage)
@@ -77,7 +77,7 @@ class StoreManager extends Actor with ActorLogging {
    *
    * @return
    */
-  def getStores = Future[StoresChanged] {
+  def getStores = Future[StoreMap] {
     zk.checkExists().forPath("/stores") match {
       case stat: Stat =>
         val znodes = zk.getChildren.forPath("/stores")
@@ -93,9 +93,9 @@ class StoreManager extends Actor with ActorLogging {
           (store.id, store)
         }.toMap
         val storesByName = storesById.values.map(store => (store.name, store)).toMap
-        StoresChanged(storesById, storesByName)
+        StoreMap(storesById, storesByName)
       case null =>
-        StoresChanged(Map.empty, Map.empty)
+        StoreMap(Map.empty, Map.empty)
     }
   }
 
@@ -164,12 +164,12 @@ class StoreManager extends Actor with ActorLogging {
 
 object StoreManager {
 
-  case class Store(id: String, name: String, created: DateTime)
-
   sealed trait StoreOperation
   case class CreateStore(name: String) extends StoreOperation
   case class CreatedStore(store: Store)
 
   sealed trait StoreNotification
-  case class StoresChanged(storesById: Map[String,Store], storesByName: Map[String,Store]) extends StoreNotification
+  case class StoreMap(storesById: Map[String,Store], storesByName: Map[String,Store]) extends StoreNotification
 }
+
+case class Store(id: String, name: String, created: DateTime)

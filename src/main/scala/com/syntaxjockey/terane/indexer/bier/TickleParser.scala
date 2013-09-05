@@ -23,7 +23,6 @@ import akka.actor.ActorRefFactory
 import scala.util.parsing.combinator.syntactical._
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher}
 
 /**

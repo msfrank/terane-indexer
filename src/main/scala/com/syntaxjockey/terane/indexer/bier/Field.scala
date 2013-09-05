@@ -27,10 +27,17 @@ import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
-import com.syntaxjockey.terane.indexer.bier.matchers.TermMatcher.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
 import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
 import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
+
+/**
+ * Identifies a field by name and type.
+ *
+ * @param fieldName
+ * @param fieldType
+ */
+case class FieldIdentifier(fieldName: String, fieldType: DataType.Value)
 
 abstract class Field
 
