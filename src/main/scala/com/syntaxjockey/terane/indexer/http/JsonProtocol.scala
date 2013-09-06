@@ -27,7 +27,7 @@ import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.EventRouter
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
-import com.syntaxjockey.terane.indexer.bier.Event
+import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, EventSet}
@@ -54,8 +54,8 @@ object JsonProtocol extends DefaultJsonProtocol {
   }
 
   /* convert Event class */
-  implicit object EventFormat extends RootJsonFormat[Event] {
-    def write(event: Event) = {
+  implicit object EventFormat extends RootJsonFormat[BierEvent] {
+    def write(event: BierEvent) = {
       val fields: List[JsField] = for ((FieldIdentifier(name, _), value) <- event.values.toList) yield {
         val values = scala.collection.mutable.HashMap[String,JsValue]()
         for (text <- value.text)

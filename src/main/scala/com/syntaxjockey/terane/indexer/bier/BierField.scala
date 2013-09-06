@@ -26,7 +26,7 @@ import java.util.Date
 import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
 import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
 import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
@@ -39,9 +39,9 @@ import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
  */
 case class FieldIdentifier(fieldName: String, fieldType: DataType.Value)
 
-abstract class Field
+abstract class BierField
 
-object Field {
+object BierField {
   case class PostingMetadata(positions: Option[scala.collection.mutable.Set[Int]])
 }
 
@@ -51,7 +51,7 @@ case class ParsedValue[T](postings: Seq[(T,PostingMetadata)], statistics: FieldS
  * Parses a TEXT field.  The tokenizer is pretty stupid and simply splits the input Text
  * value on runs of whitespace.
  */
-class TextField extends Field {
+class TextField extends BierField {
 
   def tokenizeValue(text: Text): Seq[String] = text.underlying.toLowerCase.split("""\s+""")
 
@@ -79,7 +79,7 @@ object TextField extends TextField
  * without any processing.  Useful for keyword fields where whitespace, capitalization, special
  * characters, etc. must all be preserved exactly.
  */
-class LiteralField extends Field {
+class LiteralField extends BierField {
 
   def tokenizeValue(literal: Literal): String = literal.underlying
 
@@ -97,7 +97,7 @@ object LiteralField extends LiteralField
  * Parses an INTEGER field.  The tokenizer passes the supplied input Integer (a 64-bit long)
  * along as-is without any processing.
  */
-class IntegerField extends Field {
+class IntegerField extends BierField {
 
   def tokenizeValue(integer: Integer): Long = integer.underlying
 
@@ -115,7 +115,7 @@ object IntegerField extends IntegerField
  * Parses a FLOAT field.  The tokenizer passes the supplied input Float (a 64-bit double) along
  * as-is without any processing.
  */
-class FloatField extends Field {
+class FloatField extends BierField {
 
   def tokenizeValue(float: Float): Double = float.underlying
 
@@ -132,7 +132,7 @@ object FloatField extends FloatField
 /**
  * Parses a DATETIME field.
  */
-class DatetimeField extends Field {
+class DatetimeField extends BierField {
 
   def tokenizeValue(datetime: Datetime): Date = datetime.underlying.toDate
 
@@ -153,7 +153,7 @@ object DatetimeField extends DatetimeField
 /**
  * Parses an ADDRESS field.
  */
-class AddressField extends Field {
+class AddressField extends BierField {
 
   def tokenizeValue(address: Address): Array[Byte] = address.underlying.getAddress
 
@@ -174,7 +174,7 @@ object AddressField extends AddressField
 /**
  * Parses a HOSTNAME field.
  */
-class HostnameField extends Field {
+class HostnameField extends BierField {
 
   def parseValue(hostname: Hostname): ParsedValue[String] = {
     val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()

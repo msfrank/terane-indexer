@@ -22,8 +22,8 @@ package com.syntaxjockey.terane.indexer.syslog
 import com.netflix.astyanax.util.TimeUUIDUtils
 import org.xbill.DNS.Name
 
-import com.syntaxjockey.terane.indexer.bier.Event
-import com.syntaxjockey.terane.indexer.bier.Event._
+import com.syntaxjockey.terane.indexer.bier.BierEvent
+import com.syntaxjockey.terane.indexer.bier.BierEvent._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 
 /**
@@ -31,9 +31,9 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
  */
 trait SyslogReceiver {
 
-  implicit def message2event(message: Message): Event = {
+  implicit def message2event(message: Message): BierEvent = {
     val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
-    var event = Event(Some(id)) ++ Seq(
+    var event = BierEvent(Some(id)) ++ Seq(
       "origin" -> Hostname(new Name(message.origin)),
       "timestamp" -> Datetime(message.timestamp),
       "facility" -> Literal(message.priority.facilityString),

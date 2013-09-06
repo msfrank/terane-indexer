@@ -27,8 +27,7 @@ import scala.concurrent.duration._
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}

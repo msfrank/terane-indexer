@@ -25,8 +25,7 @@ import scala.collection.mutable
 import java.io.File
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent}
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.sink.DirectStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap

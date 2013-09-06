@@ -24,7 +24,7 @@ import com.typesafe.config.ConfigValueType
 import scala.Some
 import scala.collection.JavaConversions._
 
-import com.syntaxjockey.terane.indexer.bier.Event
+import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.metadata.{Store, StoreManager}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
@@ -84,5 +84,5 @@ class EventRouter extends Actor with ActorLogging {
 }
 
 object EventRouter {
-  case class StoreEvent(store: String, event: Event)
+  case class StoreEvent(store: String, event: BierEvent)
 }

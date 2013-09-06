@@ -70,7 +70,7 @@ class EventWriter(store: Store, val keyspace: Keyspace, fieldManager: ActorRef) 
    * @param keyspace
    * @return
    */
-   def buildMutation(event: Event, keyspace: Keyspace): Either[Seq[CreateField],Mutation] = {
+   def buildMutation(event: BierEvent, keyspace: Keyspace): Either[Seq[CreateField],Mutation] = {
     log.debug("received event {}", event.id)
     /* create our batches */
     val postingsMutation = keyspace.prepareMutationBatch()

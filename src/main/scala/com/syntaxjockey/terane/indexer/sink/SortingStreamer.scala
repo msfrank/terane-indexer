@@ -29,7 +29,7 @@ import java.net.InetAddress
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.{Event => BierEvent, Value}
+import com.syntaxjockey.terane.indexer.bier.{BierEvent, Value}
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.SortingStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery

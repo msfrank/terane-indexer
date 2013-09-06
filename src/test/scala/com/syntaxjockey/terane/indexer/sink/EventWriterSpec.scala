@@ -31,8 +31,8 @@ import java.net.InetAddress
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.{RequiresTestCluster, UUIDLike, TestCluster}
-import com.syntaxjockey.terane.indexer.bier.Event
-import com.syntaxjockey.terane.indexer.bier.Event._
+import com.syntaxjockey.terane.indexer.bier.BierEvent
+import com.syntaxjockey.terane.indexer.bier.BierEvent._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{StoreEvent, WroteEvent}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.{GetFields, FieldMap}
@@ -72,7 +72,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, textField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(textField.fieldId -> textField), Map(textField.text.get.id -> textField))
-      val event = Event(values = Map("text_field" -> Text("foo")))
+      val event = BierEvent(values = Map("text_field" -> Text("foo")))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -81,7 +81,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, literalField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(literalField.fieldId -> literalField), Map(literalField.literal.get.id -> literalField))
-      val event = Event(values = Map("literal_field" -> Literal("foo")))
+      val event = BierEvent(values = Map("literal_field" -> Literal("foo")))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -90,7 +90,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, integerField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(integerField.fieldId -> integerField), Map(integerField.integer.get.id -> integerField))
-      val event = Event(values = Map("integer_field" -> Integer(42)))
+      val event = BierEvent(values = Map("integer_field" -> Integer(42)))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -99,7 +99,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, floatField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(floatField.fieldId -> floatField), Map(floatField.float.get.id -> floatField))
-      val event = Event(values = Map("float_field" -> Float(3.14)))
+      val event = BierEvent(values = Map("float_field" -> Float(3.14)))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -108,7 +108,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, datetimeField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(datetimeField.fieldId -> datetimeField), Map(datetimeField.datetime.get.id -> datetimeField))
-      val event = Event(values = Map("datetime_field" -> Datetime(DateTime.now())))
+      val event = BierEvent(values = Map("datetime_field" -> Datetime(DateTime.now())))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -117,7 +117,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, addressField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(addressField.fieldId -> addressField), Map(addressField.address.get.id -> addressField))
-      val event = Event(values = Map("address_field" -> Address(InetAddress.getLocalHost)))
+      val event = BierEvent(values = Map("address_field" -> Address(InetAddress.getLocalHost)))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }
@@ -126,7 +126,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
       createColumnFamily(keyspace, hostnameField)
       expectMsg(GetFields)
       writer ! FieldMap(Map(hostnameField.fieldId -> hostnameField), Map(hostnameField.hostname.get.id -> hostnameField))
-      val event = Event(values = Map("hostname_field" -> Hostname(Name.fromString("syntaxjockey.com"))))
+      val event = BierEvent(values = Map("hostname_field" -> Hostname(Name.fromString("syntaxjockey.com"))))
       writer ! StoreEvent(event, 1)
       expectMsgClass(30 seconds, classOf[WroteEvent]) must be(WroteEvent(event))
     }

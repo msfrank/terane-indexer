@@ -24,19 +24,19 @@ import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 
-class Event(val id: UUID, val values: Map[FieldIdentifier,Value]) {
-  import Event._
+class BierEvent(val id: UUID, val values: Map[FieldIdentifier,Value]) {
+  import BierEvent._
 
-  def +(kv: KeyValue): Event = {
-    new Event(id, values + kv)
+  def +(kv: KeyValue): BierEvent = {
+    new BierEvent(id, values + kv)
   }
 
-  def ++(xs: Traversable[KeyValue]): Event = {
-    new Event(id, values ++ xs)
+  def ++(xs: Traversable[KeyValue]): BierEvent = {
+    new BierEvent(id, values ++ xs)
   }
 
-  def -(key: FieldIdentifier): Event = {
-    new Event(id, values - key)
+  def -(key: FieldIdentifier): BierEvent = {
+    new BierEvent(id, values - key)
   }
 
   override def toString: String = {
@@ -62,13 +62,13 @@ class Event(val id: UUID, val values: Map[FieldIdentifier,Value]) {
   }
 }
 
-object Event {
+object BierEvent {
 
-  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,Value] = Map.empty): Event = {
+  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,Value] = Map.empty): BierEvent = {
     if (uuid.isDefined)
-      new Event(uuid.get, values)
+      new BierEvent(uuid.get, values)
     else
-      new Event(TimeUUIDUtils.getUniqueTimeUUIDinMicros, values)
+      new BierEvent(TimeUUIDUtils.getUniqueTimeUUIDinMicros, values)
   }
 
   type KeyValue = (FieldIdentifier,Value)

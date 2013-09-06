@@ -36,7 +36,7 @@ import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.{TickleParser, Matchers, Value, Event => BierEvent}
+import com.syntaxjockey.terane.indexer.bier.{TickleParser, Matchers, Value, BierEvent}
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap

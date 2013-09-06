@@ -37,7 +37,7 @@ import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer.bier.Matchers
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, MatchResult, NextPosting, FindPosting}
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.cassandra._
 
 case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: CassandraField)(implicit val factory: ActorRefFactory) extends Matchers {

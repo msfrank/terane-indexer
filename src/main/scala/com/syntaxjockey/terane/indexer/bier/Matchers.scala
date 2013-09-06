@@ -19,7 +19,7 @@
 
 package com.syntaxjockey.terane.indexer.bier
 
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.Matchers._
 import java.util.UUID
 import scala.concurrent.Future

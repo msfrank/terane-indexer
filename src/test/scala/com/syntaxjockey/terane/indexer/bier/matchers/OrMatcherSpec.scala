@@ -30,7 +30,7 @@ import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.TestTermMatcher
 import com.syntaxjockey.terane.indexer.bier.Matchers.{MatchResult, NoMoreMatches, Posting}
-import com.syntaxjockey.terane.indexer.bier.Field.PostingMetadata
+import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 
 class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec with MustMatchers with BeforeAndAfterAll {
 
