@@ -44,6 +44,7 @@ import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.metadata.Store
+import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import scala.language.postfixOps
@@ -59,11 +60,10 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   else
     context.actorOf(DirectStreamer.props(id, createQuery, fields))
 
-
   /* get term estimates and possibly reorder the query */
   maybeMatchers match {
     case Some(matchers) =>
-      buildTerms(matchers, fields, keyspace) match {
+      buildTerms(matchers, keyspace, fields, stats) match {
         case Some(query) =>
           log.debug("parsed query '{}' => {}", createQuery.query, query)
           startWith(ReadingResults, ReadingResults(query, 0))
@@ -187,31 +187,39 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
   /**
    * Recursively descend the Matchers tree replacing TermMatchers with Terms and removing
-   * leaves and branches if they are not capable or returning any matches.
+   * leaves and branches if they are not capable or returning any matches.  Statistical information
+   * is supplied to each matcher, so it can make query-planning decisions based on join costs.
    *
    * @param matchers
    * @return
    */
-  def buildTerms(matchers: Matchers, fields: FieldMap, keyspace: Keyspace): Option[Matchers] = {
+  def buildTerms(matchers: Matchers, keyspace: Keyspace, fields: FieldMap, stats: StatsMap): Option[Matchers] = {
     matchers match {
       case termMatcher @ TermMatcher(fieldId: FieldIdentifier, _) =>
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
             termMatcher match {
               case TermMatcher(FieldIdentifier(_, DataType.TEXT), text: String) =>
-                Some(new Term[String](fieldId, text, keyspace, field))
+                val stat = stats.statsByCf.get(field.text.get.id)
+                Some(new Term[String](fieldId, text, keyspace, field, stat))
               case TermMatcher(FieldIdentifier(_, DataType.LITERAL), literal: String) =>
-                Some(new Term[String](fieldId, literal, keyspace, field))
+                val stat = stats.statsByCf.get(field.literal.get.id)
+                Some(new Term[String](fieldId, literal, keyspace, field,  stat))
               case TermMatcher(FieldIdentifier(_, DataType.INTEGER), integer: Long) =>
-                Some(new Term[Long](fieldId, integer, keyspace, field))
+                val stat = stats.statsByCf.get(field.integer.get.id)
+                Some(new Term[Long](fieldId, integer, keyspace, field, stat))
               case TermMatcher(FieldIdentifier(_, DataType.FLOAT), float: Double) =>
-                Some(new Term[Double](fieldId, float, keyspace, field))
+                val stat = stats.statsByCf.get(field.float.get.id)
+                Some(new Term[Double](fieldId, float, keyspace, field, stat))
               case TermMatcher(FieldIdentifier(_, DataType.DATETIME), datetime: Date) =>
-                Some(new Term[Date](fieldId, datetime, keyspace, field))
+                val stat = stats.statsByCf.get(field.datetime.get.id)
+                Some(new Term[Date](fieldId, datetime, keyspace, field, stat))
               case TermMatcher(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte]) =>
-                Some(new Term[Array[Byte]](fieldId, address, keyspace, field))
+                val stat = stats.statsByCf.get(field.address.get.id)
+                Some(new Term[Array[Byte]](fieldId, address, keyspace, field, stat))
               case TermMatcher(FieldIdentifier(_, DataType.HOSTNAME), hostname: String) =>
-                Some(new Term[String](fieldId, hostname, keyspace, field))
+                val stat = stats.statsByCf.get(field.hostname.get.id)
+                Some(new Term[String](fieldId, hostname, keyspace, field, stat))
               case unknown =>
                 throw new Exception("unknown field type or value type for " + termMatcher.toString)
             }
@@ -219,7 +227,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
             None
         }
       case andGroup @ AndMatcher(children) =>
-        AndMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten) match {
+        AndMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case AndMatcher(_children) if _children.isEmpty =>
             None
           case AndMatcher(_children) if _children.length == 1 =>
@@ -228,7 +236,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
             Some(andMatcher)
         }
       case orGroup @ OrMatcher(children) =>
-        OrMatcher(children map { child => buildTerms(child, fields, keyspace) } flatten) match {
+        OrMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case OrMatcher(_children) if _children.isEmpty =>
             None
           case OrMatcher(_children) if _children.length == 1 =>

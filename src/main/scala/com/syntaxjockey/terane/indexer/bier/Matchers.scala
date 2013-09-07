@@ -29,6 +29,7 @@ import scala.concurrent.Future
  */
 abstract class Matchers {
   import Matchers._
+  def estimateCost: Long
   def nextPosting: Future[MatchResult]
   def findPosting(id: UUID): Future[MatchResult]
   def close()

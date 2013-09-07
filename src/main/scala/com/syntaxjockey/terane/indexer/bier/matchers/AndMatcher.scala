@@ -42,7 +42,10 @@ case class AndMatcher(children: List[Matchers])(implicit factory: ActorRefFactor
 
   implicit val timeout = Timeout(5 seconds)
 
-  lazy val iterator = factory.actorOf(AndIterator.props(children.head, children.tail))
+  private[this] val _children = children.sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }
+  lazy val iterator = factory.actorOf(AndIterator.props(_children.head, _children.tail))
+
+  def estimateCost: Long = _children.head.estimateCost
 
   def nextPosting = iterator.ask(NextPosting).mapTo[MatchResult]
 

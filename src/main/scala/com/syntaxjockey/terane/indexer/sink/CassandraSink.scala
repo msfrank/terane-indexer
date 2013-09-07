@@ -74,6 +74,10 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
       currentFields = fieldsChanged
       stay()
 
+    case Event(statsChanged: StatsMap, _) =>
+      currentStats = statsChanged
+      stay()
+
     case Event(event: BierEvent, UnconnectedBuffer(retries)) =>
       stay() using UnconnectedBuffer(RetryEvent(event, 1) +: retries)
 
@@ -100,6 +104,10 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
 
     case Event(fieldsChanged: FieldMap, _) =>
       currentFields = fieldsChanged
+      stay()
+
+    case Event(statsChanged: StatsMap, _) =>
+      currentStats = statsChanged
       stay()
 
     case Event(event: BierEvent, EventBuffer(retries, scheduledFlush)) =>

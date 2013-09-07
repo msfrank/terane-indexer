@@ -36,10 +36,8 @@ import com.syntaxjockey.terane.indexer.bier.Matchers
  * @tparam T
  */
 case class TermMatcher[T](fieldId: FieldIdentifier, term: T) extends Matchers {
-
+  def estimateCost = 0L
   def nextPosting = Future.failed(new NotImplementedError("TermMatcher doesn't implement nextPosting"))
-
   def findPosting(id: UUID) = Future.failed(new NotImplementedError("TermMatcher doesn't implement findPosting"))
-
   def close() {}
 }

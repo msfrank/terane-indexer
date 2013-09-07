@@ -21,6 +21,7 @@ package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor._
 import akka.pattern.ask
+import akka.agent.Agent
 import akka.event.LoggingReceive
 import akka.util.Timeout
 import com.netflix.astyanax.Keyspace
@@ -35,18 +36,41 @@ import java.util.{Date, UUID}
 
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
+import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
 import com.syntaxjockey.terane.indexer.bier.Matchers
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, MatchResult, NextPosting, FindPosting}
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.cassandra._
 
-case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: CassandraField)(implicit val factory: ActorRefFactory) extends Matchers {
+/**
+ *
+ */
+case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: CassandraField, stats: Option[Agent[FieldStatistics]])(implicit val factory: ActorRefFactory) extends Matchers {
   import scala.language.postfixOps
+  import Analytical._
 
   implicit val timeout = Timeout(5 seconds)
 
   // FIXME: create multiple iterators for each shard
   lazy val iterator = factory.actorOf(Props(classOf[TermIterator[T]], this, 0))
+
+  def estimateCost: Long = {
+    if (stats.isDefined) {
+      val _stats = stats.get.get()
+      term match {
+        case v: String =>
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+        case v: Long =>
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+        case v: Double =>
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+        case v: Date =>
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+        case v: Array[Byte] =>
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+      }
+    } else 0
+  }
 
   def nextPosting: Future[MatchResult] = iterator.ask(NextPosting).mapTo[MatchResult]
 
@@ -96,43 +120,43 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
    */
   def makeScanner(term: Term[T], shard: Int) = {
     term match {
-      case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _) =>
+      case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
         val range = FieldSerializers.Text.buildRange().greaterThanEquals(text).lessThanEquals(text).build()
         term.keyspace.prepareQuery(term.field.text.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _) =>
+      case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
         val range = FieldSerializers.Literal.buildRange().greaterThanEquals(literal).lessThanEquals(literal).build()
         term.keyspace.prepareQuery(term.field.literal.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _) =>
+      case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
         val range = FieldSerializers.Integer.buildRange().greaterThanEquals(integer).lessThanEquals(integer).build()
         term.keyspace.prepareQuery(term.field.integer.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _) =>
+      case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
         val range = FieldSerializers.Float.buildRange().greaterThanEquals(float).lessThanEquals(float).build()
         term.keyspace.prepareQuery(term.field.float.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _) =>
+      case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
         val range = FieldSerializers.Datetime.buildRange().greaterThanEquals(datetime).lessThanEquals(datetime).build()
         term.keyspace.prepareQuery(term.field.datetime.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _) =>
+      case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
         val range = FieldSerializers.Address.buildRange().greaterThanEquals(address).lessThanEquals(address).build()
         term.keyspace.prepareQuery(term.field.address.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _) =>
+      case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
         val range = FieldSerializers.Hostname.buildRange().greaterThanEquals(hostname).lessThanEquals(hostname).build()
         term.keyspace.prepareQuery(term.field.hostname.get.cf)
           .getKey(shard)
@@ -151,31 +175,31 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
    */
   def findPosting(id: UUID, term: Term[T], shard: Int): ColumnQuery[_] = {
     term match {
-      case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _) =>
+      case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
         term.keyspace.prepareQuery(term.field.text.get.cf)
           .getKey(shard)
           .getColumn(new StringPosting(text, id))
-      case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _) =>
+      case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
         term.keyspace.prepareQuery(term.field.literal.get.cf)
           .getKey(shard)
           .getColumn(new StringPosting(literal, id))
-      case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _) =>
+      case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
         term.keyspace.prepareQuery(term.field.integer.get.cf)
           .getKey(shard)
           .getColumn(new LongPosting(integer, id))
-      case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _) =>
+      case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
         term.keyspace.prepareQuery(term.field.float.get.cf)
           .getKey(shard)
           .getColumn(new DoublePosting(float, id))
-      case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _) =>
+      case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
         term.keyspace.prepareQuery(term.field.datetime.get.cf)
           .getKey(shard)
           .getColumn(new DatePosting(datetime, id))
-      case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _) =>
+      case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
         term.keyspace.prepareQuery(term.field.address.get.cf)
           .getKey(shard)
           .getColumn(new AddressPosting(address, id))
-      case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _) =>
+      case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
         term.keyspace.prepareQuery(term.field.hostname.get.cf)
           .getKey(shard)
           .getColumn(new StringPosting(hostname, id))

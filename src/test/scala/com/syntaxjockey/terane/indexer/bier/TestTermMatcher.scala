@@ -29,6 +29,8 @@ case class TestTermMatcher(postings: List[Posting]) extends Matchers {
 
   var postingsLeft = postings
 
+  def estimateCost: Long = postings.length
+
   def nextPosting = Future[MatchResult] {
     if (postingsLeft.isEmpty) {
       Left(NoMoreMatches)
