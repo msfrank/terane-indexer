@@ -31,6 +31,11 @@ import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.cassandra.CassandraRowOperations
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 
+/**
+ * EventWriter actors receive StoreEvent messages from upstream and store them
+ * in the specified cassandra keyspace.  If the write fails, then the event is either
+ * sent back upstream to be retried if possible, or is dropped.
+ */
 class EventWriter(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef, statsManager: ActorRef) extends Actor with ActorLogging with CassandraRowOperations {
   import EventWriter._
   import CassandraSink._
@@ -76,10 +81,6 @@ class EventWriter(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldM
 
   /**
    * Returns Left(missingFields) if not all needed fields exist, otherwise Right(mutation).
-   *
-   * @param event
-   * @param keyspace
-   * @return
    */
    def buildMutation(event: BierEvent, keyspace: Keyspace): Either[Seq[CreateField],Mutation] = {
     log.debug("received event {}", event.id)
@@ -183,9 +184,6 @@ class EventWriter(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldM
   /**
    * Returns Retry if the write failed and we should retry, Success if the write succeeded, or
    * Failure if the write failed in a way which we should not retry.
-   *
-   * @param mutation
-   * @return
    */
   def writeEvent(mutation: Mutation): Result = {
     try {
@@ -206,6 +204,15 @@ class EventWriter(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldM
       case ex: Exception =>
         log.error(ex, "failed to write postings for {}", mutation.id)
         Failure
+    }
+  }
+
+  /**
+   * Update all field statistics using the specified mutation.
+   */
+  def updateStatistics(mutation: Mutation) {
+    mutation.stats.foreach { case ((cf: String, stat: FieldStatistics)) =>
+      for (agent <- statsByCf.get(cf)) { agent.send(_ + stat) }
     }
   }
 }

@@ -41,10 +41,11 @@ import com.syntaxjockey.terane.indexer.bier.{TickleParser, Matchers, Value, Bier
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
+import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.metadata.Store
 
-class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
+class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import scala.language.postfixOps
   import Query._
   import context.dispatcher
@@ -290,8 +291,8 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
 object Query {
 
-  def props(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap) = {
-    Props(classOf[Query], id, createQuery, store, keyspace, fields)
+  def props(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) = {
+    Props(classOf[Query], id, createQuery, store, keyspace, fields, stats)
   }
 
   /* query case classes */

@@ -42,6 +42,7 @@ import com.syntaxjockey.terane.indexer.http.RetryLater
 class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorLogging with CassandraKeyspaceOperations {
   import CassandraSink._
   import FieldManager._
+  import StatsManager._
   import context.dispatcher
 
   val config = context.system.settings.config.getConfig("terane.cassandra")
@@ -52,8 +53,10 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
 
   val sinkBus = new SinkBus()
   sinkBus.subscribe(self, classOf[FieldNotification])
+  sinkBus.subscribe(self, classOf[StatsNotification])
 
   var currentFields = FieldMap(Map.empty, Map.empty)
+  var currentStats = StatsMap(Map.empty)
 
   val fieldManager = context.actorOf(FieldManager.props(store, keyspace, sinkBus), "field-manager")
   val statsManager = context.actorOf(StatsManager.props(store, keyspace, sinkBus, fieldManager), "stats-manager")
@@ -113,7 +116,7 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
 
     case Event(createQuery: CreateQuery, _) =>
       val id = UUID.randomUUID()
-      context.system.actorOf(Query.props(id, createQuery, store, keyspace, currentFields), "query-" + id.toString)
+      context.system.actorOf(Query.props(id, createQuery, store, keyspace, currentFields, currentStats), "query-" + id.toString)
       sender ! CreatedQuery(id)
       stay()
 
