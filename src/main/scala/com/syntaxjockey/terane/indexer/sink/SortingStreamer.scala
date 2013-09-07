@@ -19,7 +19,7 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{ActorRef, LoggingFSM}
+import akka.actor.{Props, ActorRef, LoggingFSM}
 import org.mapdb.{DB, DBMaker, Serializer, BTreeKeySerializer}
 import org.joda.time.{DateTimeZone, DateTime}
 import org.xbill.DNS.Name
@@ -135,6 +135,10 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) exte
 }
 
 object SortingStreamer {
+
+  def props(id: UUID, createQuery: CreateQuery, fields: FieldMap) = {
+    Props(classOf[SortingStreamer], id, createQuery, fields)
+  }
 
   case class DeferredGetEvents(sender: ActorRef, getEvents: GetEvents)
 

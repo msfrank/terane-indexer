@@ -20,6 +20,8 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor._
+import akka.event.{SubchannelClassification, ActorEventBus}
+import akka.util.Subclassification
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.{StringSerializer, SetSerializer, UUIDSerializer}
 import org.apache.cassandra.db.marshal.Int32Type
@@ -34,7 +36,8 @@ import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.http.RetryLater
 
 /**
- *
+ * CassandraSink is the parent actor for all activity for a particular sink,
+ * such as querying and writing events.
  */
 class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorLogging with CassandraKeyspaceOperations {
   import CassandraSink._
@@ -47,14 +50,14 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   val cluster = Cassandra(context.system).cluster
   val keyspace = getKeyspace(store.id)
 
+  val sinkBus = new SinkBus()
+  sinkBus.subscribe(self, classOf[FieldNotification])
+
   var currentFields = FieldMap(Map.empty, Map.empty)
-  val fieldBus = new FieldBus()
-  fieldBus.subscribe(self, classOf[FieldNotification])
 
-  val fieldManager = context.actorOf(Props(new FieldManager(store, keyspace, fieldBus)), "field-manager")
-
-  val writers = context.actorOf(Props(new EventWriter(store, keyspace, fieldManager)), "writer")
-  fieldBus.subscribe(writers, classOf[FieldNotification])
+  val fieldManager = context.actorOf(FieldManager.props(store, keyspace, sinkBus), "field-manager")
+  val statsManager = context.actorOf(StatsManager.props(store, keyspace, sinkBus, fieldManager), "stats-manager")
+  val writers = context.actorOf(EventWriter.props(store, keyspace, sinkBus, fieldManager, statsManager), "writer")
 
   startWith(Connected, EventBuffer(Seq.empty, None))
   self ! FlushRetries
@@ -110,7 +113,7 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
 
     case Event(createQuery: CreateQuery, _) =>
       val id = UUID.randomUUID()
-      context.system.actorOf(Props(new Query(id, createQuery, store, keyspace, currentFields)), "query-" + id.toString)
+      context.system.actorOf(Query.props(id, createQuery, store, keyspace, currentFields), "query-" + id.toString)
       sender ! CreatedQuery(id)
       stay()
 
@@ -123,6 +126,8 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
 }
 
 object CassandraSink {
+
+  def props(store: Store) = Props(classOf[CassandraSink], store)
 
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
   val CF_META = new ColumnFamily[UUID,String]("meta", UUIDSerializer.get(), StringSerializer.get())
@@ -144,3 +149,23 @@ object CassandraSink {
   case class EventBuffer(events: Seq[RetryEvent], scheduledFlush: Option[Cancellable]) extends Data
   case class UnconnectedBuffer(events: Seq[RetryEvent]) extends Data
 }
+
+/**
+ * SinkBus is an event stream which is private to each individual CassandraSink, and
+ * is used for broadcast communication between sink components.
+ */
+class SinkBus extends ActorEventBus with SubchannelClassification {
+  type Event = SinkEvent
+  type Classifier = Class[_]
+
+  protected implicit val subclassification = new Subclassification[Class[_]] {
+    def isEqual(x: Class[_], y: Class[_]) = x == y
+    def isSubclass(x: Class[_], y: Class[_]) = y isAssignableFrom x
+  }
+
+  protected def classify(event: SinkEvent): Class[_] = event.getClass
+
+  protected def publish(event: SinkEvent, subscriber: ActorRef) { subscriber ! event }
+}
+
+trait SinkEvent

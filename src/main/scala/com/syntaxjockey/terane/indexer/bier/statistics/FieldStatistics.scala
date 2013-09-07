@@ -30,6 +30,14 @@ object FieldStatistics {
   val BF_MONOID  = new BloomFilterMonoid(termsetNumHashes, termsetWidth, termsetSeed)
   val MH32_MONOID = new MinHasher32(fieldSignatureNumHashes, fieldSignatureNumBands)
 
+  val empty = {
+    val termFrequencies = CMS_MONOID.zero
+    val fieldCardinality = HLL_MONOID.zero
+    val termSet = BF_MONOID.zero
+    val fieldSignature = MH32_MONOID.zero
+    new FieldStatistics(termFrequencies, fieldCardinality, termSet, 0, fieldSignature)
+  }
+
   def apply(terms: Seq[Analytical]): FieldStatistics = {
     val termFrequencies = CMS_MONOID.create(terms.map(_.hash))
     val fieldCardinality = HLL_MONOID.sum(terms.map(term => HLL_MONOID.create(term.bytes)))

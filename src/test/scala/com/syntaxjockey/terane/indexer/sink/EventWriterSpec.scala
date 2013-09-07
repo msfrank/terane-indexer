@@ -56,7 +56,7 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
     val keyspace = createKeyspace(client, id)
     val store = Store(id, id, DateTime.now())
     val writer = system.actorOf(Props(new Actor {
-      val child = context.actorOf(Props(new EventWriter(store, keyspace, testActor)), "writer_" + id)
+      val child = context.actorOf(Props(new EventWriter(store, keyspace, new SinkBus(), testActor, testActor)), "writer_" + id)
       def receive = {
         case x if this.sender == child => testActor forward x
         case x => child forward x

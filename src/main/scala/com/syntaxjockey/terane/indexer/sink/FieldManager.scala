@@ -19,11 +19,9 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{ActorRef, Actor, ActorLogging}
-import akka.event.{ActorEventBus, SubchannelClassification}
+import akka.actor.{Props, Actor, ActorLogging}
 import akka.pattern.pipe
 import akka.actor.Status.Failure
-import akka.util.Subclassification
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.netflix.astyanax.Keyspace
@@ -40,7 +38,6 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.cassandra._
 import com.syntaxjockey.terane.indexer.zookeeper._
 import com.syntaxjockey.terane.indexer.metadata.Store
-import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldBus
 import com.syntaxjockey.terane.indexer.UUIDLike
 
 /**
@@ -51,11 +48,9 @@ import com.syntaxjockey.terane.indexer.UUIDLike
  *      + "fields"
  *        + fieldTypeAndName: String -> id: UUIDLike
  *          - "created" -> Long
- *          - "count" -> UUID
- *          - "frequency" -> UUID
  *
  */
-class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) extends Actor with ActorLogging with CassandraCFOperations {
+class FieldManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
   import FieldManager._
   import UUIDLike._
 
@@ -79,7 +74,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
     case fieldsChanged: FieldMap =>
       log.debug("fields have changed")
       currentFields = fieldsChanged
-      fieldBus.publish(currentFields)
+      sinkBus.publish(currentFields)
 
     /* send current fields to sender */
     case GetFields =>
@@ -97,7 +92,7 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
       val fieldsByCf = currentFields.fieldsByCf
       currentFields = FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
       creatingFields = creatingFields - fieldId
-      fieldBus.publish(currentFields)
+      sinkBus.publish(currentFields)
 
     case Failure(cause) =>
       log.debug("received failure: {}", cause.getMessage)
@@ -247,28 +242,17 @@ class FieldManager(store: Store, val keyspace: Keyspace, fieldBus: FieldBus) ext
 
 object FieldManager {
 
+  def props(store: Store, keyspace: Keyspace, sinkBus: SinkBus) = {
+    Props(classOf[FieldManager], store, keyspace, sinkBus)
+  }
+
   case object GetFields
   case class CreateField(fieldId: FieldIdentifier)
   case class CreatedField(fieldId: FieldIdentifier, field: CassandraField, fcf: FieldColumnFamily, schemaChangeId: SchemaChangeResult)
   case class DeleteField(field: FieldIdentifier)
   case class DeletedField(fieldId: FieldIdentifier, field: CassandraField, schemaChangeId: SchemaChangeResult)
 
-  class FieldBus extends ActorEventBus with SubchannelClassification {
-    type Event = FieldEvent
-    type Classifier = Class[_]
-
-    protected implicit val subclassification = new Subclassification[Class[_]] {
-      def isEqual(x: Class[_], y: Class[_]) = x == y
-      def isSubclass(x: Class[_], y: Class[_]) = y isAssignableFrom x
-    }
-
-    protected def classify(event: FieldEvent): Class[_] = event.getClass
-
-    protected def publish(event: FieldEvent, subscriber: ActorRef) { subscriber ! event }
-  }
-
-  sealed trait FieldEvent
-
+  sealed trait FieldEvent extends SinkEvent
   sealed trait FieldNotification extends FieldEvent
   case class FieldMap(fieldsByIdent: Map[FieldIdentifier,CassandraField], fieldsByCf: Map[String,CassandraField]) extends FieldNotification
 }

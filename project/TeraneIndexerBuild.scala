@@ -7,7 +7,7 @@ import Keys._
 object TeraneIndexerBuild extends Build {
 
   val teraneVersion = "0.1-SNAPSHOT"
-  val akkaVersion = "2.2.0"
+  val akkaVersion = "2.2.1"
   val sprayVersion = "1.2-20130712"
 
   lazy val teraneIndexerBuild = Project(
@@ -23,6 +23,7 @@ object TeraneIndexerBuild extends Build {
       ),
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+        "com.typesafe.akka" %% "akka-agent" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "com.netflix.astyanax" % "astyanax-core" % "1.56.37",
         "com.netflix.astyanax" % "astyanax-thrift" % "1.56.37",

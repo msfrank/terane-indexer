@@ -52,11 +52,10 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   val reapingInterval = 30.seconds
   val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
 
-  // FIXME: if sorting is specified, using SortingStreamer
   val streamer = if (createQuery.sortBy.isDefined)
-    context.actorOf(Props(new SortingStreamer(id, createQuery, fields)))
+    context.actorOf(SortingStreamer.props(id, createQuery, fields))
   else
-    context.actorOf(Props(new DirectStreamer(id, createQuery, fields)))
+    context.actorOf(DirectStreamer.props(id, createQuery, fields))
 
 
   /* get term estimates and possibly reorder the query */
@@ -289,6 +288,11 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 }
 
 object Query {
+
+  def props(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap) = {
+    Props(classOf[Query], id, createQuery, store, keyspace, fields)
+  }
+
   /* query case classes */
   case class GetEvents(offset: Option[Int] = None, limit: Option[Int] = None)
   case object NextEvent

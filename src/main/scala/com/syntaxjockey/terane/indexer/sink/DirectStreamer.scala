@@ -19,7 +19,7 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{ActorRef, LoggingFSM}
+import akka.actor.{Props, ActorRef, LoggingFSM}
 import org.mapdb.{BTreeKeySerializer, DBMaker}
 import scala.collection.mutable
 import java.io.File
@@ -121,6 +121,10 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) exten
 }
 
 object DirectStreamer {
+
+  def props(id: UUID, createQuery: CreateQuery, fields: FieldMap) = {
+    Props(classOf[DirectStreamer], id, createQuery, fields)
+  }
 
   case class DeferredGetEvents(sender: ActorRef, getEvents: GetEvents)
 
