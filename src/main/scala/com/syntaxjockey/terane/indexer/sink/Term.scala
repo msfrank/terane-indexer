@@ -41,11 +41,12 @@ import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.cassandra._
 
 case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: CassandraField)(implicit val factory: ActorRefFactory) extends Matchers {
+  import scala.language.postfixOps
 
   implicit val timeout = Timeout(5 seconds)
 
   // FIXME: create multiple iterators for each shard
-  lazy val iterator = factory.actorOf(Props(new TermIterator[T](this, 0)))
+  lazy val iterator = factory.actorOf(Props(classOf[TermIterator[T]], this, 0))
 
   def nextPosting: Future[MatchResult] = iterator.ask(NextPosting).mapTo[MatchResult]
 

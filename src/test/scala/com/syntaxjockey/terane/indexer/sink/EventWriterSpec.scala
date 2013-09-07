@@ -19,6 +19,8 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
+import scala.language.postfixOps
+
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, WordSpec}
 import org.scalatest.matchers.MustMatchers
 import akka.testkit.TestKit

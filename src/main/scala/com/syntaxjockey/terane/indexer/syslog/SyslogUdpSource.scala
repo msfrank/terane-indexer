@@ -21,7 +21,7 @@ package com.syntaxjockey.terane.indexer.syslog
 
 import com.typesafe.config.Config
 import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
-import akka.actor.{ActorRef, Actor, ActorLogging}
+import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import java.net.InetSocketAddress
 
 import com.syntaxjockey.terane.indexer.EventRouter
@@ -60,3 +60,6 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   }
 }
 
+object SyslogUdpSource {
+  def props(config: Config, eventRouter: ActorRef) = Props(classOf[SyslogUdpSource], config, eventRouter)
+}

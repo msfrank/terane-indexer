@@ -38,10 +38,11 @@ import com.syntaxjockey.terane.indexer.bier.Matchers.MatchResult
  * @param children
  */
 case class OrMatcher(children: List[Matchers])(implicit factory: ActorRefFactory) extends Matchers {
+  import scala.language.postfixOps
 
   implicit val timeout = Timeout(5 seconds)
 
-  lazy val iterator = factory.actorOf(Props(new OrIterator(children)))
+  lazy val iterator = factory.actorOf(OrIterator.props(children))
 
   def nextPosting = iterator.ask(NextPosting).mapTo[MatchResult]
 
@@ -243,6 +244,9 @@ class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with 
 }
 
 object OrIterator {
+
+  def props(children: List[Matchers]) = Props(classOf[OrIterator], children)
+
   case class ChildState(child: Matchers, result: Option[Posting])
 
   sealed trait State

@@ -26,6 +26,7 @@ class UUIDLike(private val uuid: UUID) {
 }
 
 object UUIDLike {
+  import scala.language.implicitConversions
   def apply(uuid: UUID) = new UUIDLike(uuid)
   implicit def uuid2UUIDLike(uuid: UUID) = new UUIDLike(uuid)
   implicit def string2UUIDLike(str: String) = new UUIDLike(UUID.fromString(str))

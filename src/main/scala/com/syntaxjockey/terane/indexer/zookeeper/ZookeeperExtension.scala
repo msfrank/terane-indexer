@@ -63,6 +63,10 @@ class ZookeeperManager(client: CuratorFramework) extends Actor with ActorLogging
   }
 }
 
+object ZookeeperManager {
+  def props(client: CuratorFramework) = Props(classOf[ZookeeperManager], client)
+}
+
 class ZookeeperExtension(system: ActorSystem) extends Extension {
 
   private val log = LoggerFactory.getLogger(classOf[ZookeeperExtension])
@@ -84,7 +88,7 @@ class ZookeeperExtension(system: ActorSystem) extends Extension {
   val client = CuratorFrameworkFactory.newClient(connectionString, retryPolicy)
 
   /* create zookeeper manager */
-  val manager = system.actorOf(Props(new ZookeeperManager(client)))
+  val manager = system.actorOf(ZookeeperManager.props(client), "zookeeper-manager")
 
   /* start zookeeper */
   log.info("connecting to zookeeper servers {}", connectionString)

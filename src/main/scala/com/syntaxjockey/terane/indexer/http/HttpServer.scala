@@ -20,7 +20,7 @@
 package com.syntaxjockey.terane.indexer.http
 
 import akka.io.IO
-import akka.actor.{ActorRef, Actor, ActorLogging}
+import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import akka.pattern.ask
 import akka.util.Timeout
 import akka.event.LoggingAdapter
@@ -67,7 +67,12 @@ class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with A
   }
 }
 
+object HttpServer {
+  def props(config: Config, eventRouter: ActorRef) = Props(classOf[HttpServer], config, eventRouter)
+}
+
 trait ApiService extends HttpService {
+  import scala.language.postfixOps
   import JsonProtocol._
   import spray.httpx.SprayJsonSupport._
   import spray.json._

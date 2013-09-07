@@ -36,19 +36,19 @@ object IndexerApp extends App {
   val system = ActorSystem("terane-indexer")
 
   /* start the sinks */
-  val eventRouter = system.actorOf(Props[EventRouter], "event-router")
+  val eventRouter = system.actorOf(EventRouter.props(), "event-router")
 
   /* start the sources */
   val sources: Seq[ActorRef] = if (config.hasPath("terane.sources"))
     config.getConfig("terane.sources").root()
       .filter { entry => entry._2.valueType() == ConfigValueType.OBJECT }
-      .map { entry => system.actorOf(Props(new SyslogUdpSource(entry._2.asInstanceOf[ConfigObject].toConfig, eventRouter)), "source-" + entry._1)
+      .map { entry => system.actorOf(SyslogUdpSource.props(entry._2.asInstanceOf[ConfigObject].toConfig, eventRouter), "source-" + entry._1)
     }.toSeq
   else Seq.empty
 
   /* start the api */
   val httpApi = if (config.hasPath("terane.http"))
-    Some(system.actorOf(Props(new HttpServer(config.getConfig("terane.http"), eventRouter)), "http-api"))
+    Some(system.actorOf(HttpServer.props(config.getConfig("terane.http"), eventRouter), "http-api"))
   else None
 
   // FIXME: add appropriate shutdown logic

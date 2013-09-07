@@ -60,7 +60,7 @@ class EventRouter extends Actor with ActorLogging {
       }
       // add any created stores
       _storesById.values.filter(store => !storesById.contains(store.id)).foreach { store =>
-        val sink = context.actorOf(Props(new CassandraSink(store)), "sink-" + store.id)
+        val sink = context.actorOf(CassandraSink.props(store), "sink-" + store.id)
         sinksByName.put(store.name, sink)
         log.debug("creating sink {} for store {}", sink.path.name, store.name)
       }
@@ -84,5 +84,8 @@ class EventRouter extends Actor with ActorLogging {
 }
 
 object EventRouter {
+
+  def props() = Props[EventRouter]
+
   case class StoreEvent(store: String, event: BierEvent)
 }

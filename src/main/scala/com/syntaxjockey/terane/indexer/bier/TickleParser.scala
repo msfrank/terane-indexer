@@ -122,6 +122,7 @@ class TickleParser extends StandardTokenParsers {
 }
 
 object TickleParser {
+  import scala.language.postfixOps
 
   private val parser = new TickleParser()
 

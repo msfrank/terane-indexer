@@ -19,7 +19,7 @@
 
 package com.syntaxjockey.terane.indexer.metadata
 
-import akka.actor.{Actor, ActorLogging}
+import akka.actor.{Props, Actor, ActorLogging}
 import akka.pattern.pipe
 import akka.actor.Status.Failure
 import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
@@ -163,6 +163,8 @@ class StoreManager extends Actor with ActorLogging {
 }
 
 object StoreManager {
+
+  def props() = Props[StoreManager]
 
   sealed trait StoreOperation
   case class CreateStore(name: String) extends StoreOperation

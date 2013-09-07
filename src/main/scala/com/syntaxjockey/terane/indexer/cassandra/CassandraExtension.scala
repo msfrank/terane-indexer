@@ -46,6 +46,10 @@ class CassandraManager(_context: AstyanaxContext[Cluster]) extends Actor with Ac
   }
 }
 
+object CassandraManager {
+  def props(context: AstyanaxContext[Cluster]) = Props(classOf[CassandraManager], context)
+}
+
 class CassandraExtension(system: ActorSystem) extends Extension {
 
   private val log = LoggerFactory.getLogger(classOf[CassandraExtension])
@@ -71,7 +75,7 @@ class CassandraExtension(system: ActorSystem) extends Extension {
   log.info("connecting to cluster {}", clusterName)
   context.start()
 
-  val manager = system.actorOf(Props(new CassandraManager(context)))
+  val manager = system.actorOf(CassandraManager.props(context), "cassandra-manager")
   val cluster = context.getClient
 }
 

@@ -30,6 +30,7 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
  *
  */
 trait SyslogReceiver {
+  import scala.language.implicitConversions
 
   implicit def message2event(message: Message): BierEvent = {
     val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros

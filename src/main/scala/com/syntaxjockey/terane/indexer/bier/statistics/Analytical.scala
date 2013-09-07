@@ -15,6 +15,7 @@ trait Analytical {
 }
 
 object Analytical {
+  import scala.language.implicitConversions
 
   val CHARSET_LATIN1 = Charset.forName("ISO-8859-1")
 

@@ -19,6 +19,8 @@
 
 package com.syntaxjockey.terane.indexer.bier.matchers
 
+import scala.language.postfixOps
+
 import org.scalatest.{BeforeAndAfterAll, WordSpec}
 import org.scalatest.matchers.MustMatchers
 import org.scalatest.Inside._

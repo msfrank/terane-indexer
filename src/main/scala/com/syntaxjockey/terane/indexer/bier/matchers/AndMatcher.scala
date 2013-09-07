@@ -38,10 +38,11 @@ import akka.event.LoggingReceive
  * @param children
  */
 case class AndMatcher(children: List[Matchers])(implicit factory: ActorRefFactory) extends Matchers {
+  import scala.language.postfixOps
 
   implicit val timeout = Timeout(5 seconds)
 
-  lazy val iterator = factory.actorOf(Props(new AndIterator(children.head, children.tail)))
+  lazy val iterator = factory.actorOf(AndIterator.props(children.head, children.tail))
 
   def nextPosting = iterator.ask(NextPosting).mapTo[MatchResult]
 
@@ -113,5 +114,8 @@ class AndIterator(scanner: Matchers, finders: List[Matchers]) extends Actor with
 }
 
 object AndIterator {
+
+  def props(scanner: Matchers, finders: List[Matchers]) = Props(classOf[AndIterator], scanner, finders)
+
   case object ScanToNext
 }

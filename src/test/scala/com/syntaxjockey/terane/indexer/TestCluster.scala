@@ -128,6 +128,8 @@ abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with I
 }
 
 object TestCluster {
+  import scala.language.implicitConversions
+
   class ClusterWithKeyspaceOperations(val cluster: Cluster) extends CassandraKeyspaceOperations {}
   class KeyspaceWithCFOperations(val keyspace: Keyspace) extends CassandraCFOperations {}
   class KeyspaceWithRowOperations(val keyspace: Keyspace) extends CassandraRowOperations {}

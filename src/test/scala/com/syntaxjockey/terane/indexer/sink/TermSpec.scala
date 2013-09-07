@@ -19,11 +19,11 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
+import scala.language.postfixOps
+
 import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 import org.scalatest.Inside._
-import akka.actor.ActorSystem
-import akka.testkit.{ImplicitSender, TestKit}
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.util.TimeUUIDUtils
 import org.xbill.DNS.Name

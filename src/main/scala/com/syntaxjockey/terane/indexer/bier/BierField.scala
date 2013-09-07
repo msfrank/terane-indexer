@@ -175,6 +175,7 @@ object AddressField extends AddressField
  * Parses a HOSTNAME field.
  */
 class HostnameField extends BierField {
+  import scala.language.postfixOps
 
   def parseValue(hostname: Hostname): ParsedValue[String] = {
     val positions = new scala.collection.mutable.HashMap[String,PostingMetadata]()

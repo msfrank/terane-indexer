@@ -63,6 +63,7 @@ class BierEvent(val id: UUID, val values: Map[FieldIdentifier,Value]) {
 }
 
 object BierEvent {
+  import scala.language.implicitConversions
 
   def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,Value] = Map.empty): BierEvent = {
     if (uuid.isDefined)
