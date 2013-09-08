@@ -23,7 +23,7 @@ import akka.actor.ActorRefFactory
 import scala.util.parsing.combinator.syntactical._
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher}
+import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher, NotMatcher}
 
 /**
  * Tickle EBNF Grammar is as follows:
@@ -186,6 +186,9 @@ object TickleParser {
       case Right(OrGroup(children)) =>
         val orMatcher = new OrMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
         if (orMatcher.children.isEmpty) None else Some(orMatcher)
+      case Right(NotGroup(children)) =>
+        val notMatcher = new NotMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
+        if (notMatcher.children.isEmpty) None else Some(notMatcher)
       case Right(unknown) =>
         throw new Exception("unknown group type " + unknown.toString)
     })
@@ -209,6 +212,10 @@ object TickleParser {
         if (children.isEmpty)
           None
         else if (children.length == 1) Some(children.head) else orMatcher
+      case notMatcher @ Some(NotMatcher(children)) =>
+        if (children.isEmpty)
+          None
+        else if (children.length == 1) Some(children.head) else notMatcher
       case other: Some[Matchers] =>
         other
       case None =>
@@ -216,9 +223,53 @@ object TickleParser {
     }
   }
 
+  /**
+   *
+   */
+  def prettyPrint(query: Query): String = {
+    prettyPrintImpl(new StringBuilder(), query.query, 0).mkString
+  }
+  private def prettyPrintImpl(sb: StringBuilder, subjectOrGroup: SubjectOrGroup, indent: Int): StringBuilder = {
+    subjectOrGroup match {
+      case Left(subject: Subject) =>
+        sb.append(" " * indent)
+        for (fieldName <- subject.fieldName) {
+          sb.append(fieldName)
+          for (fieldType <- subject.fieldName)
+            sb.append("[" + fieldType.toString.toLowerCase + "]")
+          sb.append("=")
+        }
+        sb.append("\"" + subject.value + "\"\n")
+      case Right(AndGroup(children)) =>
+        sb.append(" " * indent)
+        sb.append("AND (\n")
+        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+        sb.append(" " * indent)
+        sb.append(")\n")
+      case Right(OrGroup(children)) =>
+        sb.append(" " * indent)
+        sb.append("OR (\n")
+        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+        sb.append(" " * indent)
+        sb.append(")\n")
+      case Right(NotGroup(children)) =>
+        sb.append(" " * indent)
+        sb.append("NOT (\n")
+        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+        sb.append(" " * indent)
+        sb.append(")\n")
+      case other =>
+        sb.append(" " * indent)
+        sb.append(other.toString)
+    }
+    sb
+  }
+
+
   type SubjectOrGroup = Either[Subject,Group]
 
   abstract class Group
+  case object Every extends Group
   case class AndGroup(children: List[SubjectOrGroup]) extends Group
   case class OrGroup(children: List[SubjectOrGroup]) extends Group
   case class NotGroup(children: List[SubjectOrGroup]) extends Group

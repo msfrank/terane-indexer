@@ -46,25 +46,30 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
   "A TickleParser" must {
 
     "parse a bare subject" in {
-      TickleParser.parseQueryString("foobar") must be(
-        Query(Left(Subject("foobar", None, None))))
+      val query = TickleParser.parseQueryString("foobar")
+      println(TickleParser.prettyPrint(query))
+      query must be(Query(Left(Subject("foobar", None, None))))
     }
 
     "parse a qualified subject with a field name" in {
-      TickleParser.parseQueryString("fieldname=foobar") must be(
-        Query(Left(Subject("foobar", Some("fieldname"), None))))
+      val query = TickleParser.parseQueryString("fieldname=foobar")
+      println(TickleParser.prettyPrint(query))
+      query must be(Query(Left(Subject("foobar", Some("fieldname"), None))))
     }
 
     "parse a qualified subject with a field name and type" in {
-      TickleParser.parseQueryString("fieldname[text]=foobar") must be(
-        Query(Left(Subject("foobar", Some("fieldname"), Some(DataType.TEXT)))))
+      val query = TickleParser.parseQueryString("fieldname[text]=foobar")
+      println(TickleParser.prettyPrint(query))
+      query must be(Query(Left(Subject("foobar", Some("fieldname"), Some(DataType.TEXT)))))
     }
 
     "parse a bare quoted subject" in {
-      TickleParser.parseQueryString(
+      val query = TickleParser.parseQueryString(
         """
           |"hello, world!"
-        """.stripMargin) must be(
+        """.stripMargin)
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Left(Subject("hello, world!", None, None))
         )
@@ -72,10 +77,12 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a quoted subject with a field name" in {
-      TickleParser.parseQueryString(
+      val query = TickleParser.parseQueryString(
         """
           |fieldname="hello, world!"
-        """.stripMargin) must be(
+        """.stripMargin)
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Left(Subject("hello, world!", Some("fieldname"), None))
         )
@@ -83,10 +90,12 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a quoted subject with a field name and type" in {
-      TickleParser.parseQueryString(
+      val query = TickleParser.parseQueryString(
         """
           |fieldname[text]="hello, world!"
-        """.stripMargin) must be(
+        """.stripMargin)
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Left(Subject("hello, world!", Some("fieldname"), Some(DataType.TEXT)))
         )
@@ -94,7 +103,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse an AND group" in {
-      TickleParser.parseQueryString("foo AND bar") must be(
+      val query = TickleParser.parseQueryString("foo AND bar")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(AndGroup(List(
             Left(Subject("foo",None,None)),
@@ -105,7 +116,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse an OR group" in {
-      TickleParser.parseQueryString("foo OR bar") must be(
+      val query = TickleParser.parseQueryString("foo OR bar")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(OrGroup(List(
             Left(Subject("foo",None,None)),
@@ -116,7 +129,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a NOT group" in {
-      TickleParser.parseQueryString("NOT foo") must be(
+      val query = TickleParser.parseQueryString("NOT foo")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(NotGroup(List(
             Left(Subject("foo",None,None))
@@ -125,8 +140,28 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
+   "parse multiple NOT groups joined by AND" in {
+      val query = TickleParser.parseQueryString("foo AND NOT bar AND NOT baz")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Right(AndGroup(List(
+            Left(Subject("foo",None,None)),
+            Right(NotGroup(List(
+              Left(Subject("bar",None,None))
+            ))),
+            Right(NotGroup(List(
+              Left(Subject("baz",None,None))
+            )))
+          )))
+        )
+      )
+    }
+
     "parse nested OR group with parentheses" in {
-      TickleParser.parseQueryString("foo AND (bar OR baz)") must be(
+      val query = TickleParser.parseQueryString("foo AND (bar OR baz)")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(AndGroup(List(
             Left(Subject("foo", None, None)),
@@ -140,7 +175,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse nested AND group with parentheses" in {
-      TickleParser.parseQueryString("(foo AND bar) OR baz") must be(
+      val query = TickleParser.parseQueryString("(foo AND bar) OR baz")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(OrGroup(List(
             Right(AndGroup(List(
@@ -154,7 +191,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse trailing AND group without parentheses using operator precedence" in {
-      TickleParser.parseQueryString("foo OR bar AND baz") must be(
+      val query = TickleParser.parseQueryString("foo OR bar AND baz")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(OrGroup(List(
             Left(Subject("foo", None, None)),
@@ -168,7 +207,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse leading AND group without parentheses using operator precedence" in {
-      TickleParser.parseQueryString("foo AND bar OR baz") must be(
+      val query = TickleParser.parseQueryString("foo AND bar OR baz")
+      println(TickleParser.prettyPrint(query))
+      query must be(
         Query(
           Right(OrGroup(List(
             Right(AndGroup(List(
@@ -182,7 +223,8 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a text value with a single term" in {
-      TickleParser.buildMatchers("fieldname[text]=foo") must be(
+      val matchers = TickleParser.buildMatchers("fieldname[text]=foo")
+      matchers must be(
         Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo"))
       )
     }

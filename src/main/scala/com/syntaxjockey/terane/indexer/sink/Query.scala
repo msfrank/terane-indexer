@@ -44,8 +44,18 @@ import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.metadata.Store
-import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 
+/**
+ * The Query actor manages the lifecycle of an individual query.  Query processing
+ * consists of the following phases:
+ *  1) parse the query string into a syntax tree.
+ *  2) build a query plan from the syntax tree, incorporating store metadata and
+ *     statistics to model the costs of each join.
+ *  3) read each matching event and store it in temp file, possibly in sorted order if
+ *     one or more sort fields are specified.
+ *  4) fulfill GetEvents requests from the ApiService.
+ *  5) eventually delete the temp file.
+ */
 class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import scala.language.postfixOps
   import Query._
