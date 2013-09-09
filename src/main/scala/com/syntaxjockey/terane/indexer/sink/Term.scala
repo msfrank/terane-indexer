@@ -79,6 +79,8 @@ case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field:
   def close() {
     factory.stop(iterator)
   }
+
+  def hashString: String = "%s:%s[%s]=\"%s\"".format(this.getClass.getName, fieldId.fieldName, fieldId.fieldType.toString.toLowerCase, term.toString)
 }
 
 class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging {

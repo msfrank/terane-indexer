@@ -29,4 +29,5 @@ class EveryMatcher extends Matchers {
   def nextPosting = Future.failed(new NotImplementedError("EveryMatcher doesn't implement nextPosting"))
   def findPosting(id: UUID) = Future.failed(new NotImplementedError("EveryMatcher doesn't implement findPosting"))
   def close() {}
+  def hashString = this.getClass.getName + ":"
 }

@@ -40,4 +40,5 @@ case class TermMatcher[T](fieldId: FieldIdentifier, term: T) extends Matchers {
   def nextPosting = Future.failed(new NotImplementedError("TermMatcher doesn't implement nextPosting"))
   def findPosting(id: UUID) = Future.failed(new NotImplementedError("TermMatcher doesn't implement findPosting"))
   def close() {}
+  def hashString: String = "%s:%s[%s]=\"%s\"".format(this.getClass.getName, fieldId.fieldName, fieldId.fieldType.toString.toLowerCase, term.toString)
 }

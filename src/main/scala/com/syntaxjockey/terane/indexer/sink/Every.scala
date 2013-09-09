@@ -13,4 +13,5 @@ case class Every(keyspace: Keyspace) extends Matchers {
   def nextPosting = Future.successful(Left(NoMoreMatches))
   def findPosting(id: UUID) = Future.successful(Left(NoMoreMatches))
   def close() { }
+  def hashString = this.getClass.getName + ":"
 }

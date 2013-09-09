@@ -29,10 +29,21 @@ import scala.concurrent.Future
  */
 abstract class Matchers {
   import Matchers._
+
   def estimateCost: Long
   def nextPosting: Future[MatchResult]
   def findPosting(id: UUID): Future[MatchResult]
   def close()
+  def hashString: String
+
+  // override equals and hashCode to we can use Set operations on Matchers
+  override def equals(other: Any): Boolean = other match {
+    case matcher: Matchers =>
+      this.hashString.equals(matcher.hashString)
+    case _ =>
+      false
+  }
+  override def hashCode(): Int = this.hashString.hashCode
 }
 
 object Matchers {

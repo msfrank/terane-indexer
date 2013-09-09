@@ -37,12 +37,12 @@ import com.syntaxjockey.terane.indexer.bier.Matchers.MatchResult
  *
  * @param children
  */
-case class OrMatcher(children: List[Matchers])(implicit factory: ActorRefFactory) extends Matchers {
+case class OrMatcher(children: Set[Matchers])(implicit factory: ActorRefFactory) extends Matchers {
   import scala.language.postfixOps
 
   implicit val timeout = Timeout(5 seconds)
 
-  private[this] val _children = children.sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }
+  private[this] val _children = children.toList.sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }
   lazy val iterator = factory.actorOf(OrIterator.props(_children))
 
   def estimateCost: Long = children.foldLeft(0L) {(acc: Long, m: Matchers) => acc + m.estimateCost }
@@ -54,6 +54,8 @@ case class OrMatcher(children: List[Matchers])(implicit factory: ActorRefFactory
   def close() {
     factory.stop(iterator)
   }
+
+  def hashString: String = "%s:(%s)".format(this.getClass.getName, children.toList.map(_.hashString).sorted.mkString(","))
 }
 
 class OrIterator(children: List[Matchers]) extends Actor with ActorLogging with LoggingFSM[State,Data] {

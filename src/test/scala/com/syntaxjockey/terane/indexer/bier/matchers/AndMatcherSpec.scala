@@ -30,7 +30,7 @@ import scala.concurrent.{Future, Await}
 import scala.concurrent.duration._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.TestTermMatcher
+import com.syntaxjockey.terane.indexer.bier.{Matchers, TestTermMatcher}
 import com.syntaxjockey.terane.indexer.bier.Matchers.{MatchResult, NoMoreMatches, Posting}
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 
@@ -53,7 +53,7 @@ class AndMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpe
   "An AndMatcher" must {
 
     "return the intersection" in {
-      val andMatcher = AndMatcher(List(
+      val andMatcher = AndMatcher(Set(
         TestTermMatcher(List(
           Posting(id01, PostingMetadata(None)),
           Posting(id02, PostingMetadata(None)),
@@ -68,7 +68,7 @@ class AndMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpe
           Posting(id06, PostingMetadata(None)),
           Posting(id07, PostingMetadata(None))
         ))
-      ))
+      ).toSet[Matchers])
       inside(Await.result(andMatcher.nextPosting, 10 seconds)) {
         case Right(Posting(id, _)) =>
           id must be(id02)
@@ -85,14 +85,14 @@ class AndMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpe
     }
 
     "find a Posting if it is present in all child matchers" in {
-      val andMatcher = AndMatcher(List(
+      val andMatcher = AndMatcher(Set(
         TestTermMatcher(List(
           Posting(id02, PostingMetadata(None))
         )),
         TestTermMatcher(List(
           Posting(id02, PostingMetadata(None))
         ))
-      ))
+      ).toSet[Matchers])
       inside(Await.result(andMatcher.findPosting(id02), 10 seconds)) {
         case Right(Posting(id, _)) =>
           id must be(id02)
@@ -100,14 +100,14 @@ class AndMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpe
     }
 
     "not find a Posting if it is not present in all child matchers" in {
-      val andMatcher = AndMatcher(List(
+      val andMatcher = AndMatcher(Set(
         TestTermMatcher(List(
           Posting(id01, PostingMetadata(None))
         )),
         TestTermMatcher(List(
           Posting(id02, PostingMetadata(None))
         ))
-      ))
+      ).toSet[Matchers])
       Await.result(andMatcher.findPosting(id01), 10 seconds) must be(Left(NoMoreMatches))
     }
   }

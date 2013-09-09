@@ -181,10 +181,10 @@ object TickleParser {
             throw new Exception("unknown value type " + unknown.toString)
         })
       case Right(AndGroup(children)) =>
-        val andMatcher = new AndMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
+        val andMatcher = new AndMatcher(children.map { child => parseSubjectOrGroup(child) }.flatten.toSet)
         if (andMatcher.children.isEmpty) None else Some(andMatcher)
       case Right(OrGroup(children)) =>
-        val orMatcher = new OrMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
+        val orMatcher = new OrMatcher(children.map { child => parseSubjectOrGroup(child) }.flatten.toSet)
         if (orMatcher.children.isEmpty) None else Some(orMatcher)
       case Right(NotGroup(child)) =>
         val childMatcher = parseSubjectOrGroup(child)
@@ -208,11 +208,11 @@ object TickleParser {
       case andMatcher @ Some(AndMatcher(children)) =>
         if (children.isEmpty)
           None
-        else if (children.length == 1) Some(children.head) else andMatcher
+        else if (children.size == 1) Some(children.head) else andMatcher
       case orMatcher @ Some(OrMatcher(children)) =>
         if (children.isEmpty)
           None
-        else if (children.length == 1) Some(children.head) else orMatcher
+        else if (children.size == 1) Some(children.head) else orMatcher
       case other: Some[Matchers] =>
         other
       case None =>
@@ -226,11 +226,11 @@ object TickleParser {
   def siftMatchers(matchers: Option[Matchers])(implicit factory: ActorRefFactory): Option[Matchers] = {
     matchers match {
       case andMatcher @ Some(AndMatcher(children)) =>
-        val (additive: List[Matchers], subtractive: List[Matchers]) = children.partition(m => !m.isInstanceOf[NotMatcher])
+        val (additive: List[Matchers], subtractive: List[Matchers]) = children.toList.partition(m => !m.isInstanceOf[NotMatcher])
         if (additive.length > 0 && subtractive.length > 0) {
           val source = additive ++ subtractive.map { case m: NotMatcher => m.source }
           val filter = subtractive.map { case m: NotMatcher => m.filter }
-          Some(new NotMatcher(new AndMatcher(source), new AndMatcher(filter)))
+          Some(new NotMatcher(new AndMatcher(source.toSet), new AndMatcher(filter.toSet)))
         } else andMatcher
       case other: Some[Matchers] =>
         other

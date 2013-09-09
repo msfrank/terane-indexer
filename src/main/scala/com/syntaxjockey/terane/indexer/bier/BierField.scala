@@ -69,7 +69,7 @@ class TextField extends BierField {
   }
 
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, text: String): Matchers = {
-    AndMatcher(tokenizeValue(Text(text)).map { case term => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(tokenizeValue(Text(text)).map { case term => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
   }
 }
 object TextField extends TextField
@@ -194,7 +194,7 @@ class HostnameField extends BierField {
 
   def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, hostname: String): Matchers = {
     val parsed = parseValue(Hostname(parseHostnameString(hostname)))
-    AndMatcher(parsed.postings.map { case (term,metadata) => TermMatcher(fieldId, term) }.toList)(factory)
+    AndMatcher(parsed.postings.map { case (term,metadata) => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
   }
 }
 object HostnameField extends HostnameField

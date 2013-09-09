@@ -52,6 +52,8 @@ case class NotMatcher(source: Matchers, filter: Matchers)(implicit factory: Acto
   def close() {
     factory.stop(iterator)
   }
+
+  def hashString: String = "%s:(%s,%s)".format(this.getClass.getName, source.hashString, filter.hashString)
 }
 
 class NotIterator(source: Matchers, filter: Matchers) extends Actor with ActorLogging {

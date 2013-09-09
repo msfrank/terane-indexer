@@ -236,7 +236,7 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         """.stripMargin)
       inside(matchers) {
         case Some(AndMatcher(children)) =>
-          children must have length(3)
+          children must have size(3)
           children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
           children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
           children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])

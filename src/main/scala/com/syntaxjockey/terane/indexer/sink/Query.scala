@@ -245,7 +245,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
         AndMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case AndMatcher(_children) if _children.isEmpty =>
             None
-          case AndMatcher(_children) if _children.length == 1 =>
+          case AndMatcher(_children) if _children.size == 1 =>
             Some(_children.head)
           case andMatcher: AndMatcher =>
             Some(andMatcher)
@@ -255,7 +255,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
         OrMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case OrMatcher(_children) if _children.isEmpty =>
             None
-          case OrMatcher(_children) if _children.length == 1 =>
+          case OrMatcher(_children) if _children.size == 1 =>
             Some(_children.head)
           case orMatcher: OrMatcher =>
             Some(orMatcher)

@@ -51,4 +51,6 @@ case class TestTermMatcher(postings: List[Posting]) extends Matchers {
   }
 
   def close() { }
+
+  def hashString: String = "%s:%s".format(this.getClass.getName, postings.map(_.id.toString).mkString(","))
 }

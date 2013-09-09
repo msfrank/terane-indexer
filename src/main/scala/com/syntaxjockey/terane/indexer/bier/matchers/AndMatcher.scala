@@ -37,12 +37,12 @@ import akka.event.LoggingReceive
  *
  * @param children
  */
-case class AndMatcher(children: List[Matchers])(implicit factory: ActorRefFactory) extends Matchers {
+case class AndMatcher(children: Set[Matchers])(implicit factory: ActorRefFactory) extends Matchers {
   import scala.language.postfixOps
 
   implicit val timeout = Timeout(5 seconds)
 
-  private[this] val _children = children.sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }
+  private[this] val _children = children.toList.sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }
   lazy val iterator = factory.actorOf(AndIterator.props(_children.head, _children.tail))
 
   def estimateCost: Long = _children.head.estimateCost
@@ -54,6 +54,8 @@ case class AndMatcher(children: List[Matchers])(implicit factory: ActorRefFactor
   def close() {
     factory.stop(iterator)
   }
+
+  def hashString: String = "%s:(%s)".format(this.getClass.getName, children.toList.map(_.hashString).sorted.mkString(","))
 }
 
 class AndIterator(scanner: Matchers, finders: List[Matchers]) extends Actor with ActorLogging {

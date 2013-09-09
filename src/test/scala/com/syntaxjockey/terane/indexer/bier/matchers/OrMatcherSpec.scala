@@ -30,7 +30,7 @@ import scala.concurrent.{Future, Await}
 import scala.concurrent.duration._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.TestTermMatcher
+import com.syntaxjockey.terane.indexer.bier.{Matchers, TestTermMatcher}
 import com.syntaxjockey.terane.indexer.bier.Matchers.{MatchResult, NoMoreMatches, Posting}
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 
@@ -57,7 +57,7 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
   "An OrMatcher" must {
 
     "return the union" in {
-      val orMatcher = OrMatcher(List(
+      val orMatcher = OrMatcher(Set(
         TestTermMatcher(List(
           Posting(ids(0), PostingMetadata(None)),
           Posting(ids(2), PostingMetadata(None))
@@ -66,7 +66,7 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
           Posting(ids(1), PostingMetadata(None)),
           Posting(ids(4), PostingMetadata(None))
         ))
-      ))
+      ).toSet[Matchers])
       inside(Await.result(orMatcher.nextPosting, 10 seconds)) {
         case Right(Posting(id, _)) =>
           id must be(ids(0))
@@ -87,7 +87,7 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
     }
 
     "find a Posting if it is present in any child matchers" in {
-      val orMatcher = OrMatcher(List(
+      val orMatcher = OrMatcher(Set(
         TestTermMatcher(List(
           Posting(ids(0), PostingMetadata(None)),
           Posting(ids(2), PostingMetadata(None))
@@ -96,7 +96,7 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
           Posting(ids(1), PostingMetadata(None)),
           Posting(ids(2), PostingMetadata(None))
         ))
-      ))
+      ).toSet[Matchers])
       inside(Await.result(orMatcher.findPosting(ids(0)), 10 seconds)) {
         case Right(Posting(id, _)) =>
           id must be(ids(0))
@@ -112,14 +112,14 @@ class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec
     }
 
     "not find a Posting if it is not present in any child matchers" in {
-      val orMatcher = OrMatcher(List(
+      val orMatcher = OrMatcher(Set(
         TestTermMatcher(List(
           Posting(ids(0), PostingMetadata(None))
         )),
         TestTermMatcher(List(
           Posting(ids(1), PostingMetadata(None))
         ))
-      ))
+      ).toSet[Matchers])
       Await.result(orMatcher.findPosting(ids(2)), 10 seconds) must be(Left(NoMoreMatches))
     }
   }
