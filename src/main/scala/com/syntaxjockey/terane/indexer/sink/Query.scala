@@ -260,15 +260,21 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
           case orMatcher: OrMatcher =>
             Some(orMatcher)
         }
+
       case NotMatcher(every: EveryMatcher, filter: Matchers) =>
         throw new Exception("EveryMatcher is not implemented")
 
       case notMatcher: NotMatcher =>
-        val source = buildTerms(notMatcher.source, keyspace, fields, stats)
-        if (source.isDefined) {
-          val filter = buildTerms(notMatcher.filter, keyspace, fields, stats)
-          if (filter.isDefined) Some(new NotMatcher(source.get, filter.get)) else Some(source.get)
-        } else None
+        buildTerms(notMatcher.source, keyspace, fields, stats) match {
+          case Some(source) =>
+            buildTerms(notMatcher.filter, keyspace, fields, stats) match {
+              case Some(filter) =>
+                Some(new NotMatcher(source, filter))
+              case None =>
+                Some(source)
+            }
+          case None => None
+        }
 
       case unknown =>
         throw new Exception("unknown Matcher type " + unknown.toString)

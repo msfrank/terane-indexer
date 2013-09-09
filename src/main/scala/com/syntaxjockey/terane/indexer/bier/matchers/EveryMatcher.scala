@@ -24,7 +24,7 @@ import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.Matchers
 
-class EveryMatcher extends Matchers {
+case class EveryMatcher() extends Matchers {
   def estimateCost = 0L
   def nextPosting = Future.failed(new NotImplementedError("EveryMatcher doesn't implement nextPosting"))
   def findPosting(id: UUID) = Future.failed(new NotImplementedError("EveryMatcher doesn't implement findPosting"))

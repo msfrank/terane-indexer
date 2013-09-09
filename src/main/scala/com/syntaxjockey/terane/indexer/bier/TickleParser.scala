@@ -227,10 +227,18 @@ object TickleParser {
     matchers match {
       case andMatcher @ Some(AndMatcher(children)) =>
         val (additive: List[Matchers], subtractive: List[Matchers]) = children.toList.partition(m => !m.isInstanceOf[NotMatcher])
+        // reorder AndMatcher if both additive and subtractive children are present
         if (additive.length > 0 && subtractive.length > 0) {
-          val source = additive ++ subtractive.map { case m: NotMatcher => m.source }
-          val filter = subtractive.map { case m: NotMatcher => m.filter }
-          Some(new NotMatcher(new AndMatcher(source.toSet), new AndMatcher(filter.toSet)))
+          val source = additive.toSet ++ subtractive.map { case m: NotMatcher => m.source }
+          val filter = subtractive.map { case m: NotMatcher => m.filter }.toSet
+          // possibly remove redundant EveryMatcher from the source
+          val reduced = source - EveryMatcher()
+          if (reduced.size > 1)
+            Some(NotMatcher(AndMatcher(reduced), AndMatcher(filter)))
+          else if (reduced.size == 1)
+            Some(NotMatcher(reduced.head, AndMatcher(filter)))
+          else
+            Some(NotMatcher(EveryMatcher(), AndMatcher(filter)))
         } else andMatcher
       case other: Some[Matchers] =>
         other
