@@ -23,7 +23,7 @@ import akka.actor.ActorRefFactory
 import scala.util.parsing.combinator.syntactical._
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.{OrMatcher, AndMatcher, NotMatcher}
+import com.syntaxjockey.terane.indexer.bier.matchers.{EveryMatcher, OrMatcher, AndMatcher, NotMatcher}
 
 /**
  * Tickle EBNF Grammar is as follows:
@@ -43,7 +43,7 @@ class TickleParser extends StandardTokenParsers {
   lexical.delimiters += ( "=", "(", ")", "[", "]" )
   lexical.reserved += ( "AND", "OR", "NOT" )
 
-  /* basic subject without field name or type */
+  /* bare subject without field name or type */
   val bareSubject: Parser[Subject] = ident ^^ (Subject(_, None, None)) | stringLit ^^ (Subject(_, None, None)) | numericLit ^^ (Subject(_, None, None))
 
   /* subject with field name, and optional type */
@@ -64,7 +64,7 @@ class TickleParser extends StandardTokenParsers {
 
   /* match a NOT group */
   val notGroup: Parser[SubjectOrGroup] = "NOT" ~ subject ^^ {
-    case "NOT" ~ s => Right(NotGroup(List(s)))
+    case "NOT" ~ s => Right(NotGroup(s))
   } | "(" ~ orGroup ~ ")" ^^ {
     case "(" ~ or ~ ")" => or
   } | subject ^^ { s: SubjectOrGroup => s }
@@ -159,7 +159,7 @@ object TickleParser {
    * @return
    */
   def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup)(implicit factory: ActorRefFactory): Option[Matchers] = {
-    liftMatchers(subjectOrGroup match {
+    val lifted = liftMatchers(subjectOrGroup match {
       case Left(Subject(value, fieldName, fieldType)) =>
         val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(DataType.TEXT))
         Some(fieldId.fieldType match {
@@ -186,12 +186,13 @@ object TickleParser {
       case Right(OrGroup(children)) =>
         val orMatcher = new OrMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
         if (orMatcher.children.isEmpty) None else Some(orMatcher)
-      case Right(NotGroup(children)) =>
-        val notMatcher = new NotMatcher(children map { child => parseSubjectOrGroup(child) } flatten)
-        if (notMatcher.children.isEmpty) None else Some(notMatcher)
+      case Right(NotGroup(child)) =>
+        val childMatcher = parseSubjectOrGroup(child)
+        if (childMatcher.isEmpty) None else Some(new NotMatcher(new EveryMatcher(), childMatcher.get))
       case Right(unknown) =>
         throw new Exception("unknown group type " + unknown.toString)
     })
+    siftMatchers(lifted)
   }
 
   /**
@@ -212,10 +213,6 @@ object TickleParser {
         if (children.isEmpty)
           None
         else if (children.length == 1) Some(children.head) else orMatcher
-      case notMatcher @ Some(NotMatcher(children)) =>
-        if (children.isEmpty)
-          None
-        else if (children.length == 1) Some(children.head) else notMatcher
       case other: Some[Matchers] =>
         other
       case None =>
@@ -224,7 +221,26 @@ object TickleParser {
   }
 
   /**
-   *
+   * Reorder the subtree by separating additive matchers (AND, OR) from subtractive matchers (NOT).
+   */
+  def siftMatchers(matchers: Option[Matchers])(implicit factory: ActorRefFactory): Option[Matchers] = {
+    matchers match {
+      case andMatcher @ Some(AndMatcher(children)) =>
+        val (additive: List[Matchers], subtractive: List[Matchers]) = children.partition(m => !m.isInstanceOf[NotMatcher])
+        if (additive.length > 0 && subtractive.length > 0) {
+          val source = additive ++ subtractive.map { case m: NotMatcher => m.source }
+          val filter = subtractive.map { case m: NotMatcher => m.filter }
+          Some(new NotMatcher(new AndMatcher(source), new AndMatcher(filter)))
+        } else andMatcher
+      case other: Some[Matchers] =>
+        other
+      case None =>
+        None
+    }
+  }
+
+  /**
+   * Return the string representation of a query syntax tree.
    */
   def prettyPrint(query: Query): String = {
     prettyPrintImpl(new StringBuilder(), query.query, 0).mkString
@@ -252,10 +268,10 @@ object TickleParser {
         children.foreach(prettyPrintImpl(sb, _, indent + 2))
         sb.append(" " * indent)
         sb.append(")\n")
-      case Right(NotGroup(children)) =>
+      case Right(NotGroup(child)) =>
         sb.append(" " * indent)
         sb.append("NOT (\n")
-        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+        prettyPrintImpl(sb, child, indent + 2)
         sb.append(" " * indent)
         sb.append(")\n")
       case other =>
@@ -269,10 +285,9 @@ object TickleParser {
   type SubjectOrGroup = Either[Subject,Group]
 
   abstract class Group
-  case object Every extends Group
   case class AndGroup(children: List[SubjectOrGroup]) extends Group
   case class OrGroup(children: List[SubjectOrGroup]) extends Group
-  case class NotGroup(children: List[SubjectOrGroup]) extends Group
+  case class NotGroup(child: SubjectOrGroup) extends Group
   case class Query(query: Either[Subject,Group])
   case class Subject(value: String, fieldName: Option[String], fieldType: Option[DataType.Value])
 }

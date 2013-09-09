@@ -205,6 +205,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    */
   def buildTerms(matchers: Matchers, keyspace: Keyspace, fields: FieldMap, stats: StatsMap): Option[Matchers] = {
     matchers match {
+
       case termMatcher @ TermMatcher(fieldId: FieldIdentifier, _) =>
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
@@ -236,6 +237,10 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
           case missing =>
             None
         }
+
+      case every: EveryMatcher =>
+        Some(Every(keyspace))
+
       case andGroup @ AndMatcher(children) =>
         AndMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case AndMatcher(_children) if _children.isEmpty =>
@@ -245,6 +250,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
           case andMatcher: AndMatcher =>
             Some(andMatcher)
         }
+
       case orGroup @ OrMatcher(children) =>
         OrMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case OrMatcher(_children) if _children.isEmpty =>
@@ -254,6 +260,16 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
           case orMatcher: OrMatcher =>
             Some(orMatcher)
         }
+      case NotMatcher(every: EveryMatcher, filter: Matchers) =>
+        throw new Exception("EveryMatcher is not implemented")
+
+      case notMatcher: NotMatcher =>
+        val source = buildTerms(notMatcher.source, keyspace, fields, stats)
+        if (source.isDefined) {
+          val filter = buildTerms(notMatcher.filter, keyspace, fields, stats)
+          if (filter.isDefined) Some(new NotMatcher(source.get, filter.get)) else Some(source.get)
+        } else None
+
       case unknown =>
         throw new Exception("unknown Matcher type " + unknown.toString)
     }

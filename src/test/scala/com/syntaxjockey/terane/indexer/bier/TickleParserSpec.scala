@@ -133,9 +133,9 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       println(TickleParser.prettyPrint(query))
       query must be(
         Query(
-          Right(NotGroup(List(
+          Right(NotGroup(
             Left(Subject("foo",None,None))
-          )))
+          ))
         )
       )
     }
@@ -147,12 +147,12 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         Query(
           Right(AndGroup(List(
             Left(Subject("foo",None,None)),
-            Right(NotGroup(List(
+            Right(NotGroup(
               Left(Subject("bar",None,None))
-            ))),
-            Right(NotGroup(List(
+            )),
+            Right(NotGroup(
               Left(Subject("baz",None,None))
-            )))
+            ))
           )))
         )
       )
