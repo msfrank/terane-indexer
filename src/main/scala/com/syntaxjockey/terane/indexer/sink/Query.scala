@@ -75,7 +75,8 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     case Some(matchers) =>
       buildTerms(matchers, keyspace, fields, stats) match {
         case Some(query) =>
-          log.debug("parsed query '{}' => {}", createQuery.query, query)
+          log.debug("query => {}'", createQuery.query)
+          log.debug("matchers =>\n{}", prettyPrint(query))
           startWith(ReadingResults, ReadingResults(query, 0))
           query.nextPosting pipeTo self
         case None =>
@@ -306,7 +307,6 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    * @return
    */
   def readEvent(id: UUID, columnList: ColumnList[String]): BierEvent = {
-    import BierEvent._
     val values: Map[FieldIdentifier,Value] = columnList.filter(column => fields.fieldsByCf.contains(column.getName)).map { column =>
       fields.fieldsByCf(column.getName).fieldId match {
         case ident @ FieldIdentifier(_, DataType.TEXT) =>
@@ -333,6 +333,48 @@ object Query {
 
   def props(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) = {
     Props(classOf[Query], id, createQuery, store, keyspace, fields, stats)
+  }
+
+  /**
+   * Return the string representation of a query matchers tree.
+   */
+  def prettyPrint(matcher: Matchers): String = {
+    prettyPrintImpl(new StringBuilder(), matcher, 0).mkString
+  }
+  private def prettyPrintImpl(sb: StringBuilder, matcher: Matchers, indent: Int): StringBuilder = {
+    matcher match {
+      case term: TermMatcher[_] =>
+        sb.append(" " * indent)
+        sb.append("%s=\"%s\"\n".format(term.fieldId, term.term.toString))
+      case term: Term[_] =>
+        sb.append(" " * indent)
+        sb.append("%s=\"%s\"\n".format(term.fieldId, term.term.toString))
+      case every: EveryMatcher =>
+        sb.append(" " * indent)
+        sb.append("EVERY\n")
+      case every: Every =>
+        sb.append(" " * indent)
+        sb.append("EVERY\n")
+      case AndMatcher(children) =>
+        sb.append(" " * indent)
+        sb.append("AND\n")
+        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+      case OrMatcher(children) =>
+        sb.append(" " * indent)
+        sb.append("OR\n")
+        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+      case NotMatcher(source, filter) =>
+        sb.append(" " * indent)
+        sb.append("FILTER\n")
+        prettyPrintImpl(sb, filter, indent + 2)
+        sb.append(" " * indent)
+        sb.append("FROM\n")
+        prettyPrintImpl(sb, source, indent + 2)
+      case other =>
+        sb.append(" " * indent)
+        sb.append(other.toString)
+    }
+    sb
   }
 
   /* query case classes */

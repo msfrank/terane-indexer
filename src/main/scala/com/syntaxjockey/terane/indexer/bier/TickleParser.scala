@@ -234,11 +234,11 @@ object TickleParser {
           // possibly remove redundant EveryMatcher from the source
           val reduced = source - EveryMatcher()
           if (reduced.size > 1)
-            Some(NotMatcher(AndMatcher(reduced), AndMatcher(filter)))
+            Some(NotMatcher(AndMatcher(reduced), OrMatcher(filter)))
           else if (reduced.size == 1)
-            Some(NotMatcher(reduced.head, AndMatcher(filter)))
+            Some(NotMatcher(reduced.head, OrMatcher(filter)))
           else
-            Some(NotMatcher(EveryMatcher(), AndMatcher(filter)))
+            Some(NotMatcher(EveryMatcher(), OrMatcher(filter)))
         } else andMatcher
       case other: Some[Matchers] =>
         other
@@ -266,29 +266,22 @@ object TickleParser {
         sb.append("\"" + subject.value + "\"\n")
       case Right(AndGroup(children)) =>
         sb.append(" " * indent)
-        sb.append("AND (\n")
+        sb.append("AND\n")
         children.foreach(prettyPrintImpl(sb, _, indent + 2))
-        sb.append(" " * indent)
-        sb.append(")\n")
       case Right(OrGroup(children)) =>
         sb.append(" " * indent)
-        sb.append("OR (\n")
+        sb.append("OR\n")
         children.foreach(prettyPrintImpl(sb, _, indent + 2))
-        sb.append(" " * indent)
-        sb.append(")\n")
       case Right(NotGroup(child)) =>
         sb.append(" " * indent)
-        sb.append("NOT (\n")
+        sb.append("NOT\n")
         prettyPrintImpl(sb, child, indent + 2)
-        sb.append(" " * indent)
-        sb.append(")\n")
       case other =>
         sb.append(" " * indent)
         sb.append(other.toString)
     }
     sb
   }
-
 
   type SubjectOrGroup = Either[Subject,Group]
 

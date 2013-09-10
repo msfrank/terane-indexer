@@ -47,7 +47,9 @@ abstract class Matchers {
 }
 
 object Matchers {
+
   type MatchResult = Either[NoMoreMatches.type,Posting]
+
   case object NoMoreMatches
   case class Posting(id: UUID, postingMetadata: PostingMetadata)
   case object NextPosting
