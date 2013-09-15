@@ -36,8 +36,7 @@ import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers._
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.{TickleParser, Matchers, Value, BierEvent}
+import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
@@ -63,7 +62,8 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
   val created = DateTime.now(DateTimeZone.UTC)
   val reapingInterval = 30.seconds
-  val maybeMatchers = TickleParser.buildMatchers(createQuery.query)
+  val parserParams = TickleParserParams("message")
+  val maybeMatchers = TickleParser.buildMatchers(createQuery.query, parserParams)
 
   val streamer = if (createQuery.sortBy.isDefined)
     context.actorOf(SortingStreamer.props(id, createQuery, fields))

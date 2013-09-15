@@ -22,11 +22,13 @@ package com.syntaxjockey.terane.indexer.bier
 import akka.actor.ActorRefFactory
 import org.joda.time.DateTime
 import org.xbill.DNS.{Name, Address => DNSAddress}
+import scala.Some
 import java.util.Date
 import java.net.InetAddress
 
-import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
+import com.syntaxjockey.terane.indexer.bier.TickleParser._
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
 import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
 import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
@@ -68,8 +70,13 @@ class TextField extends BierField {
     ParsedValue(positions.toMap.toSeq, FieldStatistics(stats))
   }
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, text: String): Matchers = {
-    AndMatcher(tokenizeValue(Text(text)).map { case term => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.TEXT)
+    expression.predicate match {
+      case PredicateEquals(TargetText(target)) =>
+        AndMatcher(tokenizeValue(Text(target)).map { case term => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object TextField extends TextField
@@ -87,8 +94,13 @@ class LiteralField extends BierField {
     ParsedValue(Seq((literal.underlying, PostingMetadata(None))), FieldStatistics(Seq(literal.underlying)))
   }
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, literal: String): Matchers = {
-    TermMatcher(fieldId, tokenizeValue(Literal(literal)))
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.LITERAL)
+    expression.predicate match {
+      case PredicateEquals(TargetLiteral(target)) =>
+        TermMatcher(fieldId, tokenizeValue(Literal(target)))
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object LiteralField extends LiteralField
@@ -105,8 +117,13 @@ class IntegerField extends BierField {
     ParsedValue(Seq((integer.underlying, PostingMetadata(None))), FieldStatistics(Seq(integer.underlying)))
   }
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, integer: String): Matchers = {
-    TermMatcher(fieldId, tokenizeValue(Integer(integer.toLong)))
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.INTEGER)
+    expression.predicate match {
+      case PredicateEquals(TargetLiteral(target)) =>
+        TermMatcher(fieldId, tokenizeValue(Integer(target.toLong)))
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object IntegerField extends IntegerField
@@ -123,8 +140,13 @@ class FloatField extends BierField {
     ParsedValue(Seq((float.underlying, PostingMetadata(None))), FieldStatistics(Seq(float.underlying)))
   }
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, float: String): Matchers = {
-    TermMatcher(fieldId, tokenizeValue(Float(float.toDouble)))
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.FLOAT)
+    expression.predicate match {
+      case PredicateEquals(TargetLiteral(target)) =>
+        TermMatcher(fieldId, tokenizeValue(Float(target.toDouble)))
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object FloatField extends FloatField
@@ -144,8 +166,13 @@ class DatetimeField extends BierField {
     DateTime.parse(s)
   }
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, datetime: String): Matchers = {
-    TermMatcher(fieldId, parseValue(Datetime(parseDatetimeString(datetime))))
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.DATETIME)
+    expression.predicate match {
+      case PredicateEquals(TargetLiteral(target)) =>
+        TermMatcher(fieldId, parseValue(Datetime(parseDatetimeString(target))))
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object DatetimeField extends DatetimeField
@@ -165,8 +192,13 @@ class AddressField extends BierField {
     DNSAddress.getByAddress(s)
   }
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, address: String): Matchers = {
-    TermMatcher(fieldId, parseValue(Address(parseAddressString(address))))
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.ADDRESS)
+    expression.predicate match {
+      case PredicateEquals(TargetLiteral(target)) =>
+        TermMatcher(fieldId, parseValue(Address(parseAddressString(target))))
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object AddressField extends AddressField
@@ -192,9 +224,14 @@ class HostnameField extends BierField {
 
   def parseHostnameString(s: String): Name = Name.fromString(s)
 
-  def makeMatcher(factory: ActorRefFactory, fieldId: FieldIdentifier, hostname: String): Matchers = {
-    val parsed = parseValue(Hostname(parseHostnameString(hostname)))
-    AndMatcher(parsed.postings.map { case (term,metadata) => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
+  def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
+    val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.HOSTNAME)
+    expression.predicate match {
+      case PredicateEquals(TargetHostname(target)) =>
+        val parsed = parseValue(Hostname(parseHostnameString(target)))
+        AndMatcher(parsed.postings.map { case (term,metadata) => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
+      case other => throw new Exception("parse failure")
+    }
   }
 }
 object HostnameField extends HostnameField

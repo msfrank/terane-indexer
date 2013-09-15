@@ -20,7 +20,7 @@
 package com.syntaxjockey.terane.indexer.bier
 
 import akka.actor.ActorRefFactory
-import scala.util.parsing.combinator.syntactical._
+import scala.util.parsing.combinator.JavaTokenParsers
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{EveryMatcher, OrMatcher, AndMatcher, NotMatcher}
@@ -35,96 +35,128 @@ import com.syntaxjockey.terane.indexer.bier.matchers.{EveryMatcher, OrMatcher, A
  * OrGroup     ::= <IterAndGroup> [ 'OR' <IterAndGroup> ]*
  * Expr        ::= ( 'ALL' | <IterOrGroup> ) [ 'WHERE' <subjectDate> ]
  */
-class TickleParser extends StandardTokenParsers {
-
-  /* get our case classes */
+trait TickleParser extends JavaTokenParsers {
   import TickleParser._
 
-  lexical.delimiters += ( "=", "(", ")", "[", "]" )
-  lexical.reserved += ( "AND", "OR", "NOT" )
+  /* raw and shorthand types */
+  val rawText: Parser[String] = ident | stringLiteral
 
-  /* bare subject without field name or type */
-  val bareSubject: Parser[Subject] = ident ^^ (Subject(_, None, None)) | stringLit ^^ (Subject(_, None, None)) | numericLit ^^ (Subject(_, None, None))
+  val rawLiteral: Parser[String] = """'\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r ^^ { _.tail }
 
-  /* subject with field name, and optional type */
-  val qualifiedSubject: Parser[Subject] = ident ~ opt("[" ~ ident ~ "]") ~ "=" ~ bareSubject ^^ {
-    case fieldName ~ Some("[" ~ fieldType ~ "]") ~ "=" ~ s =>
-      val fieldValueType = try {
-        Some(DataType.withName(fieldType.toUpperCase))
-      } catch { case ex: Exception => None }
-      if (fieldValueType.isEmpty)
-        failure("unknown field type " + fieldType)
-      Subject(s.value, Some(fieldName), fieldValueType)
-    case fieldName ~ None ~ "=" ~ s =>
-      Subject(s.value, Some(fieldName), None)
+  val rawInteger: Parser[String] = wholeNumber
+
+  val rawFloat: Parser[String] = decimalNumber | floatingPointNumber
+
+  /* see http://stackoverflow.com/questions/3143070/javascript-regex-iso-datetime*/
+  val rawDatetime: Parser[String] = """\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+""".r ^^ { _.toString }
+
+  /* see http://answers.oreilly.com/topic/318-how-to-match-ipv4-addresses-with-regular-expressions/ */
+  //val rawIpv4address: Parser[String] = """^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$""".r ^^ { _.toString }
+
+  /* see http://stackoverflow.com/questions/53497/regular-expression-that-matches-valid-ipv6-addresses */
+  //val rawIpv6address: Parser[String] = """(?>(?>([a-f0-9]{1,4})(?>:(?1)){7}|(?!(?:.*[a-f0-9](?>:|$)){8,})((?1)(?>:(?1)){0,6})?::(?2)?)|(?>(?>(?1)(?>:(?1)){5}:|(?!(?:.*[a-f0-9]:){6,})(?3)?::(?>((?1)(?>:(?1)){0,4}):)?)?(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?>\.(?4)){3}))""".r ^^ { _.toString }
+
+  /* see http://stackoverflow.com/questions/106179/regular-expression-to-match-hostname-or-ip-address */
+  val rawHostname: Parser[String] = """@(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])""".r ^^ { _.tail }
+
+  /* raw value is a value which needs no coercion (its type is unambiguous) */
+  val rawValue: Parser[TargetValue] = rawText ^^ { TargetText }
+                                      rawLiteral ^^ { TargetLiteral } |
+                                      rawInteger ^^ { TargetInteger } |
+                                      rawFloat ^^ { TargetFloat } |
+                                      rawDatetime ^^ { TargetDatetime } |
+                                      rawHostname ^^ { TargetHostname }
+
+  /* a coercion function and value parameter */
+  val CoercionFunction = """(text|literal|integer|float|datetime|address|hostname)\((([^\p{Cntrl}\\]|\\\)])*)\)""".r
+  val coercedValue: Parser[TargetValue] = CoercionFunction ^^ {
+    case CoercionFunction(functionName, value) => functionName match {
+      case "text" => TargetText(value)
+      case "literal" => TargetLiteral(value)
+      case "integer" => TargetInteger(value)
+      case "float" => TargetFloat(value)
+      case "datetime" => TargetDatetime(value)
+      case "address" => TargetAddress(value)
+      case "hostname" => TargetHostname(value)
+    }
   }
 
-  /* either qualified or bare subject */
-  val subject: Parser[SubjectOrGroup] = qualifiedSubject ^^ (Left(_)) | bareSubject ^^ (Left(_))
+  /* a raw or coerced value */
+  val targetValue: Parser[TargetValue] = coercedValue | rawValue
+
+  /* bare target is just a value without field name or type */
+  val bareTarget: Parser[Expression] = targetValue ^^ { case target => Expression(None, PredicateEquals(target)) }
+
+  /* target expression has a field name, operator, and value */
+  def targetExpression: Parser[Expression] = elem(':') ~ ident ~ elem('=') ~ targetValue ^^ {
+    case ':' ~ name ~ '=' ~ value => Expression(Some(name), PredicateEquals(value))
+  } | ':' ~ ident ~ ("!=" ~ targetValue) ^^ {
+    case ':' ~ name ~ ("!=" ~ value) => Expression(Some(name), PredicateNotEquals(value))
+  }
+
+  /* either qualified or bare subject expression */
+  val expression: Parser[ExpressionOrGroup] = targetExpression ^^ (Left(_)) | bareTarget ^^ (Left(_))
 
   /* match a NOT group */
-  val notGroup: Parser[SubjectOrGroup] = "NOT" ~ subject ^^ {
-    case "NOT" ~ s => Right(NotGroup(s))
-  } | "(" ~ orGroup ~ ")" ^^ {
-    case "(" ~ or ~ ")" => or
-  } | subject ^^ { s: SubjectOrGroup => s }
+  def notGroup: Parser[ExpressionOrGroup] = "NOT" ~> expression ^^ {
+    case s => Right(NotGroup(s))
+  } | elem('(') ~> orGroup <~ elem(')') ^^ {
+    case or => or
+  } | expression ^^ { s: ExpressionOrGroup => s }
+//  def notGroup: Parser[ExpressionOrGroup] = "NOT" ~ expression ^^ {
+//    case "NOT" ~ s => Right(NotGroup(s))
+//  } | "(" ~ orGroup ~ ")" ^^ {
+//    case "(" ~ or ~ ")" => or
+//  } | expression ^^ { s: ExpressionOrGroup => s }
 
   /* match an AND group */
-  val andGroup: Parser[SubjectOrGroup] = subject ~ rep1("AND" ~ notGroup) ^^ {
+  def andGroup: Parser[ExpressionOrGroup] = expression ~ rep1("AND" ~ notGroup) ^^ {
     case s ~ nots =>
-      val children: List[SubjectOrGroup] = nots map { not =>
+      val children: List[ExpressionOrGroup] = nots map { not =>
         not match {
-          case "AND" ~ subjectOrGroup => subjectOrGroup
+          case "AND" ~ expressionOrGroup => expressionOrGroup
         }
       }
       Right(AndGroup(s +: children))
-  } | "(" ~ subject ~ rep1("AND" ~ notGroup) ~ ")" ^^ {
-    case "(" ~ s ~ nots ~ ")" =>
-      val children: List[SubjectOrGroup] = nots map { not =>
+  } | elem('(') ~ expression ~ rep1("AND" ~ notGroup) ~ elem(')') ^^ {
+    case '(' ~ s ~ nots ~ ')' =>
+      val children: List[ExpressionOrGroup] = nots map { not =>
         not match {
-          case "AND" ~ subjectOrGroup => subjectOrGroup
+          case "AND" ~ expressionOrGroup => expressionOrGroup
         }
       }
       Right(AndGroup(s +: children))
-  } | subject ^^ { s: SubjectOrGroup => s }
+  } | expression ^^ { s: ExpressionOrGroup => s }
 
   /* match an OR group */
-  val orGroup: Parser[SubjectOrGroup] = andGroup ~ rep1("OR" ~ andGroup) ^^ {
+  def orGroup: Parser[ExpressionOrGroup] = andGroup ~ rep1("OR" ~ andGroup) ^^ {
     case and1 ~ ands =>
       val children = ands map { and =>
         and match {
-          case "OR" ~ subjectOrGroup => subjectOrGroup
+          case "OR" ~ expressionOrGroup => expressionOrGroup
         }
       }
       Right(OrGroup(and1 +: children))
-  } | "(" ~ andGroup ~ rep1("OR" ~ andGroup) ~ ")" ^^ {
-    case "(" ~ and1 ~ ands ~ ")" =>
+  } | elem('(') ~ andGroup ~ rep1("OR" ~ andGroup) ~ elem(')') ^^ {
+    case '(' ~ and1 ~ ands ~ ')' =>
       val children = ands map { and =>
         and match {
-          case "OR" ~ subjectOrGroup => subjectOrGroup
+          case "OR" ~ expressionOrGroup => expressionOrGroup
         }
       }
       Right(OrGroup(and1 +: children))
-  } | andGroup ^^ { and: SubjectOrGroup => and }
+  } | andGroup ^^ { and: ExpressionOrGroup => and }
 
   /* the entry point */
   val query: Parser[Query] = orGroup ^^ {
-    case subjectOrGroup => Query(subjectOrGroup)
+    case expressionOrGroup => Query(expressionOrGroup)
   } | notGroup ^^ {
-    case subjectOrGroup => Query(subjectOrGroup)
+    case expressionOrGroup => Query(expressionOrGroup)
   }
-
-  /**
-   *
-   */
-  def parseAll[T](p: Parser[T], in: String): ParseResult[T] =
-    phrase(p)(new lexical.Scanner(in))
 }
 
-object TickleParser {
+object TickleParser extends TickleParser {
   import scala.language.postfixOps
-
-  private val parser = new TickleParser()
 
   /**
    * Given a raw query string, produce a syntax tree.
@@ -132,7 +164,7 @@ object TickleParser {
    * @return
    */
   def parseQueryString(qs: String): Query = {
-    val result = parser.parseAll(parser.query, qs)
+    val result = parseAll(query, qs)
     if (!result.successful)
       throw new Exception("parsing was unsuccessful")
     result.get
@@ -146,8 +178,8 @@ object TickleParser {
    * @param qs
    * @return
    */
-  def buildMatchers(qs: String)(implicit factory: ActorRefFactory): Option[Matchers] = {
-    parseSubjectOrGroup(parseQueryString(qs).query)
+  def buildMatchers(qs: String, params: TickleParserParams)(implicit factory: ActorRefFactory): Option[Matchers] = {
+    parseExpressionOrGroup(parseQueryString(qs).query, params)
   }
 
   /**
@@ -155,39 +187,21 @@ object TickleParser {
    * ActorRefFactory is expected to be in scope, because some Matchers may need to use
    * Actors for processing results.
    *
-   * @param subjectOrGroup
+   * @param expressionOrGroup
    * @return
    */
-  def parseSubjectOrGroup(subjectOrGroup: SubjectOrGroup)(implicit factory: ActorRefFactory): Option[Matchers] = {
-    val lifted = liftMatchers(subjectOrGroup match {
-      case Left(Subject(value, fieldName, fieldType)) =>
-        val fieldId = FieldIdentifier(fieldName.getOrElse("message"), fieldType.getOrElse(DataType.TEXT))
-        Some(fieldId.fieldType match {
-          case DataType.TEXT =>
-            TextField.makeMatcher(factory, fieldId, value)
-          case DataType.LITERAL =>
-            LiteralField.makeMatcher(factory, fieldId, value)
-          case DataType.INTEGER =>
-            IntegerField.makeMatcher(factory, fieldId, value)
-          case DataType.FLOAT =>
-            FloatField.makeMatcher(factory, fieldId, value)
-          case DataType.DATETIME =>
-            DatetimeField.makeMatcher(factory, fieldId, value)
-          case DataType.HOSTNAME =>
-            HostnameField.makeMatcher(factory, fieldId, value)
-          case DataType.ADDRESS =>
-            AddressField.makeMatcher(factory, fieldId, value)
-          case unknown =>
-            throw new Exception("unknown value type " + unknown.toString)
-        })
+  def parseExpressionOrGroup(expressionOrGroup: ExpressionOrGroup, params: TickleParserParams)(implicit factory: ActorRefFactory): Option[Matchers] = {
+    val lifted = liftMatchers(expressionOrGroup match {
+      case Left(expr: Expression) =>
+        parseExpression(expr, params)
       case Right(AndGroup(children)) =>
-        val andMatcher = new AndMatcher(children.map { child => parseSubjectOrGroup(child) }.flatten.toSet)
+        val andMatcher = new AndMatcher(children.map { child => parseExpressionOrGroup(child, params) }.flatten.toSet)
         if (andMatcher.children.isEmpty) None else Some(andMatcher)
       case Right(OrGroup(children)) =>
-        val orMatcher = new OrMatcher(children.map { child => parseSubjectOrGroup(child) }.flatten.toSet)
+        val orMatcher = new OrMatcher(children.map { child => parseExpressionOrGroup(child, params) }.flatten.toSet)
         if (orMatcher.children.isEmpty) None else Some(orMatcher)
       case Right(NotGroup(child)) =>
-        val childMatcher = parseSubjectOrGroup(child)
+        val childMatcher = parseExpressionOrGroup(child, params)
         if (childMatcher.isEmpty) None else Some(new NotMatcher(new EveryMatcher(), childMatcher.get))
       case Right(unknown) =>
         throw new Exception("unknown group type " + unknown.toString)
@@ -195,6 +209,24 @@ object TickleParser {
     siftMatchers(lifted)
   }
 
+  def parseExpression(expression: Expression, params: TickleParserParams)(implicit factory: ActorRefFactory): Option[Matchers] = {
+    expression.predicate.dataType match {
+      case DataType.TEXT =>
+        Some(TextField.parseExpression(factory, expression, params))
+      case DataType.LITERAL =>
+        Some(LiteralField.parseExpression(factory, expression, params))
+      case DataType.INTEGER =>
+        Some(IntegerField.parseExpression(factory, expression, params))
+      case DataType.FLOAT =>
+        Some(FloatField.parseExpression(factory, expression, params))
+      case DataType.DATETIME =>
+        Some(DatetimeField.parseExpression(factory, expression, params))
+      case DataType.HOSTNAME =>
+        Some(HostnameField.parseExpression(factory, expression, params))
+      case DataType.ADDRESS =>
+        Some(AddressField.parseExpression(factory, expression, params))
+    }
+  }
   /**
    * Pull up the subtree if the group only has one matcher.  An implicit ActorRefFactory
    * is expected to be in scope, because some Matchers may need to use Actors for processing
@@ -253,17 +285,23 @@ object TickleParser {
   def prettyPrint(query: Query): String = {
     prettyPrintImpl(new StringBuilder(), query.query, 0).mkString
   }
-  private def prettyPrintImpl(sb: StringBuilder, subjectOrGroup: SubjectOrGroup, indent: Int): StringBuilder = {
-    subjectOrGroup match {
-      case Left(subject: Subject) =>
+  private def prettyPrintImpl(sb: StringBuilder, expressionOrGroup: ExpressionOrGroup, indent: Int): StringBuilder = {
+    expressionOrGroup match {
+      case Left(Expression(subject, predicate)) =>
         sb.append(" " * indent)
-        for (fieldName <- subject.fieldName) {
-          sb.append(fieldName)
-          for (fieldType <- subject.fieldName)
-            sb.append("[" + fieldType.toString.toLowerCase + "]")
-          sb.append("=")
+        subject match {
+          case Some(_subject) =>
+            sb.append(_subject + " ")
+          case None =>
+            sb.append("? ")
         }
-        sb.append("\"" + subject.value + "\"\n")
+        predicate match {
+          case PredicateEquals(target) =>
+            sb.append("= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case PredicateNotEquals(target) =>
+            sb.append("!= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case other => throw new Exception("parse failure")
+        }
       case Right(AndGroup(children)) =>
         sb.append(" " * indent)
         sb.append("AND\n")
@@ -283,12 +321,35 @@ object TickleParser {
     sb
   }
 
-  type SubjectOrGroup = Either[Subject,Group]
+  type ExpressionOrGroup = Either[Expression,Group]
 
-  abstract class Group
-  case class AndGroup(children: List[SubjectOrGroup]) extends Group
-  case class OrGroup(children: List[SubjectOrGroup]) extends Group
-  case class NotGroup(child: SubjectOrGroup) extends Group
-  case class Query(query: Either[Subject,Group])
-  case class Subject(value: String, fieldName: Option[String], fieldType: Option[DataType.Value])
+  case class Query(query: Either[Expression,Group])
+
+  sealed abstract class Group
+  case class AndGroup(children: List[ExpressionOrGroup]) extends Group
+  case class OrGroup(children: List[ExpressionOrGroup]) extends Group
+  case class NotGroup(child: ExpressionOrGroup) extends Group
+
+  case class Expression(subject: Option[String], predicate: Predicate)
+
+  sealed abstract class TargetValue(val raw: String, val dataType: DataType.DataType)
+  case class TargetText(text: String) extends TargetValue(text, DataType.TEXT)
+  case class TargetLiteral(literal: String) extends TargetValue(literal, DataType.LITERAL)
+  case class TargetInteger(integer: String) extends TargetValue(integer, DataType.INTEGER)
+  case class TargetFloat(float: String) extends TargetValue(float, DataType.FLOAT)
+  case class TargetDatetime(datetime: String) extends TargetValue(datetime, DataType.DATETIME)
+  case class TargetAddress(address: String) extends TargetValue(address, DataType.ADDRESS)
+  case class TargetHostname(hostname: String) extends TargetValue(hostname, DataType.HOSTNAME)
+
+  sealed abstract class Predicate(val dataType: DataType.DataType)
+  case class PredicateEquals(target: TargetValue) extends Predicate(target.dataType)
+  case class PredicateNotEquals(target: TargetValue) extends Predicate(target.dataType)
+  case class PredicateGreaterThan(target: TargetValue) extends Predicate(target.dataType)
+  case class PredicateLessThan(target: TargetValue) extends Predicate(target.dataType)
+  case class PredicateGreaterThanEqualTo(target: TargetValue) extends Predicate(target.dataType)
+  case class PredicateLessThanEqualTo(target: TargetValue) extends Predicate(target.dataType)
+  case class PredicateEqualsRange(start: TargetValue, end: TargetValue, startExcl: Boolean, endExcl: Boolean)
+  case class PredicateEqualsNotRange(start: TargetValue, end: TargetValue, startExcl: Boolean, endExcl: Boolean)
 }
+
+case class TickleParserParams(defaultField: String)

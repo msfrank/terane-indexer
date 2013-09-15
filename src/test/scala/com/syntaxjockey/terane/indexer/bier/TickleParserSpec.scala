@@ -48,19 +48,21 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     "parse a bare subject" in {
       val query = TickleParser.parseQueryString("foobar")
       println(TickleParser.prettyPrint(query))
-      query must be(Query(Left(Subject("foobar", None, None))))
+      query must be(
+        Query(
+          Left(Expression(None, PredicateEquals(TargetText("foobar"))))
+        )
+      )
     }
 
     "parse a qualified subject with a field name" in {
-      val query = TickleParser.parseQueryString("fieldname=foobar")
+      val query = TickleParser.parseQueryString(":fieldname=foobar")
       println(TickleParser.prettyPrint(query))
-      query must be(Query(Left(Subject("foobar", Some("fieldname"), None))))
-    }
-
-    "parse a qualified subject with a field name and type" in {
-      val query = TickleParser.parseQueryString("fieldname[text]=foobar")
-      println(TickleParser.prettyPrint(query))
-      query must be(Query(Left(Subject("foobar", Some("fieldname"), Some(DataType.TEXT)))))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateEquals(TargetText("foobar"))))
+        )
+      )
     }
 
     "parse a bare quoted subject" in {
@@ -71,235 +73,235 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       println(TickleParser.prettyPrint(query))
       query must be(
         Query(
-          Left(Subject("hello, world!", None, None))
+          Left(Expression(None, PredicateEquals(TargetText("\"hello, world!\""))))
         )
       )
     }
 
-    "parse a quoted subject with a field name" in {
-      val query = TickleParser.parseQueryString(
-        """
-          |fieldname="hello, world!"
-        """.stripMargin)
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Left(Subject("hello, world!", Some("fieldname"), None))
-        )
-      )
-    }
-
-    "parse a quoted subject with a field name and type" in {
-      val query = TickleParser.parseQueryString(
-        """
-          |fieldname[text]="hello, world!"
-        """.stripMargin)
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Left(Subject("hello, world!", Some("fieldname"), Some(DataType.TEXT)))
-        )
-      )
-    }
-
-    "parse an AND group" in {
-      val query = TickleParser.parseQueryString("foo AND bar")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(AndGroup(List(
-            Left(Subject("foo",None,None)),
-            Left(Subject("bar",None,None))
-          )))
-        )
-      )
-    }
-
-    "parse an OR group" in {
-      val query = TickleParser.parseQueryString("foo OR bar")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(OrGroup(List(
-            Left(Subject("foo",None,None)),
-            Left(Subject("bar",None,None))
-          )))
-        )
-      )
-    }
-
-    "parse a NOT group" in {
-      val query = TickleParser.parseQueryString("NOT foo")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(NotGroup(
-            Left(Subject("foo",None,None))
-          ))
-        )
-      )
-    }
-
-   "parse multiple NOT groups joined by AND" in {
-      val query = TickleParser.parseQueryString("foo AND NOT bar AND NOT baz")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(AndGroup(List(
-            Left(Subject("foo",None,None)),
-            Right(NotGroup(
-              Left(Subject("bar",None,None))
-            )),
-            Right(NotGroup(
-              Left(Subject("baz",None,None))
-            ))
-          )))
-        )
-      )
-    }
-
-    "parse nested OR group with parentheses" in {
-      val query = TickleParser.parseQueryString("foo AND (bar OR baz)")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(AndGroup(List(
-            Left(Subject("foo", None, None)),
-            Right(OrGroup(List(
-              Left(Subject("bar",None,None)),
-              Left(Subject("baz",None,None))
-            )))
-          )))
-        )
-      )
-    }
-
-    "parse nested AND group with parentheses" in {
-      val query = TickleParser.parseQueryString("(foo AND bar) OR baz")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(OrGroup(List(
-            Right(AndGroup(List(
-              Left(Subject("foo",None,None)),
-              Left(Subject("bar",None,None))
-            ))),
-            Left(Subject("baz", None, None))
-          )))
-        )
-      )
-    }
-
-    "parse trailing AND group without parentheses using operator precedence" in {
-      val query = TickleParser.parseQueryString("foo OR bar AND baz")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(OrGroup(List(
-            Left(Subject("foo", None, None)),
-            Right(AndGroup(List(
-              Left(Subject("bar",None,None)),
-              Left(Subject("baz",None,None))))
-            )
-          )))
-        )
-      )
-    }
-
-    "parse leading AND group without parentheses using operator precedence" in {
-      val query = TickleParser.parseQueryString("foo AND bar OR baz")
-      println(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Right(OrGroup(List(
-            Right(AndGroup(List(
-              Left(Subject("foo",None,None)),
-              Left(Subject("bar",None,None))
-            ))),
-            Left(Subject("baz", None, None))
-          )))
-        )
-      )
-    }
-
-    "parse a text value with a single term" in {
-      val matchers = TickleParser.buildMatchers("fieldname[text]=foo")
-      matchers must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo"))
-      )
-    }
-
-    "parse a text value with multiple terms" in {
-      val matchers = TickleParser.buildMatchers(
-        """
-          |fieldname[text]="foo bar baz"
-        """.stripMargin)
-      inside(matchers) {
-        case Some(AndMatcher(children)) =>
-          children must have size(3)
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
-      }
-    }
-
-    "parse a literal value" in {
-      TickleParser.buildMatchers(
-        """
-          |fieldname[literal]="foo bar baz"
-        """.stripMargin) must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foo bar baz"))
-      )
-    }
-
-    "parse an integer value" in {
-      TickleParser.buildMatchers("fieldname[integer]=42") must be(
-        Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
-      )
-    }
-
-    "parse a quoted float value" in {
-      TickleParser.buildMatchers(
-        """
-          |fieldname[float]="3.14159"
-        """.stripMargin) must be(
-        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
-      )
-    }
-
-    "parse an unquoted float value" in {
-      TickleParser.buildMatchers("fieldname[float]=3.14159") must be(
-        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
-      )
-    }
-
-    "parse a quoted datetime value" in {
-      val datetime = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC)
-      val matchers = TickleParser.buildMatchers(
-        """
-          |fieldname[datetime]="1994-11-05T08:15:30Z"
-        """.stripMargin)
-      inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), _datetime: DateTime)) =>
-          datetime must equal(_datetime)
-      }
-    }
-
-    "parse a quoted IPv4 address value" in {
-      val address = Address.getByAddress("127.0.0.1")
-      TickleParser.buildMatchers(
-        """
-          |fieldname[address]="127.0.0.1"
-        """.stripMargin) must be(
-        Some(TermMatcher[InetAddress](FieldIdentifier("fieldname", DataType.ADDRESS), address))
-      )
-    }
-
-    "parse a hostname value" in {
-      val hostname = Name.fromString("com")
-      TickleParser.buildMatchers("fieldname[hostname]=com") must be(
-        Some(TermMatcher[Name](FieldIdentifier("fieldname", DataType.HOSTNAME), hostname))
-      )
-    }
+//    "parse a quoted subject with a field name" in {
+//      val query = TickleParser.parseQueryString(
+//        """
+//          |fieldname="hello, world!"
+//        """.stripMargin)
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Left(Subject("hello, world!", Some("fieldname"), None))
+//        )
+//      )
+//    }
+//
+//    "parse a quoted subject with a field name and type" in {
+//      val query = TickleParser.parseQueryString(
+//        """
+//          |fieldname[text]="hello, world!"
+//        """.stripMargin)
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Left(Subject("hello, world!", Some("fieldname"), Some(DataType.TEXT)))
+//        )
+//      )
+//    }
+//
+//    "parse an AND group" in {
+//      val query = TickleParser.parseQueryString("foo AND bar")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(AndGroup(List(
+//            Left(Subject("foo",None,None)),
+//            Left(Subject("bar",None,None))
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse an OR group" in {
+//      val query = TickleParser.parseQueryString("foo OR bar")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(OrGroup(List(
+//            Left(Subject("foo",None,None)),
+//            Left(Subject("bar",None,None))
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse a NOT group" in {
+//      val query = TickleParser.parseQueryString("NOT foo")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(NotGroup(
+//            Left(Subject("foo",None,None))
+//          ))
+//        )
+//      )
+//    }
+//
+//   "parse multiple NOT groups joined by AND" in {
+//      val query = TickleParser.parseQueryString("foo AND NOT bar AND NOT baz")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(AndGroup(List(
+//            Left(Subject("foo",None,None)),
+//            Right(NotGroup(
+//              Left(Subject("bar",None,None))
+//            )),
+//            Right(NotGroup(
+//              Left(Subject("baz",None,None))
+//            ))
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse nested OR group with parentheses" in {
+//      val query = TickleParser.parseQueryString("foo AND (bar OR baz)")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(AndGroup(List(
+//            Left(Subject("foo", None, None)),
+//            Right(OrGroup(List(
+//              Left(Subject("bar",None,None)),
+//              Left(Subject("baz",None,None))
+//            )))
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse nested AND group with parentheses" in {
+//      val query = TickleParser.parseQueryString("(foo AND bar) OR baz")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(OrGroup(List(
+//            Right(AndGroup(List(
+//              Left(Subject("foo",None,None)),
+//              Left(Subject("bar",None,None))
+//            ))),
+//            Left(Subject("baz", None, None))
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse trailing AND group without parentheses using operator precedence" in {
+//      val query = TickleParser.parseQueryString("foo OR bar AND baz")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(OrGroup(List(
+//            Left(Subject("foo", None, None)),
+//            Right(AndGroup(List(
+//              Left(Subject("bar",None,None)),
+//              Left(Subject("baz",None,None))))
+//            )
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse leading AND group without parentheses using operator precedence" in {
+//      val query = TickleParser.parseQueryString("foo AND bar OR baz")
+//      println(TickleParser.prettyPrint(query))
+//      query must be(
+//        Query(
+//          Right(OrGroup(List(
+//            Right(AndGroup(List(
+//              Left(Subject("foo",None,None)),
+//              Left(Subject("bar",None,None))
+//            ))),
+//            Left(Subject("baz", None, None))
+//          )))
+//        )
+//      )
+//    }
+//
+//    "parse a text value with a single term" in {
+//      val matchers = TickleParser.buildMatchers("fieldname[text]=foo")
+//      matchers must be(
+//        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo"))
+//      )
+//    }
+//
+//    "parse a text value with multiple terms" in {
+//      val matchers = TickleParser.buildMatchers(
+//        """
+//          |fieldname[text]="foo bar baz"
+//        """.stripMargin)
+//      inside(matchers) {
+//        case Some(AndMatcher(children)) =>
+//          children must have size(3)
+//          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
+//          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
+//          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
+//      }
+//    }
+//
+//    "parse a literal value" in {
+//      TickleParser.buildMatchers(
+//        """
+//          |fieldname[literal]="foo bar baz"
+//        """.stripMargin) must be(
+//        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foo bar baz"))
+//      )
+//    }
+//
+//    "parse an integer value" in {
+//      TickleParser.buildMatchers("fieldname[integer]=42") must be(
+//        Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
+//      )
+//    }
+//
+//    "parse a quoted float value" in {
+//      TickleParser.buildMatchers(
+//        """
+//          |fieldname[float]="3.14159"
+//        """.stripMargin) must be(
+//        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
+//      )
+//    }
+//
+//    "parse an unquoted float value" in {
+//      TickleParser.buildMatchers("fieldname[float]=3.14159") must be(
+//        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
+//      )
+//    }
+//
+//    "parse a quoted datetime value" in {
+//      val datetime = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC)
+//      val matchers = TickleParser.buildMatchers(
+//        """
+//          |fieldname[datetime]="1994-11-05T08:15:30Z"
+//        """.stripMargin)
+//      inside(matchers) {
+//        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), _datetime: DateTime)) =>
+//          datetime must equal(_datetime)
+//      }
+//    }
+//
+//    "parse a quoted IPv4 address value" in {
+//      val address = Address.getByAddress("127.0.0.1")
+//      TickleParser.buildMatchers(
+//        """
+//          |fieldname[address]="127.0.0.1"
+//        """.stripMargin) must be(
+//        Some(TermMatcher[InetAddress](FieldIdentifier("fieldname", DataType.ADDRESS), address))
+//      )
+//    }
+//
+//    "parse a hostname value" in {
+//      val hostname = Name.fromString("com")
+//      TickleParser.buildMatchers("fieldname[hostname]=com") must be(
+//        Some(TermMatcher[Name](FieldIdentifier("fieldname", DataType.HOSTNAME), hostname))
+//      )
+//    }
   }
 }
