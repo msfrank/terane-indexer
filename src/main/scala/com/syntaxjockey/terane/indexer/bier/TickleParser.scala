@@ -48,13 +48,13 @@ trait TickleParser extends JavaTokenParsers {
 
   val rawLiteral: Parser[TargetValue] = log(regex("""'\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("rawLiteral") ^^ { value => TargetLiteral(value.tail) }
 
-  val rawNumber: Parser[TargetValue] = log(wholeNumber | decimalNumber)("rawNumber") ^^ {
+  val rawNumber: Parser[TargetValue] = log(decimalNumber | wholeNumber)("rawNumber") ^^ {
     case number if number.contains('.') => TargetFloat(number)
     case number => TargetInteger(number)
   }
 
   /* see http://stackoverflow.com/questions/3143070/javascript-regex-iso-datetime*/
-  val rawDatetime: Parser[TargetValue] = log(regex("""\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+""".r))("rawDatetime") ^^ { TargetDatetime }
+  val rawDatetime: Parser[TargetValue] = log(regex("""\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(Z|(\+-)\d\d:\d\d)""".r))("rawDatetime") ^^ { TargetDatetime }
 
   /* see http://answers.oreilly.com/topic/318-how-to-match-ipv4-addresses-with-regular-expressions/ */
   //val rawIpv4address: Parser[String] = """^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$""".r ^^ { _.toString }
@@ -66,7 +66,7 @@ trait TickleParser extends JavaTokenParsers {
   val rawHostname: Parser[TargetValue] = log(regex("""@(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])""".r))("rawHostname") ^^ { TargetHostname }
 
   /* raw value is a value which needs no coercion (its type is unambiguous) */
-  val rawValue: Parser[TargetValue] = rawText | rawLiteral | rawNumber | rawDatetime | rawHostname
+  val rawValue: Parser[TargetValue] = rawHostname | rawDatetime | rawNumber | rawLiteral | rawText
 
   /*
    * <CoercedValue>     ::= <CoercerFunction> '(' <CoercedString> ')'

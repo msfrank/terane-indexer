@@ -25,7 +25,7 @@ import org.scalatest.Inside._
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import org.joda.time.{DateTimeZone, DateTime}
-import org.xbill.DNS.{Name, Address}
+import org.xbill.DNS.{Name, Address => DNSAddress}
 import scala.Some
 import java.net.InetAddress
 
@@ -268,19 +268,19 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a datetime value" in {
-      val datetime = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC)
-      val matchers = TickleParser.buildMatchers(":fieldname = 1994-11-05T08:15:30Z", params)
-      inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), _datetime: DateTime)) =>
-          datetime must equal(_datetime)
-      }
+      val date = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC).toDate
+      TickleParser.buildMatchers(":fieldname = 1994-11-05T08:15:30.0Z", params) must be(
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), date))
+      )
     }
 
     "parse a coerced IPv4 address value" in {
-      val address = Address.getByAddress("127.0.0.1")
-      TickleParser.buildMatchers(":fieldname = address(127.0.0.1)", params) must be(
-        Some(TermMatcher[InetAddress](FieldIdentifier("fieldname", DataType.ADDRESS), address))
-      )
+      val address = DNSAddress.getByAddress("127.0.0.1")
+      val matchers = TickleParser.buildMatchers(":fieldname = address(127.0.0.1)", params)
+      inside(matchers) {
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+          InetAddress.getByAddress(bytes) must be(address)
+      }
     }
 
     "parse a hostname value" in {

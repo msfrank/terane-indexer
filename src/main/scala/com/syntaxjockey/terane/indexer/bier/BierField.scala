@@ -120,7 +120,7 @@ class IntegerField extends BierField {
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.INTEGER)
     expression.predicate match {
-      case PredicateEquals(TargetLiteral(target)) =>
+      case PredicateEquals(TargetInteger(target)) =>
         TermMatcher(fieldId, tokenizeValue(Integer(target.toLong)))
       case other => throw new Exception("parse failure")
     }
@@ -143,7 +143,7 @@ class FloatField extends BierField {
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.FLOAT)
     expression.predicate match {
-      case PredicateEquals(TargetLiteral(target)) =>
+      case PredicateEquals(TargetFloat(target)) =>
         TermMatcher(fieldId, tokenizeValue(Float(target.toDouble)))
       case other => throw new Exception("parse failure")
     }
@@ -169,8 +169,8 @@ class DatetimeField extends BierField {
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.DATETIME)
     expression.predicate match {
-      case PredicateEquals(TargetLiteral(target)) =>
-        TermMatcher(fieldId, parseValue(Datetime(parseDatetimeString(target))))
+      case PredicateEquals(TargetDatetime(target)) =>
+        TermMatcher(fieldId, tokenizeValue(Datetime(parseDatetimeString(target))))
       case other => throw new Exception("parse failure")
     }
   }
@@ -195,8 +195,8 @@ class AddressField extends BierField {
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.ADDRESS)
     expression.predicate match {
-      case PredicateEquals(TargetLiteral(target)) =>
-        TermMatcher(fieldId, parseValue(Address(parseAddressString(target))))
+      case PredicateEquals(TargetAddress(target)) =>
+        TermMatcher(fieldId, tokenizeValue(Address(parseAddressString(target))))
       case other => throw new Exception("parse failure")
     }
   }
