@@ -45,7 +45,7 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
 
   "A TickleParser" must {
 
-    "parse a bare subject" in {
+    "parse a bare text predicate" in {
       val query = TickleParser.parseQueryString("foobar")
       println(TickleParser.prettyPrint(query))
       query must be(
@@ -55,8 +55,18 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
-    "parse a qualified subject with a field name" in {
-      val query = TickleParser.parseQueryString(":fieldname=foobar")
+    "parse a bare integer predicate" in {
+      val query = TickleParser.parseQueryString("42")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(None, PredicateEquals(TargetInteger("42"))))
+        )
+      )
+    }
+
+    "parse a text predicate with a field name" in {
+      val query = TickleParser.parseQueryString(":fieldname = foobar")
       println(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -65,83 +75,74 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
-    "parse a bare quoted subject" in {
-      val query = TickleParser.parseQueryString(
-        """
-          |"hello, world!"
-        """.stripMargin)
+    "parse a bare quoted text predicate" in {
+      val query = TickleParser.parseQueryString(""" "hello, world!" """)
       println(TickleParser.prettyPrint(query))
       query must be(
         Query(
-          Left(Expression(None, PredicateEquals(TargetText("\"hello, world!\""))))
+          Left(Expression(None, PredicateEquals(TargetText("hello, world!"))))
         )
       )
     }
 
-//    "parse a quoted subject with a field name" in {
-//      val query = TickleParser.parseQueryString(
-//        """
-//          |fieldname="hello, world!"
-//        """.stripMargin)
-//      println(TickleParser.prettyPrint(query))
-//      query must be(
-//        Query(
-//          Left(Subject("hello, world!", Some("fieldname"), None))
-//        )
-//      )
-//    }
-//
-//    "parse a quoted subject with a field name and type" in {
-//      val query = TickleParser.parseQueryString(
-//        """
-//          |fieldname[text]="hello, world!"
-//        """.stripMargin)
-//      println(TickleParser.prettyPrint(query))
-//      query must be(
-//        Query(
-//          Left(Subject("hello, world!", Some("fieldname"), Some(DataType.TEXT)))
-//        )
-//      )
-//    }
-//
-//    "parse an AND group" in {
-//      val query = TickleParser.parseQueryString("foo AND bar")
-//      println(TickleParser.prettyPrint(query))
-//      query must be(
-//        Query(
-//          Right(AndGroup(List(
-//            Left(Subject("foo",None,None)),
-//            Left(Subject("bar",None,None))
-//          )))
-//        )
-//      )
-//    }
-//
-//    "parse an OR group" in {
-//      val query = TickleParser.parseQueryString("foo OR bar")
-//      println(TickleParser.prettyPrint(query))
-//      query must be(
-//        Query(
-//          Right(OrGroup(List(
-//            Left(Subject("foo",None,None)),
-//            Left(Subject("bar",None,None))
-//          )))
-//        )
-//      )
-//    }
-//
-//    "parse a NOT group" in {
-//      val query = TickleParser.parseQueryString("NOT foo")
-//      println(TickleParser.prettyPrint(query))
-//      query must be(
-//        Query(
-//          Right(NotGroup(
-//            Left(Subject("foo",None,None))
-//          ))
-//        )
-//      )
-//    }
-//
+    "parse a quoted text subject with a field name" in {
+      val query = TickleParser.parseQueryString(""" :fieldname = "hello, world!" """)
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateEquals(TargetText("hello, world!"))))
+        )
+      )
+    }
+
+    "parse a predicate coerced to text with a field name" in {
+      val query = TickleParser.parseQueryString(":fieldname = text(hello, world!)")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateEquals(TargetText("hello, world!"))))
+        )
+      )
+    }
+
+    "parse an AND group" in {
+      val query = TickleParser.parseQueryString("foo AND bar")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Right(AndGroup(List(
+            Left(Expression(None, PredicateEquals(TargetText("foo")))),
+            Left(Expression(None, PredicateEquals(TargetText("bar"))))
+          )))
+        )
+      )
+    }
+
+    "parse an OR group" in {
+      val query = TickleParser.parseQueryString("foo OR bar")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Right(OrGroup(List(
+            Left(Expression(None, PredicateEquals(TargetText("foo")))),
+            Left(Expression(None, PredicateEquals(TargetText("bar"))))
+          )))
+        )
+      )
+    }
+
+    "parse a NOT group" in {
+      val query = TickleParser.parseQueryString("NOT foo")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Right(NotGroup(
+            Left(Expression(None, PredicateEquals(TargetText("foo"))))
+          ))
+        )
+      )
+    }
+
 //   "parse multiple NOT groups joined by AND" in {
 //      val query = TickleParser.parseQueryString("foo AND NOT bar AND NOT baz")
 //      println(TickleParser.prettyPrint(query))
