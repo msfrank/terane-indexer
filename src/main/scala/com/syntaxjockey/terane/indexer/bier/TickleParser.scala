@@ -89,24 +89,24 @@ trait TickleParser extends JavaTokenParsers {
   val subject: Parser[String] = log(regex(""":\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("subject") ^^ { _.tail }
 
   /* target expression has a field name, operator, and value */
-  def targetExpression: Parser[Expression] = log(subject ~ literal("=") ~ targetValue)("targetExpression") ^^ {
+  def expressionEquals: Parser[Expression] = log(subject ~ literal("=") ~ targetValue)("targetExpression") ^^ {
     case name ~ "=" ~ value => Expression(Some(name), PredicateEquals(value))
-  } | log(subject ~ literal("!=") ~ targetValue)("targetExpression") ^^ {
+  }
+  def expressionNotEquals: Parser[Expression] = log(subject ~ literal("!=") ~ targetValue)("targetExpression") ^^ {
     case name ~ "!=" ~ value => Expression(Some(name), PredicateNotEquals(value))
   }
+  def targetExpression: Parser[Expression] = expressionEquals | expressionNotEquals
 
   /* either qualified or bare subject expression */
-  val expression: Parser[ExpressionOrGroup] = targetExpression ^^ (Left(_)) | bareTarget ^^ (Left(_))
+  val expression: Parser[ExpressionOrGroup] = log(targetExpression | bareTarget)("expression") ^^ (Left(_))
 
   /* match a NOT group */
-  def notGroup: Parser[ExpressionOrGroup] = log("NOT" ~> expression)("notGroup") ^^ {
-    case s => Right(NotGroup(s))
-  } | log(literal("(") ~> orGroup <~ literal(")"))("notGroup") ^^ {
-    case or => or
-  } | log(expression)("notGroup") ^^ { s: ExpressionOrGroup => s }
+  def notExpression: Parser[ExpressionOrGroup] = log("NOT" ~> expression)("notExpression") ^^ { s => Right(NotGroup(s)) }
+  def groupedOr: Parser[ExpressionOrGroup] = log(literal("(") ~> orGroup <~ literal(")"))("groupedOr") ^^ { or => or }
+  def notGroup: Parser[ExpressionOrGroup] = notExpression | groupedOr
 
   /* match an AND group */
-  def andGroup: Parser[ExpressionOrGroup] = log(expression ~ rep1("AND" ~ notGroup))("andGroup") ^^ {
+  def expressionAndNot: Parser[ExpressionOrGroup] = log(expression ~ rep1("AND" ~ notGroup))("expressionAndNot") ^^ {
     case s ~ nots =>
       val children: List[ExpressionOrGroup] = nots map { not =>
         not match {
@@ -114,7 +114,8 @@ trait TickleParser extends JavaTokenParsers {
         }
       }
       Right(AndGroup(s +: children))
-  } | log(literal("(") ~ expression ~ rep1("AND" ~ notGroup) ~ literal(")"))("andGroup") ^^ {
+  }
+  def groupedExpressionAndNot: Parser[ExpressionOrGroup] = log(literal("(") ~ expression ~ rep1("AND" ~ notGroup) ~ literal(")"))("groupedExpressionAndNot") ^^ {
     case "(" ~ s ~ nots ~ ")" =>
       val children: List[ExpressionOrGroup] = nots map { not =>
         not match {
@@ -122,10 +123,11 @@ trait TickleParser extends JavaTokenParsers {
         }
       }
       Right(AndGroup(s +: children))
-  } | log(expression)("andGroup") ^^ { s: ExpressionOrGroup => s }
+  }
+  def andGroup: Parser[ExpressionOrGroup] = expressionAndNot | groupedExpressionAndNot | expression
 
   /* match an OR group */
-  def orGroup: Parser[ExpressionOrGroup] = log(andGroup ~ rep1("OR" ~ andGroup))("orGroup") ^^ {
+  def andOrAnd: Parser[ExpressionOrGroup] = log(andGroup ~ rep1("OR" ~ andGroup))("andOrAnd") ^^ {
     case and1 ~ ands =>
       val children = ands map { and =>
         and match {
@@ -133,7 +135,8 @@ trait TickleParser extends JavaTokenParsers {
         }
       }
       Right(OrGroup(and1 +: children))
-  } | log(literal("(") ~ andGroup ~ rep1("OR" ~ andGroup) ~ literal(")"))("orGroup") ^^ {
+  }
+  def groupedAndOrAnd: Parser[ExpressionOrGroup] = log(literal("(") ~ andGroup ~ rep1("OR" ~ andGroup) ~ literal(")"))("groupedAndOrAnd") ^^ {
     case "(" ~ and1 ~ ands ~ ")" =>
       val children = ands map { and =>
         and match {
@@ -141,7 +144,8 @@ trait TickleParser extends JavaTokenParsers {
         }
       }
       Right(OrGroup(and1 +: children))
-  } | log(andGroup)("orGroup") ^^ { and: ExpressionOrGroup => and }
+  }
+  def orGroup: Parser[ExpressionOrGroup] = andOrAnd | groupedAndOrAnd | andGroup
 
   /* the entry point */
   val query: Parser[Query] = log(notGroup | orGroup)("query") ^^ { Query }
