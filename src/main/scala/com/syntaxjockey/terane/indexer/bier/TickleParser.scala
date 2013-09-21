@@ -114,11 +114,17 @@ trait TickleParser extends JavaTokenParsers {
   val targetValue: Parser[TargetValue] = coercedValue | rawValue
 
   /*
-   * <Expression>           ::= <TargetExpression | <BareTarget>
-   * <BareTarget>           ::= <TargetValue>
-   * <TargetExpression>     ::= <ExpressionEquals> | <ExpressionNotEquals>
-   * <ExpressionEquals>     ::= <Subject> '=' <TargetValue>
-   * <ExpressionNotEquals>  ::= <Subject> '!=' <TargetValue>
+   * <Expression>         ::= <TargetExpression | <BareTarget>
+   * <BareTarget>         ::= <TargetValue>
+   * <Subject>            ::= ':' <JavaIdentifier>
+   * <JavaIdentifier>     ::= see http://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.8
+   * <TargetExpression>   ::= <Equals> | <NotEquals> | <GreaterThan> | <LessThan> | <GreaterThanEquals> | <LessThanEquals>
+   * <Equals>             ::= <Subject> '=' <TargetValue>
+   * <NotEquals>          ::= <Subject> '!=' <TargetValue>
+   * <GreaterThan>        ::= <Subject> '>' <TargetValue>
+   * <LessThan>           ::= <Subject> '<' <TargetValue>
+   * <GreaterThanEquals>  ::= <Subject> '>=' <TargetValue>
+   * <LessThanEquals>     ::= <Subject> '<=' <TargetValue>
    */
 
   /* subject is a java token starting with a ':' */
@@ -128,13 +134,25 @@ trait TickleParser extends JavaTokenParsers {
   val bareTarget: Parser[Expression] = log(targetValue)("bareTarget") ^^ { case target => Expression(None, PredicateEquals(target)) }
 
   /* target expression has a field name, operator, and value */
-  def expressionEquals: Parser[Expression] = log(subject ~ literal("=") ~ targetValue)("targetExpression") ^^ {
+  def equals: Parser[Expression] = log(subject ~ literal("=") ~ targetValue)("equals") ^^ {
     case name ~ "=" ~ value => Expression(Some(name), PredicateEquals(value))
   }
-  def expressionNotEquals: Parser[Expression] = log(subject ~ literal("!=") ~ targetValue)("targetExpression") ^^ {
+  def notEquals: Parser[Expression] = log(subject ~ literal("!=") ~ targetValue)("notEquals") ^^ {
     case name ~ "!=" ~ value => Expression(Some(name), PredicateNotEquals(value))
   }
-  def targetExpression: Parser[Expression] = expressionEquals | expressionNotEquals
+  def greaterThan: Parser[Expression] = log(subject ~ literal(">") ~ targetValue)("greaterThan") ^^ {
+    case name ~ ">" ~ value => Expression(Some(name), PredicateGreaterThan(value))
+  }
+  def lessThan: Parser[Expression] = log(subject ~ literal("<") ~ targetValue)("lessThan") ^^ {
+    case name ~ "<" ~ value => Expression(Some(name), PredicateLessThan(value))
+  }
+  def greaterThanEquals: Parser[Expression] = log(subject ~ literal(">=") ~ targetValue)("greaterThanEquals") ^^ {
+    case name ~ ">=" ~ value => Expression(Some(name), PredicateGreaterThanEqualTo(value))
+  }
+  def lessThanEquals: Parser[Expression] = log(subject ~ literal("<=") ~ targetValue)("lessThanEquals") ^^ {
+    case name ~ "<=" ~ value => Expression(Some(name), PredicateLessThanEqualTo(value))
+  }
+  def targetExpression: Parser[Expression] = equals | notEquals | greaterThanEquals | lessThanEquals | greaterThan | lessThan
 
   /* either qualified or bare subject expression */
   val expression: Parser[ExpressionOrGroup] = log(targetExpression | bareTarget)("expression") ^^ (Left(_))
@@ -330,7 +348,15 @@ object TickleParser extends TickleParser {
             sb.append("= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
           case PredicateNotEquals(target) =>
             sb.append("!= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
-          case other => throw new Exception("parse failure")
+          case PredicateGreaterThan(target) =>
+            sb.append("> " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case PredicateLessThan(target) =>
+            sb.append("< " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case PredicateGreaterThanEqualTo(target) =>
+            sb.append(">= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case PredicateLessThanEqualTo(target) =>
+            sb.append("<= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case other => throw new Exception("don't know how to prettyPrint '%s'".format(other))
         }
       case Right(AndGroup(children)) =>
         sb.append(" " * indent)

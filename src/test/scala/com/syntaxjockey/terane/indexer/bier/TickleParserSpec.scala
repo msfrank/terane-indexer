@@ -226,6 +226,56 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         )
       )
     }
+
+    "parse a not-equals expression" in {
+      val query = TickleParser.parseQueryString(":fieldname != 42")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateNotEquals(TargetInteger("42"))))
+        )
+      )
+    }
+
+    "parse a greater-than expression" in {
+      val query = TickleParser.parseQueryString(":fieldname > 42")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateGreaterThan(TargetInteger("42"))))
+        )
+      )
+    }
+
+    "parse a less-than expression" in {
+      val query = TickleParser.parseQueryString(":fieldname < 42")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateLessThan(TargetInteger("42"))))
+        )
+      )
+    }
+
+    "parse a greater-than-equals expression" in {
+      val query = TickleParser.parseQueryString(":fieldname >= 42")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateGreaterThanEqualTo(TargetInteger("42"))))
+        )
+      )
+    }
+
+    "parse a less-than-equals expression" in {
+      val query = TickleParser.parseQueryString(":fieldname <= 42")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateLessThanEqualTo(TargetInteger("42"))))
+        )
+      )
+    }
   }
 
   "TickleParser.buildMatchers()" must {
@@ -293,7 +343,6 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     }
 
     "parse a hostname value" in {
-      val hostname = Name.fromString("www.google.com")
       TickleParser.buildMatchers(":fieldname = @www.google.com", params) must be(
         Some(AndMatcher(Set(
           TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "www").asInstanceOf[Matchers],
@@ -302,5 +351,6 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         )))
       )
     }
+
   }
 }
