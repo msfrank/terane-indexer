@@ -21,6 +21,7 @@ package com.syntaxjockey.terane.indexer.bier
 
 import akka.actor.ActorRefFactory
 import scala.util.parsing.combinator.JavaTokenParsers
+import org.xbill.DNS.{Name, Address => DNSAddress}
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{EveryMatcher, OrMatcher, AndMatcher, NotMatcher}
@@ -56,17 +57,32 @@ trait TickleParser extends JavaTokenParsers {
   /* see http://stackoverflow.com/questions/3143070/javascript-regex-iso-datetime*/
   val rawDatetime: Parser[TargetValue] = log(regex("""\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(Z|(\+-)\d\d:\d\d)""".r))("rawDatetime") ^^ { TargetDatetime }
 
-  /* see http://answers.oreilly.com/topic/318-how-to-match-ipv4-addresses-with-regular-expressions/ */
-  //val rawIpv4address: Parser[String] = """^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$""".r ^^ { _.toString }
-
-  /* see http://stackoverflow.com/questions/53497/regular-expression-that-matches-valid-ipv6-addresses */
-  //val rawIpv6address: Parser[String] = """(?>(?>([a-f0-9]{1,4})(?>:(?1)){7}|(?!(?:.*[a-f0-9](?>:|$)){8,})((?1)(?>:(?1)){0,6})?::(?2)?)|(?>(?>(?1)(?>:(?1)){5}:|(?!(?:.*[a-f0-9]:){6,})(?3)?::(?>((?1)(?>:(?1)){0,4}):)?)?(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?>\.(?4)){3}))""".r ^^ { _.toString }
-
-  /* see http://stackoverflow.com/questions/106179/regular-expression-to-match-hostname-or-ip-address */
-  val rawHostname: Parser[TargetValue] = log(regex("""@(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])""".r))("rawHostname") ^^ { TargetHostname }
+  val rawLocation: Parser[Any] = log(regex("""@\S+""".r))("rawLocation") ^^ {
+    case value: String =>
+      val location = value.tail
+      // try to parse as an IPv4 or IPv6 address
+      try {
+        val address = DNSAddress.getByAddress(location)
+        TargetAddress(location)
+      } catch {
+        case ex: Exception =>
+          // try to parse as a URI
+          // try to parse as a DNS name
+          try {
+            val hostname = Name.fromString(location)
+            TargetHostname(location)
+          } catch {
+            case ex: Exception =>
+            failure("don't know how to parse location '%s'".format(location))
+          }
+      }
+      // try to parse as a file system path
+  }
 
   /* raw value is a value which needs no coercion (its type is unambiguous) */
-  val rawValue: Parser[TargetValue] = rawHostname | rawDatetime | rawNumber | rawLiteral | rawText
+  val rawValue: Parser[TargetValue] = (rawLocation | rawDatetime | rawNumber | rawLiteral | rawText) ^^ {
+    case value: TargetValue => value
+  }
 
   /*
    * <CoercedValue>     ::= <CoercerFunction> '(' <CoercedString> ')'

@@ -274,9 +274,18 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
-    "parse a coerced IPv4 address value" in {
+    "parse an IPv4 address value" in {
       val address = DNSAddress.getByAddress("127.0.0.1")
-      val matchers = TickleParser.buildMatchers(":fieldname = address(127.0.0.1)", params)
+      val matchers = TickleParser.buildMatchers(":fieldname = @127.0.0.1", params)
+      inside(matchers) {
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+          InetAddress.getByAddress(bytes) must be(address)
+      }
+    }
+
+    "parse an IPv6 address value" in {
+      val address = DNSAddress.getByAddress("::1")
+      val matchers = TickleParser.buildMatchers(":fieldname = @::1", params)
       inside(matchers) {
         case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
           InetAddress.getByAddress(bytes) must be(address)
@@ -286,7 +295,11 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
     "parse a hostname value" in {
       val hostname = Name.fromString("www.google.com")
       TickleParser.buildMatchers(":fieldname = @www.google.com", params) must be(
-        Some(TermMatcher[Name](FieldIdentifier("fieldname", DataType.HOSTNAME), hostname))
+        Some(AndMatcher(Set(
+          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "www").asInstanceOf[Matchers],
+          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "google").asInstanceOf[Matchers],
+          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "com").asInstanceOf[Matchers]
+        )))
       )
     }
   }
