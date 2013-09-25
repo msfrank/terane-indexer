@@ -109,7 +109,7 @@ trait ApiService extends HttpService {
               case createdQuery: CreatedQuery =>
                 HttpResponse(StatusCodes.Created,
                   JsonBody(createdQuery.toJson),
-                  List(Location("http://localhost:8080/1/queries" + createdQuery.id)))
+                  List(Location("http://localhost:8080/1/queries/" + createdQuery.id)))
               case failure: ApiFailure =>
                 log.info("error creating query")
                 throw new ApiException(failure)

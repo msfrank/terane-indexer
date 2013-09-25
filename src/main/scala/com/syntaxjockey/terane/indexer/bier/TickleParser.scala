@@ -125,6 +125,9 @@ trait TickleParser extends JavaTokenParsers {
    * <LessThan>           ::= <Subject> '<' <TargetValue>
    * <GreaterThanEquals>  ::= <Subject> '>=' <TargetValue>
    * <LessThanEquals>     ::= <Subject> '<=' <TargetValue>
+   * <Function>           ::= <Subject> '->' <FunctionName> '(' [ <FunctionArg> ]* ')'
+   * <FunctionName>       ::= <JavaIdentifier>
+   * <FunctionArg>        ::= <TargetValue>
    */
 
   /* subject is a java token starting with a ':' */
@@ -152,7 +155,11 @@ trait TickleParser extends JavaTokenParsers {
   def lessThanEquals: Parser[Expression] = log(subject ~ literal("<=") ~ targetValue)("lessThanEquals") ^^ {
     case name ~ "<=" ~ value => Expression(Some(name), PredicateLessThanEqualTo(value))
   }
-  def targetExpression: Parser[Expression] = equals | notEquals | greaterThanEquals | lessThanEquals | greaterThan | lessThan
+  def function: Parser[Expression] = log(subject ~ literal("->") ~ ident ~ literal("(") ~ rep(targetValue) ~ literal(")"))("function") ^^ {
+    case name ~ "->" ~ functionName ~ "(" ~ functionArgs ~ ")" => Expression(Some(name), PredicateFunction(functionName, functionArgs))
+  }
+
+  def targetExpression: Parser[Expression] = equals | notEquals | greaterThanEquals | lessThanEquals | greaterThan | lessThan | function
 
   /* either qualified or bare subject expression */
   val expression: Parser[ExpressionOrGroup] = log(targetExpression | bareTarget)("expression") ^^ (Left(_))
@@ -257,24 +264,39 @@ object TickleParser extends TickleParser {
     siftMatchers(lifted)
   }
 
+  /**
+   * Parse an expression, returning a Matchers tree.
+   *
+   * @param expression
+   * @param params
+   * @return
+   */
   def parseExpression(expression: Expression, params: TickleParserParams)(implicit factory: ActorRefFactory): Option[Matchers] = {
-    expression.predicate.dataType match {
-      case DataType.TEXT =>
-        Some(TextField.parseExpression(factory, expression, params))
-      case DataType.LITERAL =>
-        Some(LiteralField.parseExpression(factory, expression, params))
-      case DataType.INTEGER =>
-        Some(IntegerField.parseExpression(factory, expression, params))
-      case DataType.FLOAT =>
-        Some(FloatField.parseExpression(factory, expression, params))
-      case DataType.DATETIME =>
-        Some(DatetimeField.parseExpression(factory, expression, params))
-      case DataType.HOSTNAME =>
-        Some(HostnameField.parseExpression(factory, expression, params))
-      case DataType.ADDRESS =>
-        Some(AddressField.parseExpression(factory, expression, params))
+    expression.predicate match {
+      case predicate: TypedPredicate =>
+        predicate.dataType match {
+          case DataType.TEXT =>
+            Some(TextField.parseExpression(factory, expression, params))
+          case DataType.LITERAL =>
+            Some(LiteralField.parseExpression(factory, expression, params))
+          case DataType.INTEGER =>
+            Some(IntegerField.parseExpression(factory, expression, params))
+          case DataType.FLOAT =>
+            Some(FloatField.parseExpression(factory, expression, params))
+          case DataType.DATETIME =>
+            Some(DatetimeField.parseExpression(factory, expression, params))
+          case DataType.HOSTNAME =>
+            Some(HostnameField.parseExpression(factory, expression, params))
+          case DataType.ADDRESS =>
+            Some(AddressField.parseExpression(factory, expression, params))
+        }
+      case predicate: PredicateFunction =>
+        TickleFunctions.parsePredicateFunction(factory, expression.subject.get, predicate.name, predicate.args, params)
+      case unknown =>
+        throw new Exception("unknown predicate type " + unknown.toString)
     }
   }
+
   /**
    * Pull up the subtree if the group only has one matcher.  An implicit ActorRefFactory
    * is expected to be in scope, because some Matchers may need to use Actors for processing
@@ -335,11 +357,11 @@ object TickleParser extends TickleParser {
   }
   private def prettyPrintImpl(sb: StringBuilder, expressionOrGroup: ExpressionOrGroup, indent: Int): StringBuilder = {
     expressionOrGroup match {
-      case Left(Expression(subject, predicate)) =>
+      case Left(Expression(_subject, predicate)) =>
         sb.append(" " * indent)
-        subject match {
-          case Some(_subject) =>
-            sb.append(_subject + " ")
+        _subject match {
+          case Some(name) =>
+            sb.append(name + " ")
           case None =>
             sb.append("? ")
         }
@@ -356,6 +378,12 @@ object TickleParser extends TickleParser {
             sb.append(">= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
           case PredicateLessThanEqualTo(target) =>
             sb.append("<= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
+          case PredicateEqualsRange(TargetRange(start, end, _), startExcl, endExcl) =>
+            sb.append("= " + (if (startExcl) "{" else "["))
+            sb.append((if (start.isDefined) start.get.raw else " ") + " TO " + (if (end.isDefined) end.get.raw else " "))
+            sb.append(if (endExcl) "}" else "]")
+          case PredicateFunction(name, args) =>
+            sb.append("-> " + name + "(" + args.map(_.raw).mkString(", ") + ")\n")
           case other => throw new Exception("don't know how to prettyPrint '%s'".format(other))
         }
       case Right(AndGroup(children)) =>
@@ -397,15 +425,22 @@ object TickleParser extends TickleParser {
   case class TargetAddress(address: String) extends TargetValue(address, DataType.ADDRESS)
   case class TargetHostname(hostname: String) extends TargetValue(hostname, DataType.HOSTNAME)
 
-  sealed abstract class Predicate(val dataType: DataType.DataType)
-  case class PredicateEquals(target: TargetValue) extends Predicate(target.dataType)
-  case class PredicateNotEquals(target: TargetValue) extends Predicate(target.dataType)
-  case class PredicateGreaterThan(target: TargetValue) extends Predicate(target.dataType)
-  case class PredicateLessThan(target: TargetValue) extends Predicate(target.dataType)
-  case class PredicateGreaterThanEqualTo(target: TargetValue) extends Predicate(target.dataType)
-  case class PredicateLessThanEqualTo(target: TargetValue) extends Predicate(target.dataType)
-  case class PredicateEqualsRange(start: TargetValue, end: TargetValue, startExcl: Boolean, endExcl: Boolean)
-  case class PredicateEqualsNotRange(start: TargetValue, end: TargetValue, startExcl: Boolean, endExcl: Boolean)
+  case class TargetRange(start: Option[TargetValue], end: Option[TargetValue], dataType: DataType.DataType)
+
+  sealed abstract class Predicate
+  case class PredicateFunction(name: String, args: Seq[TargetValue]) extends Predicate
+
+  sealed abstract class TypedPredicate(val dataType: DataType.DataType) extends Predicate
+  case class PredicateEquals(target: TargetValue) extends TypedPredicate(target.dataType)
+  case class PredicateNotEquals(target: TargetValue) extends TypedPredicate(target.dataType)
+  case class PredicateGreaterThan(target: TargetValue) extends TypedPredicate(target.dataType)
+  case class PredicateLessThan(target: TargetValue) extends TypedPredicate(target.dataType)
+  case class PredicateGreaterThanEqualTo(target: TargetValue) extends TypedPredicate(target.dataType)
+  case class PredicateLessThanEqualTo(target: TargetValue) extends TypedPredicate(target.dataType)
+
+  case class PredicateEqualsRange(range: TargetRange, startExcl: Boolean, endExcl: Boolean) extends TypedPredicate(range.dataType)
+  case class PredicateNotEqualsRange(range: TargetRange, startExcl: Boolean, endExcl: Boolean) extends TypedPredicate(range.dataType)
+
 }
 
 case class TickleParserParams(defaultField: String)

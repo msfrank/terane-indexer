@@ -276,6 +276,16 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
         )
       )
     }
+
+    "parse a function expression with no function arguments" in {
+      val query = TickleParser.parseQueryString(":fieldname -> function()")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateFunction("function", Seq.empty)))
+        )
+      )
+    }
   }
 
   "TickleParser.buildMatchers()" must {
@@ -352,5 +362,8 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
+    "parse the cidr function" in {
+       TickleParser.buildMatchers(""":fieldname -> cidr("192.168.0/24")""", params) must be(None)
+    }
   }
 }
