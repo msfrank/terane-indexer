@@ -277,6 +277,28 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
+    "parse an equals-range expression" in {
+      val query = TickleParser.parseQueryString(":fieldname = [ 42 TO 44 ]")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateEqualsRange(
+            TargetRange(Some(TargetInteger("42")), Some(TargetInteger("44")), DataType.INTEGER, false, false))))
+        )
+      )
+    }
+
+    "parse an not-equals-range expression" in {
+      val query = TickleParser.parseQueryString(":fieldname != [ bar TO foo ]")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateNotEqualsRange(
+            TargetRange(Some(TargetText("bar")), Some(TargetText("foo")), DataType.TEXT, false, false))))
+        )
+      )
+    }
+
     "parse a function expression with no function arguments" in {
       val query = TickleParser.parseQueryString(":fieldname -> function()")
       println(TickleParser.prettyPrint(query))

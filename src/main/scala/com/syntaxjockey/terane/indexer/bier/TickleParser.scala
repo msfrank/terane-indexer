@@ -136,12 +136,28 @@ trait TickleParser extends JavaTokenParsers {
   /* bare target is just a value without field name or type */
   val bareTarget: Parser[Expression] = log(targetValue)("bareTarget") ^^ { case target => Expression(None, PredicateEquals(target)) }
 
-  /* target expression has a field name, operator, and value */
-  def equals: Parser[Expression] = log(subject ~ literal("=") ~ targetValue)("equals") ^^ {
-    case name ~ "=" ~ value => Expression(Some(name), PredicateEquals(value))
+  /* a range with a start and an end */
+  val closedRange: Parser[TargetRange] = log(regex("[\\[{]".r) ~ targetValue ~ literal("TO") ~ targetValue ~ regex("[}\\]]".r))("targetRange") ^^ {
+    case "[" ~ valueStart ~ "TO" ~ valueEnd ~ "]" if valueStart.dataType == valueEnd.dataType =>
+      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = false, endExcl = false)
+    case "{" ~ valueStart ~ "TO" ~ valueEnd ~ "}" if valueStart.dataType == valueEnd.dataType =>
+      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = true, endExcl = true)
+    case "[" ~ valueStart ~ "TO" ~ valueEnd ~ "}" if valueStart.dataType == valueEnd.dataType =>
+      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = false, endExcl = true)
+    case "{" ~ valueStart ~ "TO" ~ valueEnd ~ "]" if valueStart.dataType == valueEnd.dataType =>
+      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = true, endExcl = false)
   }
-  def notEquals: Parser[Expression] = log(subject ~ literal("!=") ~ targetValue)("notEquals") ^^ {
-    case name ~ "!=" ~ value => Expression(Some(name), PredicateNotEquals(value))
+
+  val targetRange: Parser[TargetRange] = closedRange
+
+  /* target expression has a field name, operator, and value */
+  def equals: Parser[Expression] = log(subject ~ literal("=") ~ (targetRange | targetValue))("equals") ^^ {
+    case name ~ "=" ~ (value: TargetRange) => Expression(Some(name), PredicateEqualsRange(value))
+    case name ~ "=" ~ (value: TargetValue) => Expression(Some(name), PredicateEquals(value))
+  }
+  def notEquals: Parser[Expression] = log(subject ~ literal("!=") ~ (targetRange | targetValue))("notEquals") ^^ {
+    case name ~ "!=" ~ (value: TargetRange) => Expression(Some(name), PredicateNotEqualsRange(value))
+    case name ~ "!=" ~ (value: TargetValue) => Expression(Some(name), PredicateNotEquals(value))
   }
   def greaterThan: Parser[Expression] = log(subject ~ literal(">") ~ targetValue)("greaterThan") ^^ {
     case name ~ ">" ~ value => Expression(Some(name), PredicateGreaterThan(value))
@@ -378,7 +394,7 @@ object TickleParser extends TickleParser {
             sb.append(">= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
           case PredicateLessThanEqualTo(target) =>
             sb.append("<= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
-          case PredicateEqualsRange(TargetRange(start, end, _), startExcl, endExcl) =>
+          case PredicateEqualsRange(TargetRange(start, end, _, startExcl, endExcl)) =>
             sb.append("= " + (if (startExcl) "{" else "["))
             sb.append((if (start.isDefined) start.get.raw else " ") + " TO " + (if (end.isDefined) end.get.raw else " "))
             sb.append(if (endExcl) "}" else "]")
@@ -425,7 +441,7 @@ object TickleParser extends TickleParser {
   case class TargetAddress(address: String) extends TargetValue(address, DataType.ADDRESS)
   case class TargetHostname(hostname: String) extends TargetValue(hostname, DataType.HOSTNAME)
 
-  case class TargetRange(start: Option[TargetValue], end: Option[TargetValue], dataType: DataType.DataType)
+  case class TargetRange(start: Option[TargetValue], end: Option[TargetValue], dataType: DataType.DataType, startExcl: Boolean, endExcl: Boolean)
 
   sealed abstract class Predicate
   case class PredicateFunction(name: String, args: Seq[TargetValue]) extends Predicate
@@ -438,8 +454,8 @@ object TickleParser extends TickleParser {
   case class PredicateGreaterThanEqualTo(target: TargetValue) extends TypedPredicate(target.dataType)
   case class PredicateLessThanEqualTo(target: TargetValue) extends TypedPredicate(target.dataType)
 
-  case class PredicateEqualsRange(range: TargetRange, startExcl: Boolean, endExcl: Boolean) extends TypedPredicate(range.dataType)
-  case class PredicateNotEqualsRange(range: TargetRange, startExcl: Boolean, endExcl: Boolean) extends TypedPredicate(range.dataType)
+  case class PredicateEqualsRange(range: TargetRange) extends TypedPredicate(range.dataType)
+  case class PredicateNotEqualsRange(range: TargetRange) extends TypedPredicate(range.dataType)
 
 }
 
