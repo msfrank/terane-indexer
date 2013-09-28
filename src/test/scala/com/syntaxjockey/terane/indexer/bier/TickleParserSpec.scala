@@ -299,6 +299,28 @@ class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with Impli
       )
     }
 
+    "parse a left-open range expression" in {
+      val query = TickleParser.parseQueryString(":fieldname = [ TO foo ]")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateEqualsRange(
+            TargetRange(None, Some(TargetText("foo")), DataType.TEXT, false, false))))
+        )
+      )
+    }
+
+    "parse a right-open range expression" in {
+      val query = TickleParser.parseQueryString(":fieldname = [ bar TO ]")
+      println(TickleParser.prettyPrint(query))
+      query must be(
+        Query(
+          Left(Expression(Some("fieldname"), PredicateEqualsRange(
+            TargetRange(Some(TargetText("bar")), None, DataType.TEXT, false, false))))
+        )
+      )
+    }
+
     "parse a function expression with no function arguments" in {
       val query = TickleParser.parseQueryString(":fieldname -> function()")
       println(TickleParser.prettyPrint(query))

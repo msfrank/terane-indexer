@@ -138,17 +138,25 @@ trait TickleParser extends JavaTokenParsers {
 
   /* a range with a start and an end */
   val closedRange: Parser[TargetRange] = log(regex("[\\[{]".r) ~ targetValue ~ literal("TO") ~ targetValue ~ regex("[}\\]]".r))("targetRange") ^^ {
-    case "[" ~ valueStart ~ "TO" ~ valueEnd ~ "]" if valueStart.dataType == valueEnd.dataType =>
-      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = false, endExcl = false)
-    case "{" ~ valueStart ~ "TO" ~ valueEnd ~ "}" if valueStart.dataType == valueEnd.dataType =>
-      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = true, endExcl = true)
-    case "[" ~ valueStart ~ "TO" ~ valueEnd ~ "}" if valueStart.dataType == valueEnd.dataType =>
-      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = false, endExcl = true)
-    case "{" ~ valueStart ~ "TO" ~ valueEnd ~ "]" if valueStart.dataType == valueEnd.dataType =>
-      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl = true, endExcl = false)
+    case openBrace ~ valueStart ~ "TO" ~ valueEnd ~ closeBrace if valueStart.dataType == valueEnd.dataType =>
+      val startExcl = if (openBrace == "{")  true else false
+      val endExcl = if (closeBrace == "}")  true else false
+      TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl, endExcl)
   }
 
-  val targetRange: Parser[TargetRange] = closedRange
+  /* a range with either a start or an end, but not both */
+  val openRange: Parser[TargetRange] = log(regex("[\\[{]".r) ~ (literal("TO") ~ targetValue | targetValue ~ literal("TO")) ~ regex("[}\\]]".r))("targetRange") ^^ {
+    case openBrace ~ ((valueStart: TargetValue) ~ "TO") ~ closeBrace =>
+      val startExcl = if (openBrace == "{")  true else false
+      val endExcl = if (closeBrace == "}")  true else false
+      TargetRange(Some(valueStart), None, valueStart.dataType, startExcl, endExcl)
+    case openBrace ~ ("TO" ~ (valueEnd: TargetValue)) ~ closeBrace =>
+      val startExcl = if (openBrace == "{")  true else false
+      val endExcl = if (closeBrace == "}")  true else false
+      TargetRange(None, Some(valueEnd), valueEnd.dataType, startExcl, endExcl)
+  }
+
+  val targetRange: Parser[TargetRange] = closedRange | openRange
 
   /* target expression has a field name, operator, and value */
   def equals: Parser[Expression] = log(subject ~ literal("=") ~ (targetRange | targetValue))("equals") ^^ {
@@ -396,7 +404,11 @@ object TickleParser extends TickleParser {
             sb.append("<= " + target.dataType.toString.toLowerCase + "(" + target.raw + ")\n")
           case PredicateEqualsRange(TargetRange(start, end, _, startExcl, endExcl)) =>
             sb.append("= " + (if (startExcl) "{" else "["))
-            sb.append((if (start.isDefined) start.get.raw else " ") + " TO " + (if (end.isDefined) end.get.raw else " "))
+            sb.append((if (start.isDefined) start.get.raw else "") + " TO " + (if (end.isDefined) end.get.raw else ""))
+            sb.append(if (endExcl) "}" else "]")
+          case PredicateNotEqualsRange(TargetRange(start, end, _, startExcl, endExcl)) =>
+            sb.append("!= " + (if (startExcl) "{" else "["))
+            sb.append((if (start.isDefined) start.get.raw else "") + " TO " + (if (end.isDefined) end.get.raw else ""))
             sb.append(if (endExcl) "}" else "]")
           case PredicateFunction(name, args) =>
             sb.append("-> " + name + "(" + args.map(_.raw).mkString(", ") + ")\n")
@@ -453,10 +465,8 @@ object TickleParser extends TickleParser {
   case class PredicateLessThan(target: TargetValue) extends TypedPredicate(target.dataType)
   case class PredicateGreaterThanEqualTo(target: TargetValue) extends TypedPredicate(target.dataType)
   case class PredicateLessThanEqualTo(target: TargetValue) extends TypedPredicate(target.dataType)
-
   case class PredicateEqualsRange(range: TargetRange) extends TypedPredicate(range.dataType)
   case class PredicateNotEqualsRange(range: TargetRange) extends TypedPredicate(range.dataType)
-
 }
 
 case class TickleParserParams(defaultField: String)
