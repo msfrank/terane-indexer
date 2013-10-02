@@ -23,7 +23,7 @@ import akka.testkit.{ImplicitSender, TestKit}
 import akka.actor.{ActorRef, Actor, Props, ActorSystem}
 import org.scalatest.{BeforeAndAfterAll, WordSpec}
 import org.scalatest.matchers.MustMatchers
-import org.joda.time.DateTime
+import org.joda.time.{DateTimeZone, DateTime}
 import scala.Some
 import java.util.UUID
 
@@ -64,8 +64,9 @@ class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with Im
 
     def createSortingStreamer(createQuery: CreateQuery): ActorRef = {
       val id = UUID.randomUUID()
+      val created = DateTime.now(DateTimeZone.UTC)
       system.actorOf(Props(new Actor {
-        val child = context.actorOf(Props(new SortingStreamer(id, createQuery, fields)))
+        val child = context.actorOf(Props(new SortingStreamer(id, createQuery, created, fields)))
         def receive = {
           case x if this.sender == child => testActor forward x
           case x => child forward x

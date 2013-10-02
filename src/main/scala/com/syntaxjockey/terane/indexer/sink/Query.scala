@@ -43,6 +43,7 @@ import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.metadata.Store
+import java.util.concurrent.TimeUnit
 
 /**
  * The Query actor manages the lifecycle of an individual query.  Query processing
@@ -66,9 +67,9 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   val maybeMatchers = TickleParser.buildMatchers(createQuery.query, parserParams)
 
   val streamer = if (createQuery.sortBy.isDefined)
-    context.actorOf(SortingStreamer.props(id, createQuery, fields))
+    context.actorOf(SortingStreamer.props(id, createQuery, created, fields))
   else
-    context.actorOf(DirectStreamer.props(id, createQuery, fields))
+    context.actorOf(DirectStreamer.props(id, createQuery, created, fields))
 
   /* get term estimates and possibly reorder the query */
   maybeMatchers match {
@@ -96,7 +97,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
      * The client has requested a query description.  Send a QueryStatistics object back.
      */
     case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Reading results", 0, 0)
+      stay() replying QueryStatistics(id, created, "Reading results", 0, 0, getRuntime)
 
     /**
      * The streamer is asking for the next event.  Request the next posting.
@@ -170,10 +171,12 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   when(FinishedQuery) {
 
     /**
-     * The client has requested a query description.  Send a QueryStatistics object back.
+     * The client has requested a query description.  Forward to the streamer, which
+     * will send a QueryStatistics message back.
      */
     case Event(DescribeQuery, _) =>
-      stay() replying QueryStatistics(id, created, "Finished query", 0, 0)
+      streamer forward DescribeQuery
+      stay()
 
     case Event(getEvents: GetEvents, _) =>
       streamer forward getEvents
@@ -195,6 +198,8 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
     case StopEvent(_, state, data) =>
       log.debug("deleted query {}", id)
   }
+
+  def getRuntime: Duration = Duration(new org.joda.time.Duration(created, DateTime.now(DateTimeZone.UTC)).getMillis, TimeUnit.MILLISECONDS)
 
   /**
    * Recursively descend the Matchers tree replacing TermMatchers with Terms and removing
@@ -384,8 +389,8 @@ object Query {
   case object DescribeQuery
   case object DeleteQuery
   case object CancelQuery
-  case class EventSet(events: List[BierEvent], finished: Boolean)
-  case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int)
+  case class EventSet(fields: Map[String, FieldIdentifier], events: List[BierEvent], stats: QueryStatistics, finished: Boolean)
+  case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int, runtime: Duration)
   case object NoMoreEvents
   case object FinishedReading
 

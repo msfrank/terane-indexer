@@ -20,24 +20,24 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor.{Props, ActorRef, LoggingFSM}
+import org.joda.time.DateTime
 import org.mapdb.{BTreeKeySerializer, DBMaker}
 import scala.collection.mutable
 import java.io.File
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
+import com.syntaxjockey.terane.indexer.bier.{FieldIdentifier, BierEvent}
 import com.syntaxjockey.terane.indexer.sink.DirectStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
 
-class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) extends LoggingFSM[State,Data] {
+class DirectStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fields: FieldMap) extends Streamer(created, fields) with LoggingFSM[State,Data] {
   import DirectStreamer._
   import Query._
 
   val config = context.system.settings.config
 
-  val ident2index: Map[FieldIdentifier,Int] = fields.fieldsByIdent.keys.zip(0 to fields.fieldsByIdent.size).toMap
   val valueSerializer = new EventSerializer(ident2index)
   val dbfile = new File("temp-" + id)
   val db = DBMaker.newFileDB(dbfile)
@@ -74,8 +74,8 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) exten
     case Event(getEvents: GetEvents, ReceivingEvents(numRead, deferredGetEvents)) =>
       stay() using ReceivingEvents(numRead, deferredGetEvents :+ DeferredGetEvents(sender, getEvents))
 
-    case Event(QueryStatistics(_, created, _, _, _), receivingEvents: ReceivingEvents) =>
-      stay() replying QueryStatistics(id, created, "receiving events", receivingEvents.numRead, 0)
+    case Event(DescribeQuery, receivingEvents: ReceivingEvents) =>
+      stay() replying QueryStatistics(id, created, "receiving events", receivingEvents.numRead, 0, getRuntime)
   }
 
   onTransition {
@@ -103,11 +103,14 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) exten
         for (i <- 0.until(limit.get) if iterator.hasNext) { toSend += iterator.next().getValue }
       else
         while (iterator.hasNext) { toSend += iterator.next().getValue }
-      val batch = EventSet(toSend.toList, if (iterator.hasNext) false else true)
-      stay() using ReceivedEvents(entries, numRead, numQueries + 1, numSent + toSend.length) replying batch
+      val fields: Map[String,FieldIdentifier] = index2ident.map(e => index2key(e._1) -> e._2)
+      val stats = QueryStatistics(id, created, "received events", numRead, numSent, getRuntime)
+      val finished = if (iterator.hasNext) false else true
+      val eventSet = EventSet(fields, toSend.toList, stats, finished)
+      stay() using ReceivedEvents(entries, numRead, numQueries + 1, numSent + toSend.length) replying eventSet
 
-    case Event(QueryStatistics(_, created, _, _, _), receivedEvents: ReceivedEvents) =>
-      stay() replying QueryStatistics(id, created, "received events", receivedEvents.numRead, receivedEvents.numSent)
+    case Event(DescribeQuery, receivedEvents: ReceivedEvents) =>
+      stay() replying QueryStatistics(id, created, "received events", receivedEvents.numRead, receivedEvents.numSent, getRuntime)
   }
 
   initialize()
@@ -122,8 +125,8 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, fields: FieldMap) exten
 
 object DirectStreamer {
 
-  def props(id: UUID, createQuery: CreateQuery, fields: FieldMap) = {
-    Props(classOf[DirectStreamer], id, createQuery, fields)
+  def props(id: UUID, createQuery: CreateQuery, created: DateTime, fields: FieldMap) = {
+    Props(classOf[DirectStreamer], id, createQuery, created, fields)
   }
 
   case class DeferredGetEvents(sender: ActorRef, getEvents: GetEvents)
