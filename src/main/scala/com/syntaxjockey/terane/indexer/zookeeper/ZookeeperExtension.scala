@@ -23,49 +23,8 @@ import akka.actor._
 import org.slf4j.LoggerFactory
 import com.netflix.curator.retry.ExponentialBackoffRetry
 import com.netflix.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
-import com.netflix.curator.framework.state.{ConnectionState, ConnectionStateListener}
-import com.netflix.curator.framework.api.UnhandledErrorListener
 import scala.collection.JavaConversions._
 import java.nio.charset.Charset
-
-class ZookeeperListener extends ConnectionStateListener with UnhandledErrorListener {
-
-  val log = LoggerFactory.getLogger(classOf[ZookeeperListener])
-
-  def stateChanged(client: CuratorFramework, newState: ConnectionState) {
-    log.debug("zookeeper state changed to {}", newState.name())
-  }
-
-  def unhandledError(message: String, reason: Throwable) {
-    log.error("caught unhandled error from zookeeper: {}", message)
-  }
-}
-
-class ZookeeperManager(client: CuratorFramework) extends Actor with ActorLogging {
-
-  val listener = new ZookeeperListener()
-  client.getConnectionStateListenable.addListener(listener)
-  client.getUnhandledErrorListenable.addListener(listener)
-
-  log.debug("started zookeeper manager")
-
-  def receive = {
-    case _ =>
-  }
-
-  override def preRestart(reason: Throwable, message: Option[Any]) {
-    log.warning("restarted zookeeper manager")
-  }
-
-  override def postStop() {
-    client.close()
-    log.debug("stopped zookeeper manager")
-  }
-}
-
-object ZookeeperManager {
-  def props(client: CuratorFramework) = Props(classOf[ZookeeperManager], client)
-}
 
 class ZookeeperExtension(system: ActorSystem) extends Extension {
 

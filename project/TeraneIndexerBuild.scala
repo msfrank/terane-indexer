@@ -9,6 +9,8 @@ object TeraneIndexerBuild extends Build {
   val teraneVersion = "0.1-SNAPSHOT"
   val akkaVersion = "2.2.1"
   val sprayVersion = "1.2-20130712"
+  val astyanaxVersion = "1.56.37"
+  val curatorVersion = "1.3.3"
 
   lazy val teraneIndexerBuild = Project(
     id = "terane-indexer",
@@ -25,10 +27,11 @@ object TeraneIndexerBuild extends Build {
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
         "com.typesafe.akka" %% "akka-agent" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-        "com.netflix.astyanax" % "astyanax-core" % "1.56.37",
-        "com.netflix.astyanax" % "astyanax-thrift" % "1.56.37",
-        "com.netflix.astyanax" % "astyanax-cassandra" % "1.56.37",
-        "com.netflix.curator" % "curator-recipes" % "1.3.3",
+        "com.netflix.astyanax" % "astyanax-core" % astyanaxVersion,
+        "com.netflix.astyanax" % "astyanax-thrift" % astyanaxVersion,
+        "com.netflix.astyanax" % "astyanax-cassandra" % astyanaxVersion,
+        "com.netflix.curator" % "curator-recipes" % curatorVersion,
+        "com.netflix.curator" % "curator-x-discovery" % curatorVersion,
         "io.spray" % "spray-can" % sprayVersion,
         "io.spray" % "spray-routing" % sprayVersion,
         "io.spray" %% "spray-json" % "1.2.4",
@@ -41,7 +44,6 @@ object TeraneIndexerBuild extends Build {
         "com.typesafe" %% "scalalogging-log4j" % "1.0.1",
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",
-        "com.github.nikita-volkov" % "sext" % "0.2.3",
         "org.scalatest" %% "scalatest" % "1.9.1" % "test",
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"
       )
