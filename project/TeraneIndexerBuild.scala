@@ -40,7 +40,7 @@ object TeraneIndexerBuild extends Build {
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",
         "com.twitter" %% "algebird-core" % "0.2.0",
-        "nl.grons" %% "metrics-scala" % "2.2.0",
+        "nl.grons" %% "metrics-scala" % "3.0.3",
         "com.typesafe" %% "scalalogging-log4j" % "1.0.1",
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",

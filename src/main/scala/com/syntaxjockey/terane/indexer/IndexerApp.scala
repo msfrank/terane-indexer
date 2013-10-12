@@ -19,7 +19,7 @@
 
 package com.syntaxjockey.terane.indexer
 
-import akka.actor.{ActorRef, Props, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem}
 import com.typesafe.config._
 import scala.collection.JavaConversions._
 import scala.Some

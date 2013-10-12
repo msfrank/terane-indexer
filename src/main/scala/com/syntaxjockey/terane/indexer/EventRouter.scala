@@ -29,7 +29,7 @@ import com.syntaxjockey.terane.indexer.metadata.{Store, StoreManager}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 
-class EventRouter extends Actor with ActorLogging {
+class EventRouter extends Actor with ActorLogging with Instrumented {
   import EventRouter._
   import StoreManager._
 
