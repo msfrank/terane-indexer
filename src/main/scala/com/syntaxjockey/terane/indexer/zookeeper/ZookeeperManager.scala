@@ -39,10 +39,6 @@ class ZookeeperListener(manager: ActorRef) extends ConnectionStateListener with 
 class ZookeeperManager(client: CuratorFramework) extends Actor with ActorLogging {
   import ZookeeperManager._
 
-  val listener = new ZookeeperListener(self)
-  client.getConnectionStateListenable.addListener(listener)
-  client.getUnhandledErrorListenable.addListener(listener)
-
   log.debug("started zookeeper manager")
 
   def receive = {

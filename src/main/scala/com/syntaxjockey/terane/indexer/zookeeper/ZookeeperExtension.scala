@@ -33,28 +33,31 @@ class ZookeeperExtension(system: ActorSystem) extends Extension {
   val config = system.settings.config.getConfig("terane.zookeeper")
 
   /* configure zookeeper */
-  val retryPolicy = new ExponentialBackoffRetry(
+  private val retryPolicy = new ExponentialBackoffRetry(
     config.getMilliseconds("retry-sleep-time").toInt,
     config.getInt("retry-count"))
   log.debug("retryPolicy = {}", retryPolicy)
 
-  val connectionString = config.getStringList("servers").mkString(",")
+  private val connectionString = config.getStringList("servers").mkString(",")
   log.debug("connectionString = {}", connectionString)
 
-  val namespace = config.getString("namespace")
+  private val namespace = config.getString("namespace")
   log.debug("namespace = {}", namespace)
 
-  val client = CuratorFrameworkFactory.newClient(connectionString, retryPolicy)
+  val client = {
+    val _client = CuratorFrameworkFactory.newClient(connectionString, retryPolicy)
+    log.info("connecting to zookeeper servers {}", connectionString)
+    _client.start()
+    if (config.hasPath("namespace"))
+      _client.usingNamespace(config.getString("namespace"))
+    else _client
+  }
 
   /* create zookeeper manager */
   val manager = system.actorOf(ZookeeperManager.props(client), "zookeeper-manager")
-
-  /* start zookeeper */
-  log.info("connecting to zookeeper servers {}", connectionString)
-  client.start()
-
-  /* root ourselves in the specified namespace */
-  client.usingNamespace(config.getString("namespace"))
+  private val listener = new ZookeeperListener(manager)
+  client.getConnectionStateListenable.addListener(listener)
+  client.getUnhandledErrorListenable.addListener(listener)
 }
 
 object Zookeeper extends ExtensionId[ZookeeperExtension] with ExtensionIdProvider {
@@ -64,6 +67,5 @@ object Zookeeper extends ExtensionId[ZookeeperExtension] with ExtensionIdProvide
   override def lookup() = Zookeeper
   override def createExtension(system: ExtendedActorSystem) = new ZookeeperExtension(system)
 
-  def manager(implicit system: ActorSystem): ActorRef = super.get(system).manager
   def client(implicit system: ActorSystem): CuratorFramework = super.get(system).client
 }

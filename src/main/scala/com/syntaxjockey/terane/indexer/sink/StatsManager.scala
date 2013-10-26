@@ -25,6 +25,7 @@ import com.netflix.astyanax.Keyspace
 
 import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
+import com.syntaxjockey.terane.indexer.zookeeper.Gossiper
 
 /**
  * StatsManager handles store, field and posting statistics, which are used for
@@ -34,6 +35,9 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
   import StatsManager._
   import FieldManager._
   import context.dispatcher
+
+  val servicesPath = "/stores/" + store.name + "/services"
+  val gossiper = context.actorOf(Gossiper.props("stats", servicesPath), "gossip")
 
   var currentStats = StatsMap(Map.empty)
 

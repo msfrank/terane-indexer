@@ -7,7 +7,7 @@ import Keys._
 object TeraneIndexerBuild extends Build {
 
   val teraneVersion = "0.1-SNAPSHOT"
-  val akkaVersion = "2.2.1"
+  val akkaVersion = "2.2.3"
   val sprayVersion = "1.2-20130712"
   val astyanaxVersion = "1.56.37"
   val curatorVersion = "1.3.3"
@@ -25,6 +25,8 @@ object TeraneIndexerBuild extends Build {
       ),
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+        "com.typesafe.akka" %% "akka-remote" % akkaVersion,
+        "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
         "com.typesafe.akka" %% "akka-agent" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "com.netflix.astyanax" % "astyanax-core" % astyanaxVersion,
@@ -40,7 +42,7 @@ object TeraneIndexerBuild extends Build {
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",
         "com.twitter" %% "algebird-core" % "0.2.0",
-        "nl.grons" %% "metrics-scala" % "3.0.3",
+        "nl.grons" %% "metrics-scala" % "3.0.3" excludeAll ExclusionRule(organization = "com.typesafe.akka"),
         "com.typesafe" %% "scalalogging-log4j" % "1.0.1",
         "org.slf4j" % "slf4j-api" % "1.7.5",
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",

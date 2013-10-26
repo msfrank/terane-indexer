@@ -19,13 +19,16 @@
 
 package com.syntaxjockey.terane.indexer
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{AddressFromURIString, ActorRef, ActorSystem}
+import akka.cluster.Cluster
 import com.typesafe.config._
+import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.collection.JavaConversions._
-import scala.Some
+import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
 import com.syntaxjockey.terane.indexer.http.HttpServer
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 
 /**
  * Indexer application entry point
@@ -50,6 +53,25 @@ object IndexerApp extends App {
   val httpApi = if (config.hasPath("terane.http"))
     Some(system.actorOf(HttpServer.props(config.getConfig("terane.http"), eventRouter), "http-api"))
   else None
+
+  /* register as a cluster seed */
+  val selfAddress = Cluster(system).selfAddress
+  val serviceInstance = ServiceInstance.builder[Void]()
+      .name("node")
+      .id(UUID.randomUUID().toString)
+      .address(selfAddress.toString)
+      .build()
+  val serviceDiscovery = ServiceDiscoveryBuilder
+    .builder(classOf[Void])
+    .client(Zookeeper(system).client)
+    .basePath("/services")
+    .thisInstance(serviceInstance)
+    .build()
+  serviceDiscovery.start()
+
+  /* join with seed nodes */
+  val seeds = serviceDiscovery.queryForInstances("node").take(3).map(instance => AddressFromURIString(instance.getAddress))
+  seeds.foreach(seed => Cluster(system).join(seed))
 
   // FIXME: add appropriate shutdown logic
 }
