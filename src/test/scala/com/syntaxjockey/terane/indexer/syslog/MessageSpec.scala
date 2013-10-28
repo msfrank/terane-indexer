@@ -20,30 +20,43 @@
 package com.syntaxjockey.terane.indexer.syslog
 
 import org.scalatest.matchers.MustMatchers
-import org.scalatest.WordSpec
-import akka.util.ByteString
+import org.scalatest.{BeforeAndAfterAll, WordSpec}
+import akka.testkit.{TestActorRef, TestKit}
+import akka.actor.{Props, Actor, ActorLogging, ActorSystem}
 import akka.io.{PipelineFactory, PipelinePorts}
+import akka.util.ByteString
 import org.joda.time.{DateTimeZone, DateTime}
 
-class MessageSpec extends WordSpec with MustMatchers {
+class Blackhole extends Actor with ActorLogging {
+  def receive = { case _ => }
+}
 
-  def runSingleEvent(body: String): Message = {
-    val stages = new ProcessBody()
-    val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(new SyslogContext(), stages)
-    val (messages: Iterable[Message], _) = evt(ByteString(body, "UTF-8"))
-    val messageseq = messages.toSeq
-    messageseq must have length(1)
-    messageseq(0)
+class MessageSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec with MustMatchers with BeforeAndAfterAll {
+
+  def this() = this(ActorSystem("MessageSpec"))
+
+  def runSingleFrame(body: String): Message = {
+    val actor = TestActorRef[Blackhole]
+    val log = actor.underlyingActor.log
+    val ctx = actor.underlyingActor.context
+    val stages = new ProcessFrames()
+    val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, ctx), stages)
+    val (_messages: Iterable[SyslogMessages], _) = evt(SyslogFrames(Seq(ByteString(body, "UTF-8")), ByteString.empty))
+    val messages = _messages.toSeq
+    messages must have length 1
+    messages(0).messages must have length 1
+    messages(0).leftover must be(ByteString.empty)
+    messages(0).messages.head
   }
 
   "The syslog ProcessBody pipeline" must {
 
     "parse a basic version 0 message" in {
-      val message = runSingleEvent("<0> 2012-01-01T12:00:00Z localhost Hello, world!")
+      val message = runSingleFrame("<0> 2012-01-01T12:00:00Z localhost Hello, world!")
     }
 
     "parse a basic version 1 message" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00Z localhost - - - - Hello, world!")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00Z localhost - - - - Hello, world!")
       message.priority.facility must be(0)
       message.priority.severity must be(0)
       message.timestamp must be === new DateTime(2012, 1, 1, 12, 0, 0, 0, DateTimeZone.UTC)
@@ -56,16 +69,16 @@ class MessageSpec extends WordSpec with MustMatchers {
     }
 
     "parse a version 1 message with fractional seconds" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1Z localhost - - - - Hello, world!")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1Z localhost - - - - Hello, world!")
       message.timestamp.getMillisOfSecond must be === 100
     }
 
     "parse a version 1 message with non-UTC timezone" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - - Hello, world!")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - - Hello, world!")
     }
 
     "parse a version 1 message with a single structured data element and a message" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"bar\"] Hello, world!")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"bar\"] Hello, world!")
       val id = SDIdentifier("id", None)
       message.elements must contain key(id)
       val element = message.elements(id)
@@ -74,7 +87,7 @@ class MessageSpec extends WordSpec with MustMatchers {
     }
 
     "parse a version 1 message with a single structured data element and no message" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"bar\"]")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"bar\"]")
       val id = SDIdentifier("id", None)
       message.elements must contain key(id)
       val element = message.elements(id)
@@ -83,7 +96,7 @@ class MessageSpec extends WordSpec with MustMatchers {
     }
 
     "parse a version 1 message with a structured data element which has a reserved identifier" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [reserved foo=\"bar\"]")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [reserved foo=\"bar\"]")
       val id = SDIdentifier("reserved", None)
       message.elements must contain key(id)
       val element = message.elements(id)
@@ -91,7 +104,7 @@ class MessageSpec extends WordSpec with MustMatchers {
     }
 
     "parse a version 1 message with a structured data element which has a non-reserved identifier" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id@31337 foo=\"bar\"]")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id@31337 foo=\"bar\"]")
       val id = SDIdentifier("id", Some("31337"))
       message.elements must contain key(id)
       val element = message.elements(id)
@@ -99,7 +112,7 @@ class MessageSpec extends WordSpec with MustMatchers {
     }
 
     "parse a version 1 message with a structured data element which has escaped characters in the param value" in {
-      val message = runSingleEvent("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"\\] \\\" \\\\ \"]")
+      val message = runSingleFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"\\] \\\" \\\\ \"]")
       val id = SDIdentifier("id", None)
       message.elements must contain key(id)
       val element = message.elements(id)

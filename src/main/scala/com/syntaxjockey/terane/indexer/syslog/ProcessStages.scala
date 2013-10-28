@@ -19,24 +19,29 @@
 
 package com.syntaxjockey.terane.indexer.syslog
 
+import akka.actor.ActorContext
 import akka.io.{SymmetricPipePair, PipelineContext, SymmetricPipelineStage}
-import akka.util.{ByteStringBuilder, ByteIterator, ByteString}
+import akka.io.TcpPipelineHandler.WithinActorContext
+import akka.event.LoggingAdapter
+import akka.util.{ByteIterator, ByteString}
 import org.joda.time.{DateTimeZone, DateTime}
 import org.joda.time.tz.CachedDateTimeZone
 import java.nio.charset.Charset
 
-class SyslogContext extends PipelineContext
-
-object ProcessBody {
-  val US_ASCII_CHARSET = Charset.forName("US-ASCII")
-  val UTF_8_CHARSET = Charset.forName("UTF-8")
+/**
+ * Context when performing pipeline processing.
+ */
+class SyslogContext(logging: LoggingAdapter, context: ActorContext) extends PipelineContext with WithinActorContext {
+  def getLogger = logging
+  def getContext = context
 }
 
-class ProcessBody extends SymmetricPipelineStage[SyslogContext, Message, ByteString] {
+/**
+ * Contains methods common to all processing stages.
+ */
+trait SyslogProcessingOps {
 
-  override def apply(ctx: SyslogContext) = new SymmetricPipePair[Message, ByteString] {
-
-    def getUntil(iterator: ByteIterator, f: (Byte) => Boolean): ByteIterator = {
+  def getUntil(iterator: ByteIterator, f: (Byte) => Boolean): ByteIterator = {
       val child = iterator.clone()
       var n = 0
       while (!f(iterator.head)) {
@@ -51,16 +56,123 @@ class ProcessBody extends SymmetricPipelineStage[SyslogContext, Message, ByteStr
     }
 
     def makeAsciiString(iterator: ByteIterator): String = {
-      new String(iterator.toArray, ProcessBody.US_ASCII_CHARSET)
+      new String(iterator.toArray, SyslogProcessingOps.US_ASCII_CHARSET)
     }
 
     def makeUtf8String(iterator: ByteIterator): String = {
-      new String(iterator.toArray, ProcessBody.UTF_8_CHARSET)
+      new String(iterator.toArray, SyslogProcessingOps.UTF_8_CHARSET)
+    }
+}
+
+object SyslogProcessingOps {
+  val US_ASCII_CHARSET = Charset.forName("US-ASCII")
+  val UTF_8_CHARSET = Charset.forName("UTF-8")
+}
+
+case class SyslogFrames(frames: Seq[ByteString], leftover: ByteString)
+case class SyslogMessages(messages: Seq[Message], leftover: ByteString)
+
+class UnrecoverableProcessingError(cause: Throwable) extends Exception("unrecoverable processing error", cause)
+
+/**
+ * Consume a ByteString containing zero or more framed syslog messages, and emit a
+ * SyslogFrames object containing the frames and any leftover unprocessed data.
+ */
+class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogFrames, ByteString] with SyslogProcessingOps {
+
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogFrames, ByteString] {
+
+    /* we don't process commands */
+    override def commandPipeline = {frames => throw new IllegalArgumentException() }
+
+    /* return the framed messages, or throw UnrecoverableProcessingError */
+    override def eventPipeline = { body: ByteString =>
+      var frames = SyslogFrames(Seq.empty, body)
+      var leftover = body
+      while (!leftover.isEmpty) {
+        try {
+          val iterator = leftover.iterator
+          val msglenString = makeAsciiString(getUntil(iterator, ' '))
+          // process the msglen
+          if (!isNonzeroDigit(msglenString(0).toByte))
+            throw new IllegalArgumentException("msglen must start with a non-zero digit")
+          msglenString.tail.foreach { char =>
+            if (!isDigit(char.toByte))
+              throw new IllegalArgumentException("msglen must consist only of digits")
+          }
+          val msglen = msglenString.toInt
+          iterator.next()
+          val bytesleft = iterator.toByteString
+          // process the frame
+          if (bytesleft.length < msglen) {
+            leftover = ByteString.empty
+            frames = SyslogFrames(frames.frames, bytesleft)
+          } else {
+            val frame = bytesleft.take(msglen)
+            leftover = bytesleft.drop(msglen)
+            frames = SyslogFrames(frames.frames :+ frame, frames.leftover)
+          }
+        } catch {
+          // if the iterator has no more data
+          case ex: NoSuchElementException =>
+            leftover = ByteString.empty
+            frames = SyslogFrames(frames.frames, leftover)
+          // any other exception is considered unrecoverable
+          case ex: Throwable =>
+            throw new UnrecoverableProcessingError(ex)
+        }
+      }
+      ctx.singleEvent(frames)
     }
 
-    override def commandPipeline = {message: Message => throw new IllegalArgumentException() }
-    override def eventPipeline = { body: ByteString =>
-      val iterator = body.iterator
+    def isDigit(byte: Byte): Boolean = byte >= 0x30 && byte <= 0x39
+
+    def isNonzeroDigit(byte: Byte): Boolean = byte >= 0x31 && byte <= 0x39
+  }
+}
+
+/**
+ * Consume a ByteString containing one framed syslog message, and emit a SyslogFrames
+ * object containing the frame.
+ */
+class ProcessUdp extends SymmetricPipelineStage[SyslogContext, SyslogFrames, ByteString] with SyslogProcessingOps {
+
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogFrames, ByteString] {
+
+    /* we don't process commands */
+    override def commandPipeline = {frames => throw new IllegalArgumentException() }
+
+    /* return a singled framed message */
+    override def eventPipeline = { frame: ByteString =>
+      ctx.singleEvent(SyslogFrames(Seq(frame), ByteString.empty))
+    }
+  }
+}
+
+/**
+ * Consume a SyslogFrames object containing a sequence of frames, and emit a SyslogMessages
+ * object containing the corresponding sequence of messages.
+ */
+class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogMessages, SyslogFrames] with SyslogProcessingOps {
+
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogMessages, SyslogFrames] {
+
+    /* we don't process commands */
+    override def commandPipeline = {messages => throw new IllegalArgumentException() }
+
+    /* return messages from a sequence of frames */
+    override def eventPipeline = { case SyslogFrames(frames, leftover) =>
+      try {
+        val messages = frames.map(processFrame)
+        ctx.singleEvent(SyslogMessages(messages, leftover))
+      } catch {
+        case ex: Throwable => throw new UnrecoverableProcessingError(ex)
+      }
+    }
+
+    /* process a single frame */
+    def processFrame(frame: ByteString): Message = {
+      val iterator = frame.iterator
 
       /* process the PRI */
       val priority: Priority = {
@@ -161,7 +273,7 @@ class ProcessBody extends SymmetricPipelineStage[SyslogContext, Message, ByteStr
         } else None
       }
 
-      ctx.singleEvent(Message(hostname, timestamp, priority, elements, appName, procId, msgId, msg))
+      Message(hostname, timestamp, priority, elements, appName, procId, msgId, msg)
     }
 
     def processStructuredData(iterator: ByteIterator): (SDIdentifier, SDElement) = {
@@ -215,7 +327,7 @@ class ProcessBody extends SymmetricPipelineStage[SyslogContext, Message, ByteStr
               bb += '"'
               escaped = false
             } else {
-              val value = new String(bb.result.toArray, "UTF-8")
+              val value = new String(bb.result().toArray, SyslogProcessingOps.UTF_8_CHARSET)
               return value
             }
           case b =>

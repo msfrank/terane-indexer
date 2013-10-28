@@ -24,13 +24,22 @@ import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
 import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import java.net.InetSocketAddress
 
-import com.syntaxjockey.terane.indexer.EventRouter
+import com.syntaxjockey.terane.indexer.{Instrumented, EventRouter}
 
-class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging {
+/**
+ * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
+ * http://tools.ietf.org/html/rfc5424
+ */
+class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging with Instrumented {
   import EventRouter._
   import akka.io.Udp._
   import context.system
 
+  // metrics
+  val messagesReceived = metrics.meter("messages-received", "messages")
+  val messagesDropped = metrics.meter("messages-dropped", "messages")
+
+  // config
   val syslogPort = config.getInt("port")
   val syslogInterface = config.getString("interface")
   val defaultSink = config.getString("use-sink")
@@ -41,8 +50,8 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   log.debug("attempting to bind to {}", localAddr)
   IO(Udp) ! Bind(self, localAddr)
 
-  val stages = new ProcessBody()
-  val PipelinePorts(cmd, evt, mgmt) = PipelineFactory.buildFunctionTriple(new SyslogContext(), stages)
+  val stages = new ProcessFrames() >> new ProcessUdp()
+  val PipelinePorts(cmd, evt, mgmt) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, context), stages)
 
   def receive = {
     case Bound(_localAddr) =>
@@ -52,10 +61,17 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
     case CommandFailed(command) =>
       log.error("{} command failed", command)
     case Received(data, remoteAddr) =>
-      val (messages,_) = evt(data)
-      for (message <- messages) {
-        log.debug("received {}", message)
-        eventRouter ! StoreEvent(defaultSink, message)
+      try {
+        val (events,_) = evt(data)
+        for (event <- events; message <- event.messages) {
+          log.debug("received {}", message)
+          eventRouter ! StoreEvent(defaultSink, message)
+          messagesReceived.mark()
+        }
+      } catch {
+        case ex: UnrecoverableProcessingError =>
+          messagesDropped.mark()
+          log.debug("failed to process UDP message: {}", ex.getCause.getMessage)
       }
   }
 }
