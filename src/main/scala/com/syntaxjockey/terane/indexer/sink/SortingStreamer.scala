@@ -125,7 +125,7 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fie
     case StopEvent(_, _, _) =>
       log.debug("deleting sort file " + dbfile.getAbsolutePath)
       db.close()
-      dbfile.delete()
+      dbfile.delete()   // FIXME: file doesn't seem to get deleted
   }
 
   def makeKey(event: BierEvent): EventKey = {

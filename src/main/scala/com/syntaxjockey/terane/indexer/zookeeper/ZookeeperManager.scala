@@ -63,7 +63,7 @@ class ZookeeperManager(client: CuratorFramework) extends Actor with ActorLogging
 
 object ZookeeperManager {
   def props(client: CuratorFramework) = Props(classOf[ZookeeperManager], client)
-
-  case class StateChanged(newState: ConnectionState)
-  case class UnhandledError(message: String, reason: Throwable)
 }
+
+case class StateChanged(newState: ConnectionState)
+case class UnhandledError(message: String, reason: Throwable)

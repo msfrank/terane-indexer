@@ -19,16 +19,24 @@
 
 package com.syntaxjockey.terane.indexer.zookeeper
 
-import akka.actor.{Props, ActorRef, ActorLogging, Actor}
+import akka.actor._
 import akka.cluster.Cluster
 import com.netflix.curator.framework.CuratorFramework
 import com.netflix.curator.framework.state.ConnectionState
-import com.netflix.curator.x.discovery.{ServiceInstance, ServiceDiscoveryBuilder}
+import com.netflix.curator.x.discovery.{ServiceCache, ServiceInstance, ServiceDiscoveryBuilder}
 import com.netflix.curator.x.discovery.details.ServiceCacheListener
+import scala.concurrent.duration.Duration
+import scala.collection.JavaConversions._
 import java.util.UUID
 
-class Gossiper(gossipType: String, servicesPath: String) extends Actor with ActorLogging {
+/**
+ * Gossiper is responsible for disseminating gossip information from the parent actor
+ * to all registered peers of the same gossipType in the specified zookeeper services path
+ */
+class Gossiper(gossipType: String, servicesPath: String, interval: Duration) extends Actor with ActorLogging {
+  import Gossiper._
 
+  /* */
   val selfAddress = Cluster(context.system).selfAddress
   val serviceInstance = ServiceInstance.builder[Void]()
       .name(gossipType)
@@ -47,23 +55,53 @@ class Gossiper(gossipType: String, servicesPath: String) extends Actor with Acto
 
   /* start the service cache */
   val serviceCache = serviceDiscovery.serviceCacheBuilder().name(gossipType).build()
-  serviceCache.addListener(new GossipServiceListener(self))
+  serviceCache.addListener(new GossipServiceListener(serviceCache, self))
   serviceCache.start()
 
+  var currentPeers = GossipPeers(Seq.empty)
+  var currentData: Option[Serializable] = None
+
   def receive = {
-    case _ =>
+
+    case PeersChanged =>
+      log.debug("gossip peers changed")
+      currentPeers = GossipPeers(serviceCache.getInstances.map(instance => context.actorSelection(instance.getAddress)))
+
+    /* peer gossip */
+    case GossipPayload(gossip) =>
+      log.debug("received gossip payload from {}", sender.toString())
+      context.parent ! gossip
+
+    case Gossip(data) =>
+
+    /* connection state changed */
+    case StateChanged(state) =>
+      log.debug("noticed connection state change")
+  }
+
+  override def postStop() {
+    serviceCache.close()
+    serviceDiscovery.close()
   }
 }
 
 object Gossiper {
   def props(gossipType: String, servicesPath: String) = Props(classOf[Gossiper], gossipType, servicesPath)
+
+  case class GossipPayload(gossip: Gossip)
+  case class GossipPeers(peers: Seq[ActorSelection])
+  case object SendGossip
+  case object PeersChanged
 }
 
-class GossipServiceListener(manager: ActorRef) extends ServiceCacheListener {
-  def cacheChanged() {
+case class Gossip(data: Serializable)
 
+class GossipServiceListener(cache: ServiceCache[Void], manager: ActorRef) extends ServiceCacheListener {
+  import Gossiper._
+  def cacheChanged() {
+    manager ! PeersChanged
   }
   def stateChanged(client: CuratorFramework, state: ConnectionState) {
-
+    manager ! StateChanged(state)
   }
 }

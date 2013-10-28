@@ -22,7 +22,7 @@ package com.syntaxjockey.terane.indexer.syslog
 import org.scalatest.matchers.MustMatchers
 import org.scalatest.{BeforeAndAfterAll, WordSpec}
 import akka.testkit.{TestActorRef, TestKit}
-import akka.actor.{Props, Actor, ActorLogging, ActorSystem}
+import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.io.{PipelineFactory, PipelinePorts}
 import akka.util.ByteString
 import org.joda.time.{DateTimeZone, DateTime}
