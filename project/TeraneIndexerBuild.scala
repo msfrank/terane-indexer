@@ -21,7 +21,8 @@ object TeraneIndexerBuild extends Build {
       version := teraneVersion,
       scalaVersion := "2.10.2",
       resolvers ++= Seq(
-        "spray repo" at "http://nightlies.spray.io"
+        "spray repo" at "http://repo.spray.io",
+        "spray nightlies" at "http://nightlies.spray.io"
       ),
       libraryDependencies ++= Seq(
         "com.typesafe.akka" %% "akka-actor" % akkaVersion,
@@ -36,8 +37,8 @@ object TeraneIndexerBuild extends Build {
         "com.netflix.curator" % "curator-x-discovery" % curatorVersion,
         "io.spray" % "spray-can" % sprayVersion,
         "io.spray" % "spray-routing" % sprayVersion,
-        "io.spray" %% "spray-json" % "1.2.4",
-        "org.mapdb" % "mapdb" % "0.9.5",
+        "io.spray" %% "spray-json" % "1.2.5",
+        "org.mapdb" % "mapdb" % "0.9.7",
         "joda-time" % "joda-time" % "2.2",
         "org.joda" % "joda-convert" % "1.3.1",
         "dnsjava" % "dnsjava" % "2.1.1",
