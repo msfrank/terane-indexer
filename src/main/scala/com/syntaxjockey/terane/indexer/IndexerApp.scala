@@ -26,7 +26,7 @@ import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance
 import scala.collection.JavaConversions._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.syslog.SyslogUdpSource
+import com.syntaxjockey.terane.indexer.syslog.{SyslogTcpSource, SyslogUdpSource}
 import com.syntaxjockey.terane.indexer.http.HttpServer
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 
@@ -44,9 +44,18 @@ object IndexerApp extends App {
   /* start the sources */
   val sources: Seq[ActorRef] = if (config.hasPath("terane.sources"))
     config.getConfig("terane.sources").root()
-      .filter { entry => entry._2.valueType() == ConfigValueType.OBJECT }
-      .map { entry => system.actorOf(SyslogUdpSource.props(entry._2.asInstanceOf[ConfigObject].toConfig, eventRouter), "source-" + entry._1)
-    }.toSeq
+      .filter { case (name: String, configValue: ConfigValue) => configValue.valueType() == ConfigValueType.OBJECT }
+      .map { case (name: String, configValue: ConfigValue) =>
+        val source = configValue.asInstanceOf[ConfigObject].toConfig
+        source.getString("source-type") match {
+          case "udp" =>
+            system.actorOf(SyslogUdpSource.props(source, eventRouter), "source-" + name)
+          case "tcp" =>
+            system.actorOf(SyslogTcpSource.props(source, eventRouter), "source-" + name)
+          case other =>
+            throw new Exception("unknown source-type " + other)
+        }
+      }.toSeq
   else Seq.empty
 
   /* start the api */

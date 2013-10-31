@@ -110,7 +110,7 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogFrames, Byt
           } else {
             val frame = bytesleft.take(msglen)
             leftover = bytesleft.drop(msglen)
-            frames = SyslogFrames(frames.frames :+ frame, frames.leftover)
+            frames = SyslogFrames(frames.frames :+ frame, leftover)
           }
         } catch {
           // if the iterator has no more data
