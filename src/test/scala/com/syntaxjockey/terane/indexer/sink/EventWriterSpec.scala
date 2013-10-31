@@ -46,11 +46,6 @@ import akka.agent.Agent
 class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with MustMatchers with BeforeAndAfter with BeforeAndAfterAll {
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  // shutdown the actor system
-  override def afterAll() {
-    TestKit.shutdownActorSystem(system)
-  }
-
   /**
    * create a fixture with a new cassandra keyspace for testing
    *

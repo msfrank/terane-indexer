@@ -19,9 +19,8 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.testkit.{ImplicitSender, TestKit}
-import akka.actor.{ActorRef, Actor, Props, ActorSystem}
-import org.scalatest.{BeforeAndAfterAll, WordSpec}
+import akka.actor.{ActorRef, Actor, Props}
+import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 import org.joda.time.{DateTimeZone, DateTime}
 import scala.Some
@@ -32,13 +31,9 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink.Query._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
+import com.syntaxjockey.terane.indexer.TestCluster
 
-class SortingStreamerSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfterAll {
-
-  def this() = this(ActorSystem("SortingStreamerSpec"))
-
-  override def afterAll() { system.shutdown() }
-
+class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSpec with MustMatchers {
 
   "A SortingStreamer" must {
 

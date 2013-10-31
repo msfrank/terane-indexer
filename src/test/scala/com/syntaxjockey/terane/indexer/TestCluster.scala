@@ -19,10 +19,10 @@
 
 package com.syntaxjockey.terane.indexer
 
-import org.scalatest.Tag
+import org.scalatest.{Suite, BeforeAndAfterAll, Tag}
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.Config
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.netflix.astyanax.{Cluster, Keyspace}
@@ -35,21 +35,21 @@ import com.syntaxjockey.terane.indexer.cassandra._
 import com.syntaxjockey.terane.indexer.zookeeper._
 import com.syntaxjockey.terane.indexer.sink.CassandraField
 
-abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with ImplicitSender {
+abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with Suite with BeforeAndAfterAll {
   import TestCluster._
 
-  def this(actorSystemName: String) = this(ActorSystem(actorSystemName, ConfigFactory.parseString(
-    """
-      |terane {
-      |  cassandra {
-      |    connection-pool-name = "Default Connection Pool"
-      |    port = 9160
-      |    max-conns-per-host = 1
-      |    seeds = [ "127.0.0.1:9160" ]
-      |    cluster-name = "Default Cluster"
-      |  }
-      |}
-    """.stripMargin)))
+  def this(actorSystemName: String, config: Config) = this(ActorSystem(actorSystemName, config))
+
+  def this(actorSystemName: String, composableConfig: ComposableConfig) = this(ActorSystem(actorSystemName, composableConfig.config))
+
+  def this(actorSystemName: String, mergedConfig: MergedConfig) = this(ActorSystem(actorSystemName, mergedConfig.config))
+
+  def this(actorSystemName: String) = this(ActorSystem(actorSystemName, (AkkaConfig ++ CassandraConfig ++ ZookeeperConfig).config))
+
+  // shutdown the actor system
+  override def afterAll() {
+    TestKit.shutdownActorSystem(system)
+  }
 
   val textId = FieldIdentifier("text_field", DataType.TEXT)
   val textCf = new TypedFieldColumnFamily(textId.fieldName, "text_field", 0, new TextField(),

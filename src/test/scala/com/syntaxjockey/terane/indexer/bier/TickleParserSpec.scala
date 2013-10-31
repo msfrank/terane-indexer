@@ -20,28 +20,19 @@
 package com.syntaxjockey.terane.indexer.bier
 
 import org.scalatest.matchers.MustMatchers
-import org.scalatest.{BeforeAndAfterAll, WordSpec}
+import org.scalatest.WordSpec
 import org.scalatest.Inside._
-import akka.actor.ActorSystem
-import akka.testkit.{ImplicitSender, TestKit}
 import org.joda.time.{DateTimeZone, DateTime}
-import org.xbill.DNS.{Name, Address => DNSAddress}
+import org.xbill.DNS.{Address => DNSAddress}
 import scala.Some
 import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
+import com.syntaxjockey.terane.indexer.TestCluster
 
-class TickleParserSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpec with MustMatchers with BeforeAndAfterAll {
-
-  // magic
-  def this() = this(ActorSystem("TickleParserSpec"))
-
-  // shutdown the actor system
-  override def afterAll() {
-    TestKit.shutdownActorSystem(system)
-  }
+class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec with MustMatchers {
 
   val params = TickleParserParams("fieldname")
 

@@ -33,14 +33,9 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.{Matchers, TestTermMatcher}
 import com.syntaxjockey.terane.indexer.bier.Matchers.{MatchResult, NoMoreMatches, Posting}
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
+import com.syntaxjockey.terane.indexer.TestCluster
 
-class OrMatcherSpec(_system: ActorSystem) extends TestKit(_system) with WordSpec with MustMatchers with BeforeAndAfterAll {
-
-  def this() = this(ActorSystem("OrMatcherSpec"))
-
-  override def afterAll() {
-    system.shutdown()
-  }
+class OrMatcherSpec extends TestCluster("OrMatcherSpec") with WordSpec with MustMatchers {
 
   val ids = Seq(
     UUID.randomUUID(),
