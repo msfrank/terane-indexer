@@ -22,6 +22,7 @@ package com.syntaxjockey.terane.indexer.sink
 import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import akka.agent.Agent
 import com.netflix.astyanax.Keyspace
+import scala.concurrent.duration._
 
 import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
@@ -37,7 +38,7 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
   import context.dispatcher
 
   val servicesPath = "/stores/" + store.name + "/services"
-  val gossiper = context.actorOf(Gossiper.props("stats", servicesPath), "gossip")
+  val gossiper = context.actorOf(Gossiper.props("stats", servicesPath, 60.seconds), "gossip")
 
   var currentStats = StatsMap(Map.empty)
 

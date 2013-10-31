@@ -86,7 +86,7 @@ class Gossiper(gossipType: String, servicesPath: String, interval: Duration) ext
 }
 
 object Gossiper {
-  def props(gossipType: String, servicesPath: String) = Props(classOf[Gossiper], gossipType, servicesPath)
+  def props(gossipType: String, servicesPath: String, interval: Duration) = Props(classOf[Gossiper], gossipType, servicesPath, interval)
 
   case class GossipPayload(gossip: Gossip)
   case class GossipPeers(peers: Seq[ActorSelection])
