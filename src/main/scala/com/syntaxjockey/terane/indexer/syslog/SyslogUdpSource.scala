@@ -21,6 +21,7 @@ package com.syntaxjockey.terane.indexer.syslog
 
 import com.typesafe.config.Config
 import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
+import akka.io.Udp.{Bind, CommandFailed, Bound, Received}
 import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import java.net.InetSocketAddress
 
@@ -32,7 +33,6 @@ import com.syntaxjockey.terane.indexer.{Instrumented, EventRouter}
  */
 class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging with Instrumented {
   import EventRouter._
-  import akka.io.Udp._
   import context.system
 
   // metrics
@@ -61,17 +61,18 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
     case CommandFailed(command) =>
       log.error("{} command failed", command)
     case Received(data, remoteAddr) =>
-      try {
-        val (events,_) = evt(data)
-        for (event <- events; message <- event.messages) {
-          log.debug("received {}", message)
-          eventRouter ! StoreEvent(defaultSink, message)
-          messagesReceived.mark()
+      val (events,_) = evt(data)
+      for (event <- events) {
+        event match {
+          case message: Message =>
+            log.debug("received {}", message)
+            eventRouter ! StoreEvent(defaultSink, message)
+            messagesReceived.mark()
+          case failure: SyslogFailure =>
+            messagesDropped.mark()
+            log.debug("failed to process UDP message: {}", failure.getCause.getMessage)
+          case _ => // ignore other events
         }
-      } catch {
-        case ex: UnrecoverableProcessingError =>
-          messagesDropped.mark()
-          log.debug("failed to process UDP message: {}", ex.getCause.getMessage)
       }
   }
 }

@@ -110,7 +110,7 @@ case class Message(
   appName: Option[String] = None,
   procId: Option[String] = None,
   msgId: Option[String] = None,
-  message: Option[String] = None) {
+  message: Option[String] = None) extends SyslogEvent {
 
   override def toString: String = {
     val sb = new StringBuilder()

@@ -48,9 +48,9 @@ object IndexerApp extends App {
       .map { case (name: String, configValue: ConfigValue) =>
         val source = configValue.asInstanceOf[ConfigObject].toConfig
         source.getString("source-type") match {
-          case "udp" =>
+          case "syslog-udp" =>
             system.actorOf(SyslogUdpSource.props(source, eventRouter), "source-" + name)
-          case "tcp" =>
+          case "syslog-tcp" =>
             system.actorOf(SyslogTcpSource.props(source, eventRouter), "source-" + name)
           case other =>
             throw new Exception("unknown source-type " + other)
