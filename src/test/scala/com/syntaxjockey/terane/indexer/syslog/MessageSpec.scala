@@ -32,11 +32,11 @@ import com.syntaxjockey.terane.indexer.TestCluster
 
 class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatchers {
 
-  def makeContext: SyslogContext = {
+  def makeContext(maxMessageSize: Option[Int] = None): SyslogContext = {
     val actor = TestActorRef[Blackhole]
     val log = actor.underlyingActor.log
     val ctx = actor.underlyingActor.context
-    new SyslogContext(log, ctx)
+    new SyslogContext(log, ctx, maxMessageSize)
   }
 
   def runFrame(body: String): SyslogEvent = {
@@ -68,7 +68,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
   "The ProcessUdp pipeline" must {
 
     "parse a message" in {
-      val events = runUdp("<0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext)
+      val events = runUdp("<0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext())
       events must have length 1
     }
   }
@@ -76,20 +76,20 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
   "The ProcessTcp pipeline" must {
     
     "parse a single length-prefixed message" in {
-      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext)
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext())
       events must have length 1
       events(0).isInstanceOf[Message] must be(true)
     }
 
     "parse multiple length-prefixed messages" in {
-      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...", makeContext)
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...", makeContext())
       events must have length 2
       events(0).isInstanceOf[Message] must be(true)
       events(1).isInstanceOf[Message] must be(true)
     }
 
     "parse multiple length-prefixed messages with trailing incomplete data" in {
-      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...54 <0> 2012-01-01T12:", makeContext)
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...54 <0> 2012-01-01T12:", makeContext())
       events must have length 3
       events(0).isInstanceOf[Message] must be(true)
       events(1).isInstanceOf[Message] must be(true)
@@ -97,18 +97,24 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     }
 
     "parse an incomplete message" in {
-      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello", makeContext)
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello", makeContext())
       events must have length 1
       events(0) must be(SyslogIncomplete)
     }
 
     "parse a fragmented message" in {
-      val context = makeContext
+      val context = makeContext()
       runTcp("48 <0> 2012-01-01T12:00:00Z local", context) must be(Seq(SyslogIncomplete))
       runTcp("host Hello", context) must be(Seq(SyslogIncomplete))
       val events = runTcp(", world!", context)
       events must have length 1
       events(0).isInstanceOf[Message] must be(true)
+    }
+
+    "return failure if message is too large" in {
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext(Some(10)))
+      events must have length 1
+      events(0).isInstanceOf[SyslogFailure] must be(true)
     }
   }
 

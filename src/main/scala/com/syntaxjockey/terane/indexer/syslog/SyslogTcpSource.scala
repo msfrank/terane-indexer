@@ -6,12 +6,12 @@ import akka.io.TcpPipelineHandler.Init
 import akka.event.LoggingAdapter
 import com.typesafe.config.Config
 import scala.concurrent.duration._
+import java.util.concurrent.TimeUnit
 import java.net.InetSocketAddress
 import javax.net.ssl.SSLContext
 
 import com.syntaxjockey.terane.indexer.syslog.SyslogPipelineHandler.SyslogInit
 import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
-import java.util.concurrent.TimeUnit
 
 /**
  * Actor implementing the syslog protocol over TCP in accordance with RFC6587:
@@ -30,6 +30,8 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   val syslogInterface = config.getString("interface")
   val enableTls = if (config.hasPath("enable-tls")) config.getBoolean("enable-tls") else false
   val idleTimeout = if (config.hasPath("idle-timeout")) Some(Duration(config.getMilliseconds("idle-timeout"), TimeUnit.MILLISECONDS)) else None
+  val maxMessageSize = if (config.hasPath("max-message-size")) Some(config.getInt("max-message-size")) else None
+  val maxConnections = if (config.hasPath("max-connections")) Some(config.getInt("max-connections")) else None
   val defaultSink = config.getString("use-sink")
   val allowSinkRouting = config.getBoolean("allow-sink-routing")
   val allowSinkCreate = config.getBoolean("allow-sink-creation")
@@ -48,6 +50,9 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
       case unknown => throw new Exception("unknown tls-client auth mode '%s'".format(unknown))
     }
   } else "requested"
+
+  // state
+  var connections: Set[ActorRef] = Set.empty
 
   // if tls is enabled, then create an SSLContext
   val sslContext: Option[SSLContext] = if (enableTls) {
@@ -86,32 +91,44 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
 
     case Connected(remote, local) =>
       val connection = sender
-      val stages = sslContext match {
-        case Some(ctx) =>
-          val sslEngine = ctx.createSSLEngine()
-          sslEngine.setUseClientMode(false)
-          tlsClientAuth match {
-            case "required" => sslEngine.setNeedClientAuth(true)
-            case "requested" => sslEngine.setWantClientAuth(true)
-            case "ignored" =>
-            case default => sslEngine.setWantClientAuth(true)
+      maxConnections match {
+        case Some(_maxConnections) if connections.size == _maxConnections =>
+          val handler = context.actorOf(ImmediateCloseHandler.props(connection))
+          connection ! Tcp.Register(handler)
+        case _ =>
+          val stages = sslContext match {
+            case Some(ctx) =>
+              val sslEngine = ctx.createSSLEngine()
+              sslEngine.setUseClientMode(false)
+              tlsClientAuth match {
+                case "required" => sslEngine.setNeedClientAuth(true)
+                case "requested" => sslEngine.setWantClientAuth(true)
+                case "ignored" =>
+                case default => sslEngine.setWantClientAuth(true)
+              }
+              new ProcessFrames() >>
+                new ProcessTcp() >>
+                new TcpReadWriteAdapter() >>
+                new SslTlsSupport(sslEngine) >>
+                new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
+            case None =>
+              new ProcessFrames() >>
+                new ProcessTcp() >>
+                new TcpReadWriteAdapter() >>
+                new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
           }
-          new ProcessFrames() >>
-          new ProcessTcp() >>
-          new TcpReadWriteAdapter() >>
-          new SslTlsSupport(sslEngine) >>
-          new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
-        case None =>
-          new ProcessFrames() >>
-          new ProcessTcp() >>
-          new TcpReadWriteAdapter() >>
-          new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
+          val init = SyslogPipelineHandler.init(log, stages, maxMessageSize)
+          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, defaultSink, idleTimeout))
+          val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler))
+          connection ! Tcp.Register(pipeline)   // FIXME: enable keepOpenOnPeerClosed?
+          context.watch(handler)
+          connections = connections + handler
+          log.debug("connection from {} is registered to handler {}", remote, handler)
       }
-      val init = SyslogPipelineHandler.init(log, stages)
-      val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, defaultSink, idleTimeout), "handler")
-      val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler), "pipeline")
-      connection ! Tcp.Register(pipeline)   // FIXME: enable keepOpenOnPeerClosed?
-      log.debug("registered connection from {}", remote)
+
+    case Terminated(handler) =>
+      connections = connections - handler
+      log.debug("handler {} is unregistered", handler)
   }
 }
 
@@ -120,10 +137,25 @@ object SyslogTcpSource {
 }
 
 /**
- *
- * @param init
- * @param conn
- * @param handler
+ * Accept the TCP connection, then immediately close with a RST.
+ */
+class ImmediateCloseHandler(connection: ActorRef) extends Actor with ActorLogging {
+  import Tcp.{Abort, ConnectionClosed}
+  connection ! Abort
+  def receive = {
+    case _: ConnectionClosed =>
+      log.debug("connection is closed")
+      context.stop(self)
+    case _ =>
+  }
+}
+
+object ImmediateCloseHandler {
+  def props(connection: ActorRef) = Props(classOf[ImmediateCloseHandler], connection)
+}
+
+/**
+ * actor responsible for running data through the pipeline specified in SyslogInit.
  */
 class SyslogPipelineHandler(init: SyslogInit, conn: ActorRef, handler: ActorRef) extends TcpPipelineHandler[SyslogContext,SyslogEvent,SyslogEvent](init, conn, handler)
 
@@ -132,20 +164,15 @@ object SyslogPipelineHandler {
   type SyslogInit = Init[SyslogContext, SyslogEvent, SyslogEvent]
   type SyslogPipelineStage = PipelineStage[SyslogContext, SyslogEvent, Tcp.Command, SyslogEvent, Tcp.Event]
 
-  def init(log: LoggingAdapter, stages: SyslogPipelineStage): SyslogInit = {
+  def init(log: LoggingAdapter, stages: SyslogPipelineStage, maxMessageSize: Option[Int]): SyslogInit = {
     new SyslogInit(stages) {
-      override def makeContext(ctx: ActorContext): SyslogContext = new SyslogContext(log, ctx)
+      override def makeContext(ctx: ActorContext): SyslogContext = new SyslogContext(log, ctx, maxMessageSize)
     }
   }
 }
 
 /**
- *
- * @param init
- * @param connection
- * @param eventRouter
- * @param defaultSink
- * @param idleTimeout
+ * actor responsible for managing events from a single TCP connection.
  */
 class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) extends Actor with SyslogReceiver with ActorLogging {
   import init._

@@ -31,9 +31,8 @@ import java.nio.charset.Charset
 /**
  * Context when performing pipeline processing.
  */
-class SyslogContext(logging: LoggingAdapter, context: ActorContext) extends PipelineContext with WithinActorContext {
+class SyslogContext(logging: LoggingAdapter, context: ActorContext, val maxMessageSize: Option[Int] = None) extends PipelineContext with WithinActorContext {
   var leftover = ByteString.empty
-
   def getLogger = logging
   def getContext = context
 }
@@ -109,13 +108,15 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
           val msglenString = makeAsciiString(getUntil(iterator, ' '))
           // process the msglen
           if (!isNonzeroDigit(msglenString(0).toByte))
-            throw new IllegalArgumentException("msglen must start with a non-zero digit")
+            throw new IllegalArgumentException("MSG-LEN must start with a non-zero digit")
           msglenString.tail.foreach { char =>
             if (!isDigit(char.toByte))
-              throw new IllegalArgumentException("msglen must consist only of digits")
+              throw new IllegalArgumentException("MSG-LEN must consist only of digits")
           }
           iterator.next()
           val msglen = msglenString.toInt
+          for (maxMessageSize <- ctx.maxMessageSize if msglen > maxMessageSize)
+            throw new IllegalArgumentException("MSG-LEN too large")
           val bytesleft = iterator.toByteString
           // process the frame
           if (bytesleft.length < msglen) {
