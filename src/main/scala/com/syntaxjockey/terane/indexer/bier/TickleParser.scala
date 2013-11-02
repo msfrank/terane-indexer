@@ -25,12 +25,24 @@ import org.xbill.DNS.{Name, Address => DNSAddress}
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{EveryMatcher, OrMatcher, AndMatcher, NotMatcher}
+import akka.event.slf4j.Logger
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
  * Tickle EBNF Grammar
  */
 trait TickleParser extends JavaTokenParsers {
   import TickleParser._
+
+  val logger: Logger
+  
+  /* shamelessly copied from Parsers.scala */
+  def _log[T](p: => Parser[T])(name: String): Parser[T] = Parser { in =>
+    logger.debug("trying " + name + " at "+ in)
+    val r = p(in)
+    logger.debug(name + " --> " + r)
+    r
+  }
 
   /*
    * <RawValue>     ::= <RawText> | <RawLiteral> | <RawFloat> | <RawInteger> | <RawDatetime> | <RawHostname>
@@ -45,19 +57,19 @@ trait TickleParser extends JavaTokenParsers {
   /* raw and shorthand types */
   val bareText: Parser[TargetText] = ident ^^ { TargetText }
   val quotedText: Parser[TargetText] = stringLiteral ^^ { value => TargetText(value.tail.init) }
-  val rawText: Parser[TargetValue] = log(bareText | quotedText)("rawText")
+  val rawText: Parser[TargetValue] = _log(bareText | quotedText)("rawText")
 
-  val rawLiteral: Parser[TargetValue] = log(regex("""'\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("rawLiteral") ^^ { value => TargetLiteral(value.tail) }
+  val rawLiteral: Parser[TargetValue] = _log(regex("""'\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("rawLiteral") ^^ { value => TargetLiteral(value.tail) }
 
-  val rawNumber: Parser[TargetValue] = log(decimalNumber | wholeNumber)("rawNumber") ^^ {
+  val rawNumber: Parser[TargetValue] = _log(decimalNumber | wholeNumber)("rawNumber") ^^ {
     case number if number.contains('.') => TargetFloat(number)
     case number => TargetInteger(number)
   }
 
   /* see http://stackoverflow.com/questions/3143070/javascript-regex-iso-datetime*/
-  val rawDatetime: Parser[TargetValue] = log(regex("""\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(Z|(\+-)\d\d:\d\d)""".r))("rawDatetime") ^^ { TargetDatetime }
+  val rawDatetime: Parser[TargetValue] = _log(regex("""\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(Z|(\+-)\d\d:\d\d)""".r))("rawDatetime") ^^ { TargetDatetime }
 
-  val rawLocation: Parser[Any] = log(regex("""@\S+""".r))("rawLocation") ^^ {
+  val rawLocation: Parser[Any] = _log(regex("""@\S+""".r))("rawLocation") ^^ {
     case value: String =>
       val location = value.tail
       // try to parse as an IPv4 or IPv6 address
@@ -131,13 +143,13 @@ trait TickleParser extends JavaTokenParsers {
    */
 
   /* subject is a java token starting with a ':' */
-  val subject: Parser[String] = log(regex(""":\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("subject") ^^ { _.tail }
+  val subject: Parser[String] = _log(regex(""":\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("subject") ^^ { _.tail }
 
   /* bare target is just a value without field name or type */
-  val bareTarget: Parser[Expression] = log(targetValue)("bareTarget") ^^ { case target => Expression(None, PredicateEquals(target)) }
+  val bareTarget: Parser[Expression] = _log(targetValue)("bareTarget") ^^ { case target => Expression(None, PredicateEquals(target)) }
 
   /* a range with a start and an end */
-  val closedRange: Parser[TargetRange] = log(regex("[\\[{]".r) ~ targetValue ~ literal("TO") ~ targetValue ~ regex("[}\\]]".r))("targetRange") ^^ {
+  val closedRange: Parser[TargetRange] = _log(regex("[\\[{]".r) ~ targetValue ~ literal("TO") ~ targetValue ~ regex("[}\\]]".r))("targetRange") ^^ {
     case openBrace ~ valueStart ~ "TO" ~ valueEnd ~ closeBrace if valueStart.dataType == valueEnd.dataType =>
       val startExcl = if (openBrace == "{")  true else false
       val endExcl = if (closeBrace == "}")  true else false
@@ -145,7 +157,7 @@ trait TickleParser extends JavaTokenParsers {
   }
 
   /* a range with either a start or an end, but not both */
-  val openRange: Parser[TargetRange] = log(regex("[\\[{]".r) ~ (literal("TO") ~ targetValue | targetValue ~ literal("TO")) ~ regex("[}\\]]".r))("targetRange") ^^ {
+  val openRange: Parser[TargetRange] = _log(regex("[\\[{]".r) ~ (literal("TO") ~ targetValue | targetValue ~ literal("TO")) ~ regex("[}\\]]".r))("targetRange") ^^ {
     case openBrace ~ ((valueStart: TargetValue) ~ "TO") ~ closeBrace =>
       val startExcl = if (openBrace == "{")  true else false
       val endExcl = if (closeBrace == "}")  true else false
@@ -159,34 +171,34 @@ trait TickleParser extends JavaTokenParsers {
   val targetRange: Parser[TargetRange] = closedRange | openRange
 
   /* target expression has a field name, operator, and value */
-  def equals: Parser[Expression] = log(subject ~ literal("=") ~ (targetRange | targetValue))("equals") ^^ {
+  def equals: Parser[Expression] = _log(subject ~ literal("=") ~ (targetRange | targetValue))("equals") ^^ {
     case name ~ "=" ~ (value: TargetRange) => Expression(Some(name), PredicateEqualsRange(value))
     case name ~ "=" ~ (value: TargetValue) => Expression(Some(name), PredicateEquals(value))
   }
-  def notEquals: Parser[Expression] = log(subject ~ literal("!=") ~ (targetRange | targetValue))("notEquals") ^^ {
+  def notEquals: Parser[Expression] = _log(subject ~ literal("!=") ~ (targetRange | targetValue))("notEquals") ^^ {
     case name ~ "!=" ~ (value: TargetRange) => Expression(Some(name), PredicateNotEqualsRange(value))
     case name ~ "!=" ~ (value: TargetValue) => Expression(Some(name), PredicateNotEquals(value))
   }
-  def greaterThan: Parser[Expression] = log(subject ~ literal(">") ~ targetValue)("greaterThan") ^^ {
+  def greaterThan: Parser[Expression] = _log(subject ~ literal(">") ~ targetValue)("greaterThan") ^^ {
     case name ~ ">" ~ value => Expression(Some(name), PredicateGreaterThan(value))
   }
-  def lessThan: Parser[Expression] = log(subject ~ literal("<") ~ targetValue)("lessThan") ^^ {
+  def lessThan: Parser[Expression] = _log(subject ~ literal("<") ~ targetValue)("lessThan") ^^ {
     case name ~ "<" ~ value => Expression(Some(name), PredicateLessThan(value))
   }
-  def greaterThanEquals: Parser[Expression] = log(subject ~ literal(">=") ~ targetValue)("greaterThanEquals") ^^ {
+  def greaterThanEquals: Parser[Expression] = _log(subject ~ literal(">=") ~ targetValue)("greaterThanEquals") ^^ {
     case name ~ ">=" ~ value => Expression(Some(name), PredicateGreaterThanEqualTo(value))
   }
-  def lessThanEquals: Parser[Expression] = log(subject ~ literal("<=") ~ targetValue)("lessThanEquals") ^^ {
+  def lessThanEquals: Parser[Expression] = _log(subject ~ literal("<=") ~ targetValue)("lessThanEquals") ^^ {
     case name ~ "<=" ~ value => Expression(Some(name), PredicateLessThanEqualTo(value))
   }
-  def function: Parser[Expression] = log(subject ~ literal("->") ~ ident ~ literal("(") ~ rep(targetValue) ~ literal(")"))("function") ^^ {
+  def function: Parser[Expression] = _log(subject ~ literal("->") ~ ident ~ literal("(") ~ rep(targetValue) ~ literal(")"))("function") ^^ {
     case name ~ "->" ~ functionName ~ "(" ~ functionArgs ~ ")" => Expression(Some(name), PredicateFunction(functionName, functionArgs))
   }
 
   def targetExpression: Parser[Expression] = equals | notEquals | greaterThanEquals | lessThanEquals | greaterThan | lessThan | function
 
   /* either qualified or bare subject expression */
-  val expression: Parser[ExpressionOrGroup] = log(targetExpression | bareTarget)("expression") ^^ (Left(_))
+  val expression: Parser[ExpressionOrGroup] = _log(targetExpression | bareTarget)("expression") ^^ (Left(_))
 
 
   /*
@@ -197,16 +209,16 @@ trait TickleParser extends JavaTokenParsers {
    * <Group>        ::= '(' <OrOperator> ')' | <Expression>
    */
 
-  def Group: Parser[ExpressionOrGroup] = log((literal("(") ~> OrOperator <~ literal(")")) | expression)("group") ^^ {
+  def Group: Parser[ExpressionOrGroup] = _log((literal("(") ~> OrOperator <~ literal(")")) | expression)("group") ^^ {
     case expr: ExpressionOrGroup => expr
   }
 
-  def NotOperator: Parser[ExpressionOrGroup] = log(("NOT" ~ NotOperator) | Group)("notOperator") ^^ {
+  def NotOperator: Parser[ExpressionOrGroup] = _log(("NOT" ~ NotOperator) | Group)("notOperator") ^^ {
     case "NOT" ~ (not: ExpressionOrGroup) => Right(NotGroup(not))
     case group: ExpressionOrGroup => group
   }
 
-  def AndOperator: Parser[ExpressionOrGroup] = log(NotOperator ~ rep("AND" ~ NotOperator))("andOperator") ^^ {
+  def AndOperator: Parser[ExpressionOrGroup] = _log(NotOperator ~ rep("AND" ~ NotOperator))("andOperator") ^^ {
     case not1 ~ nots if nots.isEmpty =>
       not1
     case not1 ~ nots =>
@@ -218,7 +230,7 @@ trait TickleParser extends JavaTokenParsers {
       Right(AndGroup(not1 +: children))
   }
 
-  def OrOperator: Parser[ExpressionOrGroup] = log(AndOperator ~ rep("OR" ~ AndOperator))("orOperator") ^^ {
+  def OrOperator: Parser[ExpressionOrGroup] = _log(AndOperator ~ rep("OR" ~ AndOperator))("orOperator") ^^ {
     case and1 ~ ands if ands.isEmpty =>
       and1
     case and1 ~ ands =>
@@ -231,12 +243,14 @@ trait TickleParser extends JavaTokenParsers {
   }
 
   /* the entry point */
-  val query: Parser[Query] = log(OrOperator)("query") ^^ { Query }
+  val query: Parser[Query] = _log(OrOperator)("query") ^^ { Query }
 }
 
 object TickleParser extends TickleParser {
   import scala.language.postfixOps
 
+  val logger = LoggerFactory.getLogger("com.syntaxjockey.terane.indexer.bier.TickleParser")
+  
   /**
    * Given a raw query string, produce a syntax tree.
    * @param qs

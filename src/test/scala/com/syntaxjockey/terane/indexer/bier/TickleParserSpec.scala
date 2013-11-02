@@ -31,8 +31,11 @@ import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
 import com.syntaxjockey.terane.indexer.TestCluster
+import org.slf4j.LoggerFactory
 
 class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec with MustMatchers {
+
+  val logger = LoggerFactory.getLogger(classOf[TickleParserSpec])
 
   val params = TickleParserParams("fieldname")
 
@@ -40,7 +43,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a bare text predicate" in {
       val query = TickleParser.parseQueryString("foobar")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(None, PredicateEquals(TargetText("foobar"))))
@@ -50,7 +53,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a bare integer predicate" in {
       val query = TickleParser.parseQueryString("42")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(None, PredicateEquals(TargetInteger("42"))))
@@ -60,7 +63,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a text predicate with a field name" in {
       val query = TickleParser.parseQueryString(":fieldname = foobar")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateEquals(TargetText("foobar"))))
@@ -70,7 +73,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a bare quoted text predicate" in {
       val query = TickleParser.parseQueryString(""" "hello, world!" """)
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(None, PredicateEquals(TargetText("hello, world!"))))
@@ -80,7 +83,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a quoted text subject with a field name" in {
       val query = TickleParser.parseQueryString(""" :fieldname = "hello, world!" """)
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateEquals(TargetText("hello, world!"))))
@@ -90,7 +93,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a predicate coerced to text with a field name" in {
       val query = TickleParser.parseQueryString(":fieldname = text(hello, world!)")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateEquals(TargetText("hello, world!"))))
@@ -100,7 +103,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse an AND group" in {
       val query = TickleParser.parseQueryString("foo AND bar")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(AndGroup(List(
@@ -113,7 +116,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse an OR group" in {
       val query = TickleParser.parseQueryString("foo OR bar")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(OrGroup(List(
@@ -126,7 +129,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a NOT group" in {
       val query = TickleParser.parseQueryString("NOT foo")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(NotGroup(
@@ -138,7 +141,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
    "parse multiple NOT groups joined by AND" in {
       val query = TickleParser.parseQueryString("foo AND NOT bar AND NOT baz")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(AndGroup(List(
@@ -156,7 +159,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse nested OR group with parentheses" in {
       val query = TickleParser.parseQueryString("foo AND (bar OR baz)")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(AndGroup(List(
@@ -172,7 +175,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse nested AND group with parentheses" in {
       val query = TickleParser.parseQueryString("(foo AND bar) OR baz")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(OrGroup(List(
@@ -188,7 +191,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse trailing AND group without parentheses using operator precedence" in {
       val query = TickleParser.parseQueryString("foo OR bar AND baz")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(OrGroup(List(
@@ -204,7 +207,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse leading AND group without parentheses using operator precedence" in {
       val query = TickleParser.parseQueryString("foo AND bar OR baz")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Right(OrGroup(List(
@@ -220,7 +223,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a not-equals expression" in {
       val query = TickleParser.parseQueryString(":fieldname != 42")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateNotEquals(TargetInteger("42"))))
@@ -230,7 +233,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a greater-than expression" in {
       val query = TickleParser.parseQueryString(":fieldname > 42")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateGreaterThan(TargetInteger("42"))))
@@ -240,7 +243,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a less-than expression" in {
       val query = TickleParser.parseQueryString(":fieldname < 42")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateLessThan(TargetInteger("42"))))
@@ -250,7 +253,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a greater-than-equals expression" in {
       val query = TickleParser.parseQueryString(":fieldname >= 42")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateGreaterThanEqualTo(TargetInteger("42"))))
@@ -260,7 +263,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a less-than-equals expression" in {
       val query = TickleParser.parseQueryString(":fieldname <= 42")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateLessThanEqualTo(TargetInteger("42"))))
@@ -270,7 +273,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse an equals-range expression" in {
       val query = TickleParser.parseQueryString(":fieldname = [ 42 TO 44 ]")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateEqualsRange(
@@ -281,7 +284,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse an not-equals-range expression" in {
       val query = TickleParser.parseQueryString(":fieldname != [ bar TO foo ]")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateNotEqualsRange(
@@ -292,7 +295,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a left-open range expression" in {
       val query = TickleParser.parseQueryString(":fieldname = [ TO foo ]")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateEqualsRange(
@@ -303,7 +306,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a right-open range expression" in {
       val query = TickleParser.parseQueryString(":fieldname = [ bar TO ]")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateEqualsRange(
@@ -314,7 +317,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a function expression with no function arguments" in {
       val query = TickleParser.parseQueryString(":fieldname -> function()")
-      println(TickleParser.prettyPrint(query))
+      logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
           Left(Expression(Some("fieldname"), PredicateFunction("function", Seq.empty)))

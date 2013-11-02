@@ -50,7 +50,8 @@ object TeraneIndexerBuild extends Build {
         "org.slf4j" % "slf4j-log4j12" % "1.7.5",
         "org.scalatest" %% "scalatest" % "1.9.1" % "test",
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"
-      )
+      ),
+      javaOptions in test += "-Dlog4j.configuration=src/test/resources/log4j.properties"
     ) ++ SbtOneJar.oneJarSettings
       ++ SbtSite.site.settings
       ++ SbtSite.site.sphinxSupport()
