@@ -1,15 +1,17 @@
 package com.syntaxjockey.terane.indexer.syslog
 
-import akka.actor.{Actor, ActorRef, ActorLogging, ActorContext, Props}
+import akka.actor._
 import akka.io._
 import akka.io.TcpPipelineHandler.Init
 import akka.event.LoggingAdapter
 import com.typesafe.config.Config
+import scala.concurrent.duration._
 import java.net.InetSocketAddress
-import javax.net.ssl.{SSLContext, SSLEngine}
+import javax.net.ssl.SSLContext
 
 import com.syntaxjockey.terane.indexer.syslog.SyslogPipelineHandler.SyslogInit
 import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
+import java.util.concurrent.TimeUnit
 
 /**
  * Actor implementing the syslog protocol over TCP in accordance with RFC6587:
@@ -27,6 +29,7 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   val syslogPort = config.getInt("port")
   val syslogInterface = config.getString("interface")
   val enableTls = if (config.hasPath("enable-tls")) config.getBoolean("enable-tls") else false
+  val idleTimeout = if (config.hasPath("idle-timeout")) Some(Duration(config.getMilliseconds("idle-timeout"), TimeUnit.MILLISECONDS)) else None
   val defaultSink = config.getString("use-sink")
   val allowSinkRouting = config.getBoolean("allow-sink-routing")
   val allowSinkCreate = config.getBoolean("allow-sink-creation")
@@ -68,7 +71,7 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   // start the bind process
   val localAddr = new InetSocketAddress(syslogInterface, syslogPort)
   log.debug("attempting to bind to {}", localAddr)
-  IO(Tcp) ! Bind(self, localAddr)
+  akka.io.IO(Tcp) ! Bind(self, localAddr)
 
   def receive = {
 
@@ -105,9 +108,9 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
           new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
       }
       val init = SyslogPipelineHandler.init(log, stages)
-      val handler = context.actorOf(TcpConnectionHandler.props(init, eventRouter, defaultSink))
-      val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler))
-      connection ! Tcp.Register(pipeline, keepOpenOnPeerClosed = true)
+      val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, defaultSink, idleTimeout), "handler")
+      val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler), "pipeline")
+      connection ! Tcp.Register(pipeline)   // FIXME: enable keepOpenOnPeerClosed?
       log.debug("registered connection from {}", remote)
   }
 }
@@ -139,30 +142,50 @@ object SyslogPipelineHandler {
 /**
  *
  * @param init
+ * @param connection
  * @param eventRouter
  * @param defaultSink
+ * @param idleTimeout
  */
-class TcpConnectionHandler(init: SyslogInit, eventRouter: ActorRef, defaultSink: String) extends Actor with SyslogReceiver with ActorLogging {
+class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) extends Actor with SyslogReceiver with ActorLogging {
   import init._
+  import Tcp.{ConnectionClosed, Abort, Close}
+  import context.dispatcher
+
+  var idleTimer: Option[Cancellable] = idleTimeout match {
+    case Some(timeout) =>
+      Some(context.system.scheduler.scheduleOnce(timeout, connection, Close))
+    case None => None
+  }
 
   def receive = {
 
     case Event(message: Message) =>
       log.debug("received {}", message)
+      for (cancellable <- idleTimer) { cancellable.cancel() }
       eventRouter ! StoreEvent(defaultSink, message)
+      idleTimer = idleTimeout match {
+        case Some(timeout) =>
+          Some(context.system.scheduler.scheduleOnce(timeout, connection, Close))
+        case None => None
+      }
 
     case Event(SyslogIncomplete) =>
-      // FIXME: add idle connection handling
+      // ignore SyslogIncomplete messages
 
     case Event(failure: SyslogFailure) =>
       log.debug("failed to process TCP message: {}", failure.getCause.getMessage)
-      context.stop(self)
+      // there is no way to notify the client of error other than simply terminating the connection
+      connection ! Abort
 
-    case _: Tcp.ConnectionClosed =>
+    case _: ConnectionClosed =>
+      log.debug("connection is closed")
       context.stop(self)
   }
 }
 
 object TcpConnectionHandler {
-  def props(init: SyslogInit, eventRouter: ActorRef, defaultSink: String) = Props(classOf[TcpConnectionHandler], init, eventRouter, defaultSink)
+  def props(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) = {
+    Props(classOf[TcpConnectionHandler], init, connection, eventRouter, defaultSink, idleTimeout)
+  }
 }
