@@ -4,5 +4,5 @@ scala:
 jdk:
   - oraclejdk7
 before_script:
-  - ./ext/install-ext-dependencies.sh
-  - ./ext/start-test-cluster.sh
+  - ./ext/bin/install-ext-dependencies.sh
+  - ./ext/bin/start-test-cluster.sh
