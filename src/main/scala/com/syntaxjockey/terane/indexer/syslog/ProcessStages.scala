@@ -31,7 +31,7 @@ import java.nio.charset.Charset
 /**
  * Context when performing pipeline processing.
  */
-class SyslogContext(logging: LoggingAdapter, context: ActorContext, val maxMessageSize: Option[Int] = None) extends PipelineContext with WithinActorContext {
+class SyslogContext(logging: LoggingAdapter, context: ActorContext, val maxMessageSize: Option[Long] = None) extends PipelineContext with WithinActorContext {
   var leftover = ByteString.empty
   def getLogger = logging
   def getContext = context

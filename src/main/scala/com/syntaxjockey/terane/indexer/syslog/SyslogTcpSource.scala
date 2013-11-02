@@ -30,7 +30,7 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   val syslogInterface = config.getString("interface")
   val enableTls = if (config.hasPath("enable-tls")) config.getBoolean("enable-tls") else false
   val idleTimeout = if (config.hasPath("idle-timeout")) Some(Duration(config.getMilliseconds("idle-timeout"), TimeUnit.MILLISECONDS)) else None
-  val maxMessageSize = if (config.hasPath("max-message-size")) Some(config.getInt("max-message-size")) else None
+  val maxMessageSize = if (config.hasPath("max-message-size")) Some(config.getBytes("max-message-size").toLong) else None
   val maxConnections = if (config.hasPath("max-connections")) Some(config.getInt("max-connections")) else None
   val defaultSink = config.getString("use-sink")
   val allowSinkRouting = config.getBoolean("allow-sink-routing")
@@ -164,7 +164,7 @@ object SyslogPipelineHandler {
   type SyslogInit = Init[SyslogContext, SyslogEvent, SyslogEvent]
   type SyslogPipelineStage = PipelineStage[SyslogContext, SyslogEvent, Tcp.Command, SyslogEvent, Tcp.Event]
 
-  def init(log: LoggingAdapter, stages: SyslogPipelineStage, maxMessageSize: Option[Int]): SyslogInit = {
+  def init(log: LoggingAdapter, stages: SyslogPipelineStage, maxMessageSize: Option[Long]): SyslogInit = {
     new SyslogInit(stages) {
       override def makeContext(ctx: ActorContext): SyslogContext = new SyslogContext(log, ctx, maxMessageSize)
     }

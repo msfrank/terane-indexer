@@ -32,7 +32,7 @@ import com.syntaxjockey.terane.indexer.TestCluster
 
 class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatchers {
 
-  def makeContext(maxMessageSize: Option[Int] = None): SyslogContext = {
+  def makeContext(maxMessageSize: Option[Long] = None): SyslogContext = {
     val actor = TestActorRef[Blackhole]
     val log = actor.underlyingActor.log
     val ctx = actor.underlyingActor.context

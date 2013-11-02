@@ -6,7 +6,8 @@ import Keys._
 
 object TeraneIndexerBuild extends Build {
 
-  val teraneVersion = "0.1-SNAPSHOT"
+  val teraneVersion = "0.1"
+
   val akkaVersion = "2.2.3"
   val sprayVersion = "1.2-20130712"
   val astyanaxVersion = "1.56.37"
@@ -19,7 +20,7 @@ object TeraneIndexerBuild extends Build {
       exportJars := true,
       name := "terane-indexer",
       version := teraneVersion,
-      scalaVersion := "2.10.2",
+      scalaVersion := "2.10.3",
       resolvers ++= Seq(
         "spray repo" at "http://repo.spray.io",
         "spray nightlies" at "http://nightlies.spray.io"
