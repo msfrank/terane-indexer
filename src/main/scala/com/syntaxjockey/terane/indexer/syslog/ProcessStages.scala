@@ -72,8 +72,8 @@ object SyslogProcessingOps {
 }
 
 trait SyslogEvent
+case class SyslogFrame(frame: ByteString) extends SyslogEvent
 case object SyslogIncomplete extends SyslogEvent
-case class SyslogFrames(frames: Seq[ByteString]) extends SyslogEvent
 class SyslogFailure(cause: Throwable) extends Exception(cause) with SyslogEvent
 
 /**
@@ -87,48 +87,55 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
     /* we don't process commands */
     override def commandPipeline = {frames => throw new IllegalArgumentException() }
 
-    /* return the framed messages, or throw UnrecoverableProcessingError */
-    override def eventPipeline = { body: ByteString =>
-      try {
-        ctx.leftover = ctx.leftover ++ body
-        var frames = Seq.empty[ByteString]
-        var incomplete = false
-        while (!ctx.leftover.isEmpty && !incomplete) {
-          try {
-            val iterator = ctx.leftover.iterator
-            val msglenString = makeAsciiString(getUntil(iterator, ' '))
-            // process the msglen
-            if (!isNonzeroDigit(msglenString(0).toByte))
-              throw new IllegalArgumentException("msglen must start with a non-zero digit")
-            msglenString.tail.foreach { char =>
-              if (!isDigit(char.toByte))
-                throw new IllegalArgumentException("msglen must consist only of digits")
-            }
-            val msglen = msglenString.toInt
-            iterator.next()
-            val bytesleft = iterator.toByteString
-            // process the frame
-            if (bytesleft.length < msglen) {
-              incomplete = true
-            } else {
-              ctx.leftover = bytesleft.drop(msglen)
-              frames = frames ++ Seq(bytesleft.take(msglen))
-            }
-          } catch {
-            // if the iterator has no more data
-            case ex: NoSuchElementException =>
-              incomplete = true
+    /* return frames from a stream of bytes */
+    override def eventPipeline = { data: ByteString =>
+      val frames = processFrames(data)
+      if (frames.length > 1)
+        frames.map(Left(_))
+      else if (frames.length == 1)
+        ctx.singleEvent(frames(0))
+      else
+        Seq.empty
+    }
+
+    /* return the framed messages or SyslogIncomplete */
+    def processFrames(data: ByteString): Seq[SyslogEvent] = {
+      ctx.leftover = ctx.leftover ++ data
+      var events = Seq.empty[SyslogEvent]
+      var finished = false
+      while (!ctx.leftover.isEmpty && !finished) {
+        try {
+          val iterator = ctx.leftover.iterator
+          val msglenString = makeAsciiString(getUntil(iterator, ' '))
+          // process the msglen
+          if (!isNonzeroDigit(msglenString(0).toByte))
+            throw new IllegalArgumentException("msglen must start with a non-zero digit")
+          msglenString.tail.foreach { char =>
+            if (!isDigit(char.toByte))
+              throw new IllegalArgumentException("msglen must consist only of digits")
           }
+          iterator.next()
+          val msglen = msglenString.toInt
+          val bytesleft = iterator.toByteString
+          // process the frame
+          if (bytesleft.length < msglen) {
+            finished = true
+            events = events ++ Seq(SyslogIncomplete)
+          } else {
+            ctx.leftover = bytesleft.drop(msglen)
+            events = events ++ Seq(SyslogFrame(bytesleft.take(msglen)))
+          }
+        } catch {
+          // if the iterator has no more data
+          case ex: NoSuchElementException =>
+            finished = true
+            events = events ++ Seq(SyslogIncomplete)
+          case ex: Throwable =>
+            finished = true
+            events = events ++ Seq(new SyslogFailure(ex))
         }
-        if (frames.length == 0)
-          ctx.singleEvent(SyslogIncomplete)
-        else
-          ctx.singleEvent(SyslogFrames(frames))
-      } catch {
-        // any other exception is considered unrecoverable
-        case ex: Throwable =>
-          ctx.singleEvent(new SyslogFailure(ex))
       }
+      events
     }
 
     def isDigit(byte: Byte): Boolean = byte >= 0x30 && byte <= 0x39
@@ -148,16 +155,16 @@ class ProcessUdp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
     /* we don't process commands */
     override def commandPipeline = {frames => throw new IllegalArgumentException() }
 
-    /* return a singled framed message */
+    /* return a single frame from a stream of bytes */
     override def eventPipeline = { frame: ByteString =>
-      ctx.singleEvent(SyslogFrames(Seq(frame)))
+      ctx.singleEvent(SyslogFrame(frame))
     }
   }
 }
 
 /**
- * Consume a SyslogFrames object containing a sequence of frames, and emit a SyslogMessages
- * object containing the corresponding sequence of messages.
+ * Consume a SyslogFrames object containing a sequence of frames, and emit a sequence
+ * of SyslogEvents.
  */
 class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, SyslogEvent] with SyslogProcessingOps {
 
@@ -166,16 +173,15 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
     /* we don't process commands */
     override def commandPipeline = {messages => throw new IllegalArgumentException() }
 
-    /* return messages from a sequence of frames */
+    /* return a single message from a frame */
     override def eventPipeline = {
-      case SyslogFrames(frames) =>
-        frames.map { frame =>
-          try {
-            Left(processFrame(frame))
-          } catch {
-            case cause: Throwable => Left(new SyslogFailure(cause))
-          }
+      case SyslogFrame(frame) =>
+        val event = try {
+          processFrame(frame)
+        } catch {
+          case cause: Throwable => new SyslogFailure(cause)
         }
+        ctx.singleEvent(event)
       case event: SyslogEvent =>
         ctx.singleEvent(event)
     }
@@ -197,7 +203,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
       /* process the VERSION */
       val version: Option[Int] = {
         val version = makeAsciiString(getUntil(iterator, ' '))
-        if (iterator.getByte != ' ') throw new IllegalArgumentException("Unexpected data after PRIVAL")
+        if (iterator.getByte != ' ') throw new IllegalArgumentException("unexpected data after PRIVAL")
         if (version.length == 0)
           None
         else
@@ -211,20 +217,18 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
             DateTime.now()
           case head if head.isDigit =>
             val Array(year, month, day) = makeAsciiString(getUntil(iterator, 'T')).split("-").map(_.toInt)
-            if (iterator.getByte != 'T') throw new IllegalArgumentException()
+            if (iterator.getByte != 'T') throw new IllegalArgumentException("invalid TIMESTAMP format")
             val Array(hour, minute, second) = makeAsciiString(getUntil(iterator, byte => byte == 'Z' || byte == '-' || byte == '+')).split(":").map(_.toFloat)
             val millis = (second - second.floor) * 1000
             val tz: DateTimeZone = iterator.getByte match {
               case plusOrMinus if plusOrMinus == '-' || plusOrMinus == '+' =>
                 val Array(tzhour, tzminute) = makeAsciiString(getUntil(iterator, ' ')).split(":").map(_.toInt)
-                CachedDateTimeZone.forZone(DateTimeZone.forOffsetHoursMinutes(
-                  if (plusOrMinus == '-') -tzhour else tzhour,
-                  tzminute))
+                CachedDateTimeZone.forZone(DateTimeZone.forOffsetHoursMinutes(if (plusOrMinus == '-') -tzhour else tzhour, tzminute))
               case 'Z' =>
                 DateTimeZone.UTC
-              case _ => throw new IllegalArgumentException("")
+              case _ => throw new IllegalArgumentException("invalid TIMESTAMP format")
             }
-            if (iterator.getByte != ' ') throw new IllegalArgumentException()
+            if (iterator.getByte != ' ') throw new IllegalArgumentException("invalid TIMESTAMP format")
             new DateTime(year, month, day, hour.floor.toInt, minute.floor.toInt, second.floor.toInt, millis.floor.toInt, tz)
           case _ =>
             DateTime.now()
@@ -234,44 +238,44 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
       /* process the HOSTNAME */
       val hostname: String = {
         val hostname = makeAsciiString(getUntil(iterator, ' '))
-        if (iterator.getByte != ' ') throw new IllegalArgumentException()
+        if (iterator.getByte != ' ') throw new IllegalArgumentException("failed to parse HOSTNAME")
         hostname
       }
 
       /* process the APP-NAME */
       val appName: Option[String] = if (version.isDefined) {
         val appname = makeAsciiString(getUntil(iterator, ' '))
-        if (iterator.getByte != ' ') throw new IllegalArgumentException()
+        if (iterator.getByte != ' ') throw new IllegalArgumentException("failed to parse APP-NAME")
         Some(appname)
       } else None
 
       /* process the PROCID */
       val procId: Option[String] = if (version.isDefined) {
         val procid = makeAsciiString(getUntil(iterator, ' '))
-        if (iterator.getByte != ' ') throw new IllegalArgumentException()
+        if (iterator.getByte != ' ') throw new IllegalArgumentException("failed to parse PROCID")
         Some(procid)
       } else None
 
       /* process MSGID */
       val msgId: Option[String] = if (version.isDefined) {
         val msgId = makeAsciiString(getUntil(iterator, ' '))
-        if (iterator.getByte != ' ') throw new IllegalArgumentException()
+        if (iterator.getByte != ' ') throw new IllegalArgumentException("failed to parse MSGID")
         Some(msgId)
       } else None
 
       /* process STRUCTURED-DATA */
       val elements: Map[SDIdentifier,SDElement] = if (version.isDefined) {
         val elements = scala.collection.mutable.HashMap[SDIdentifier, SDElement]()
-        if (!iterator.hasNext) throw new IllegalArgumentException()
+        if (!iterator.hasNext) new SyslogFailure(new IllegalArgumentException("failed to parse STRUCTURED-DATA"))
         while (iterator.hasNext && (iterator.getByte match {
-        case ' ' => false
-        case '-' =>
-          if (iterator.getByte != ' ') throw new IllegalArgumentException()
-          false
-        case '[' => true
-        case _ => throw new IllegalArgumentException() })) {
-          val element = processStructuredData(iterator)
-          elements += element
+          case ' ' => false
+          case '-' =>
+            if (iterator.getByte != ' ') throw new IllegalArgumentException("failed to parse STRUCTURED-DATA")
+            false
+          case '[' => true
+          case _ => throw new IllegalArgumentException("failed to parse STRUCTURED-DATA") })) {
+            val element = processStructuredData(iterator)
+            elements += element
         }
         elements.toMap
       } else Map.empty
@@ -286,6 +290,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
       Message(hostname, timestamp, priority, elements, appName, procId, msgId, msg)
     }
 
+    /* process a single structured data instance */
     def processStructuredData(iterator: ByteIterator): (SDIdentifier, SDElement) = {
       val id: SDIdentifier = {
         val id = makeAsciiString(getUntil(iterator, ' '))
@@ -299,7 +304,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
       while (iterator.hasNext && (iterator.getByte match {
         case ' ' => true
         case ']' => false
-        case _ => throw new IllegalArgumentException()
+        case _ => throw new IllegalArgumentException("failed to parse SD-ELEMENT")
       })) {
         val param = processParam(iterator)
         params += param
@@ -309,13 +314,13 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
 
     def processParam(iterator: ByteIterator): (String,String) = {
       val name = makeAsciiString(getUntil(iterator, '='))
-      if (iterator.getByte != '=') throw new IllegalArgumentException()
+      if (iterator.getByte != '=') throw new IllegalArgumentException("failed to parse SD-PARAM")
       val value = processParamValue(iterator)
       (name, value)
     }
 
     def processParamValue(iterator: ByteIterator): String = {
-      if (iterator.getByte != '"') throw new IllegalArgumentException()
+      if (iterator.getByte != '"') throw new IllegalArgumentException("failed to parse PARAM-VALUE")
       val bb = ByteString.newBuilder
       var escaped = false
       while (iterator.hasNext) {
@@ -331,7 +336,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
               bb += ']'
               escaped = false
             } else
-              throw new IllegalArgumentException()
+              throw new IllegalArgumentException("failed to parse PARAM-VALUE")
           case '"' =>
             if (escaped) {
               bb += '"'
@@ -344,7 +349,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
             bb += b
         }
       }
-      throw new IllegalArgumentException()
+      throw new IllegalArgumentException("failed to parse PARAM-VALUE")
     }
   }
 }

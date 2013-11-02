@@ -32,57 +32,83 @@ import com.syntaxjockey.terane.indexer.TestCluster
 
 class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatchers {
 
+  def makeContext: SyslogContext = {
+    val actor = TestActorRef[Blackhole]
+    val log = actor.underlyingActor.log
+    val ctx = actor.underlyingActor.context
+    new SyslogContext(log, ctx)
+  }
+
   def runFrame(body: String): SyslogEvent = {
     val actor = TestActorRef[Blackhole]
     val log = actor.underlyingActor.log
     val ctx = actor.underlyingActor.context
     val stages = new ProcessFrames()
     val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, ctx), stages)
-    val (_events: Iterable[SyslogEvent], _) = evt(SyslogFrames(Seq(ByteString(body, "UTF-8"))))
+    val (_events: Iterable[SyslogEvent], _) = evt(SyslogFrame(ByteString(body, "UTF-8")))
     val events = _events.toSeq
     events must have length 1
     events(0)
   }
 
-  def runTcp(body: String): Seq[SyslogEvent] = {
-    val actor = TestActorRef[Blackhole]
-    val log = actor.underlyingActor.log
-    val ctx = actor.underlyingActor.context
+  def runTcp(body: String, context: SyslogContext): Seq[SyslogEvent] = {
     val stages = new ProcessFrames() >> new ProcessTcp()
-    val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, ctx), stages)
+    val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(context, stages)
     val (_events: Iterable[SyslogEvent], _) = evt(ByteString(body, "UTF-8"))
     _events.toSeq
   }
   
-  def runUdp(body: String): SyslogEvent = {
-    val actor = TestActorRef[Blackhole]
-    val log = actor.underlyingActor.log
-    val ctx = actor.underlyingActor.context
+  def runUdp(body: String, context: SyslogContext): Seq[SyslogEvent] = {
     val stages = new ProcessFrames() >> new ProcessUdp()
-    val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, ctx), stages)
+    val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(context, stages)
     val (_events: Iterable[SyslogEvent], _) = evt(ByteString(body, "UTF-8"))
-    val events = _events.toSeq
-    events must have length 1
-    events(0)
+    _events.toSeq
   }
   
   "The ProcessUdp pipeline" must {
 
     "parse a message" in {
-      val message = runUdp("<0> 2012-01-01T12:00:00Z localhost Hello, world!")
+      val events = runUdp("<0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext)
+      events must have length 1
     }
   }
   
   "The ProcessTcp pipeline" must {
     
     "parse a single length-prefixed message" in {
-      val messages = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!")
-      messages must have length 1
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext)
+      events must have length 1
+      events(0).isInstanceOf[Message] must be(true)
     }
 
     "parse multiple length-prefixed messages" in {
-      val messages = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...")
-      messages must have length 2
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...", makeContext)
+      events must have length 2
+      events(0).isInstanceOf[Message] must be(true)
+      events(1).isInstanceOf[Message] must be(true)
+    }
+
+    "parse multiple length-prefixed messages with trailing incomplete data" in {
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...54 <0> 2012-01-01T12:", makeContext)
+      events must have length 3
+      events(0).isInstanceOf[Message] must be(true)
+      events(1).isInstanceOf[Message] must be(true)
+      events(2) must be(SyslogIncomplete)
+    }
+
+    "parse an incomplete message" in {
+      val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello", makeContext)
+      events must have length 1
+      events(0) must be(SyslogIncomplete)
+    }
+
+    "parse a fragmented message" in {
+      val context = makeContext
+      runTcp("48 <0> 2012-01-01T12:00:00Z local", context) must be(Seq(SyslogIncomplete))
+      runTcp("host Hello", context) must be(Seq(SyslogIncomplete))
+      val events = runTcp(", world!", context)
+      events must have length 1
+      events(0).isInstanceOf[Message] must be(true)
     }
   }
 
