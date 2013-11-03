@@ -25,6 +25,8 @@ import com.typesafe.config._
 import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.collection.JavaConversions._
 import java.util.UUID
+import java.io.File
+import java.nio.file.{FileSystems, Files}
 
 import com.syntaxjockey.terane.indexer.source.{SyslogTcpSource, SyslogUdpSource}
 import com.syntaxjockey.terane.indexer.http.HttpServer
@@ -35,8 +37,26 @@ import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
  */
 object IndexerApp extends App {
 
-  val config = ConfigFactory.load()
-  val system = ActorSystem("terane-indexer")
+  /* build the runtime configuration */
+  val baseConfig = ConfigFactory.load()
+  val config = {
+    val config = sys.props.get("terane.config.file") match {
+      case Some(propConfFile) =>
+        ConfigFactory.parseFile(new File(propConfFile))
+      case None =>
+        val confFilePath = FileSystems.getDefault.getPath("conf", "terane.conf")
+        val rootFilePath = FileSystems.getDefault.getPath("terane.conf")
+        if (Files.isReadable(confFilePath))
+          ConfigFactory.parseFile(confFilePath.toFile)
+        else if (Files.isReadable(rootFilePath))
+          ConfigFactory.parseFile(rootFilePath.toFile)
+        else ConfigFactory.empty()
+    }
+    config.withFallback(baseConfig)
+  }
+
+  /* start the actor system */
+  val system = ActorSystem("terane-indexer", config)
 
   /* start the sinks */
   val eventRouter = system.actorOf(EventRouter.props(), "event-router")
