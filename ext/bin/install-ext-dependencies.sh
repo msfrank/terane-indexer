@@ -20,7 +20,8 @@ if [ ! -f lib/zookeeper/bin/zkServer.sh ]; then
   pushd lib/zookeeper
   tar -xzv --strip-components 1 -f $SRCPATH
   pushd conf
-  ln -s ../../../etc/zoo.cfg zoo.cfg
+  ln -f -s ../../../etc/zoo.cfg zoo.cfg
+  ln -f -s ../../../etc/log4j.zookeeper.properties log4j.properties
   popd
   popd
 fi
@@ -37,6 +38,7 @@ if [ ! -f lib/cassandra/bin/cassandra ]; then
   tar -xzv --strip-components 1 -f $SRCPATH
   pushd conf
   ln -f -s ../../../etc/cassandra.yaml cassandra.yaml
+  ln -f -s ../../../etc/log4j.cassandra.properties log4j-server.properties
   popd
   popd
 fi

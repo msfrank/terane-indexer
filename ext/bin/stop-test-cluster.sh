@@ -16,7 +16,7 @@ if [ -f var/run/zookeeper.pid ]; then
   fi
 fi
 
-# start zookeeper if it is not running
+# stop zookeeper if it is running
 if [ "$RUNNING" -eq 1 ]; then
   kill -TERM $PID &>/dev/null
   sleep 5
@@ -26,6 +26,7 @@ if [ "$RUNNING" -eq 1 ]; then
     exit 1
   else
     rm -f var/run/zookeeper.pid
+    echo "stopped zookeeper (pid $PID)"
   fi
 fi
 
@@ -40,7 +41,7 @@ if [ -f var/run/cassandra.pid ]; then
   fi
 fi
 
-# start cassandra if it is not running
+# stop cassandra if it is running
 if [ "$RUNNING" -eq 1 ]; then
   kill -TERM $PID &>/dev/null
   sleep 5
@@ -50,6 +51,7 @@ if [ "$RUNNING" -eq 1 ]; then
     exit 1
   else
     rm -f var/run/cassandra.pid
+    echo "stopped cassandra (pid $PID)"
   fi
 fi
 
