@@ -65,7 +65,7 @@ object FieldStatistics {
     new FieldStatistics(termFrequencies, fieldCardinality, termSet, terms.length, fieldSignature)
   }
 
-  def merge(others: Seq[FieldStatistics]): FieldStatistics = {
+  def merge(others: Iterable[FieldStatistics]): FieldStatistics = {
     val termFrequencies = CMS_MONOID.sum(others.map(_.termFrequencies))
     val fieldCardinality = HLL_MONOID.sum(others.map(_.fieldCardinality))
     val termSet = BF_MONOID.sum(others.map(_.termSet))

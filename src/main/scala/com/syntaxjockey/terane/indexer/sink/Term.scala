@@ -123,43 +123,43 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
   def makeScanner(term: Term[T], shard: Int) = {
     term match {
       case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
-        val range = FieldSerializers.Text.buildRange().greaterThanEquals(text).lessThanEquals(text).build()
+        val range = Serializers.Text.buildRange().greaterThanEquals(text).lessThanEquals(text).build()
         term.keyspace.prepareQuery(term.field.text.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
-        val range = FieldSerializers.Literal.buildRange().greaterThanEquals(literal).lessThanEquals(literal).build()
+        val range = Serializers.Literal.buildRange().greaterThanEquals(literal).lessThanEquals(literal).build()
         term.keyspace.prepareQuery(term.field.literal.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
-        val range = FieldSerializers.Integer.buildRange().greaterThanEquals(integer).lessThanEquals(integer).build()
+        val range = Serializers.Integer.buildRange().greaterThanEquals(integer).lessThanEquals(integer).build()
         term.keyspace.prepareQuery(term.field.integer.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
-        val range = FieldSerializers.Float.buildRange().greaterThanEquals(float).lessThanEquals(float).build()
+        val range = Serializers.Float.buildRange().greaterThanEquals(float).lessThanEquals(float).build()
         term.keyspace.prepareQuery(term.field.float.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
-        val range = FieldSerializers.Datetime.buildRange().greaterThanEquals(datetime).lessThanEquals(datetime).build()
+        val range = Serializers.Datetime.buildRange().greaterThanEquals(datetime).lessThanEquals(datetime).build()
         term.keyspace.prepareQuery(term.field.datetime.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
-        val range = FieldSerializers.Address.buildRange().greaterThanEquals(address).lessThanEquals(address).build()
+        val range = Serializers.Address.buildRange().greaterThanEquals(address).lessThanEquals(address).build()
         term.keyspace.prepareQuery(term.field.address.get.cf)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
-        val range = FieldSerializers.Hostname.buildRange().greaterThanEquals(hostname).lessThanEquals(hostname).build()
+        val range = Serializers.Hostname.buildRange().greaterThanEquals(hostname).lessThanEquals(hostname).build()
         term.keyspace.prepareQuery(term.field.hostname.get.cf)
           .getKey(shard)
           .withColumnRange(range)

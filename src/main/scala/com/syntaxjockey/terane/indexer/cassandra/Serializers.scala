@@ -28,36 +28,43 @@ import com.netflix.astyanax.model.Equality
 import com.netflix.astyanax.serializers.AnnotatedCompositeSerializer.ComponentSerializer
 import java.nio.ByteBuffer
 
-abstract class Posting
+abstract class Key
 
 // see http://blog.fakod.eu/2010/07/14/constructor-arguments-with-jpa-annotations/
-object Posting {
+object Key {
   type Component = AstyanaxComponent @field
 }
 
-import Posting.Component
+sealed trait Posting
 
-class StringPosting(@Component(ordinal = 0) var term: String, @Component(ordinal = 1) var id: UUID) extends Posting {
-  def this() = this("", FieldSerializers.emptyUUID)
+import Key.Component
+
+class StringPosting(@Component(ordinal = 0) var term: String, @Component(ordinal = 1) var id: UUID) extends Key with Posting {
+  def this() = this("", Serializers.emptyUUID)
 }
 
-class LongPosting(@Component(ordinal = 0) var term: Long, @Component(ordinal = 1) var id: UUID) extends Posting {
-  def this() = this(0L, FieldSerializers.emptyUUID)
+class LongPosting(@Component(ordinal = 0) var term: Long, @Component(ordinal = 1) var id: UUID) extends Key with Posting {
+  def this() = this(0L, Serializers.emptyUUID)
 }
 
-class DoublePosting(@Component(ordinal = 0) var term: Double, @Component(ordinal = 1) var id: UUID) extends Posting {
-  def this() = this(0.0, FieldSerializers.emptyUUID)
+class DoublePosting(@Component(ordinal = 0) var term: Double, @Component(ordinal = 1) var id: UUID) extends Key with Posting {
+  def this() = this(0.0, Serializers.emptyUUID)
 }
 
-class DatePosting(@Component(ordinal = 0) var term: Date, @Component(ordinal = 1) var id: UUID) extends Posting {
-  def this() = this(FieldSerializers.emptyDate, FieldSerializers.emptyUUID)
+class DatePosting(@Component(ordinal = 0) var term: Date, @Component(ordinal = 1) var id: UUID) extends Key with Posting {
+  def this() = this(Serializers.emptyDate, Serializers.emptyUUID)
 }
 
-class AddressPosting(@Component(ordinal = 0) var term: Array[Byte], @Component(ordinal = 1) var id: UUID) extends Posting {
-  def this() = this(FieldSerializers.emptyAddress, FieldSerializers.emptyUUID)
+class AddressPosting(@Component(ordinal = 0) var term: Array[Byte], @Component(ordinal = 1) var id: UUID) extends Key with Posting {
+  def this() = this(Serializers.emptyAddress, Serializers.emptyUUID)
 }
 
-object FieldSerializers {
+class MetaKey(@Component(ordinal = 0) var metaType: String, @Component(ordinal = 1) var nodeId: UUID) extends Key with Posting {
+  def this() = this(Serializers.emptyString, Serializers.emptyUUID)
+}
+
+object Serializers {
+  val emptyString = ""
   val emptyUUID = new UUID(0, 0)
   val emptyDate = new Date(0)
   val emptyAddress = Array[Byte](0x00, 0x00, 0x00, 0x00)
@@ -69,4 +76,5 @@ object FieldSerializers {
   val Datetime = new AnnotatedCompositeSerializer[DatePosting](classOf[DatePosting])
   val Address = new AnnotatedCompositeSerializer[AddressPosting](classOf[AddressPosting])
   val Hostname = new AnnotatedCompositeSerializer[StringPosting](classOf[StringPosting])
+  val Meta = new AnnotatedCompositeSerializer[MetaKey](classOf[MetaKey])
 }

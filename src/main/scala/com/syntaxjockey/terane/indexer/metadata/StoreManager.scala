@@ -137,8 +137,8 @@ class StoreManager extends Actor with ActorLogging {
               .setComparatorType("UTF8Type"))
             .addColumnFamily(cs.makeColumnFamilyDefinition()
               .setName("meta")
-              .setKeyValidationClass("UUIDType")
-              .setComparatorType("UTF8Type"))
+              .setKeyValidationClass("UTF8Type")
+              .setComparatorType("CompositeType(UTF8Type,UUIDType)"))
           val result = cs.addKeyspace(ksDef)
           log.debug("added keyspace {} (schema result id {})", id.toString, result.getResult.getSchemaId)
           /* create the store in zookeeper */

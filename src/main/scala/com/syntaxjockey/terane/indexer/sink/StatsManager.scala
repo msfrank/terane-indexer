@@ -22,11 +22,19 @@ package com.syntaxjockey.terane.indexer.sink
 import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import akka.agent.Agent
 import com.netflix.astyanax.Keyspace
+import com.netflix.astyanax.model.ColumnFamily
+import com.netflix.astyanax.serializers.StringSerializer
+import com.twitter.algebird.{BF, HLL, CMS}
 import scala.concurrent.duration._
+import scala.collection.JavaConversions._
+import java.io.{ObjectInputStream, ByteArrayInputStream, ObjectOutputStream, ByteArrayOutputStream}
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 import com.syntaxjockey.terane.indexer.zookeeper.Gossiper
+import com.syntaxjockey.terane.indexer.cassandra.{Serializers, MetaKey}
 
 /**
  * StatsManager handles store, field and posting statistics, which are used for
@@ -37,12 +45,17 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
   import FieldManager._
   import context.dispatcher
 
+  // config
   val servicesPath = "/stores/" + store.name + "/services"
+  val nodeId = UUID.randomUUID()  // FIXME: get real node id
+  val ttl = 0
+
   val gossiper = context.actorOf(Gossiper.props("stats", servicesPath, 60.seconds), "gossip")
 
+  // state
   var currentStats = StatsMap(Map.empty)
-
   var fieldsByCf: Map[String,CassandraField] = Map.empty
+
   sinkBus.subscribe(self, classOf[FieldNotification])
   fieldManager ! GetFields
 
@@ -54,6 +67,58 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
       val statsByCf = currentStats.statsByCf ++ statsAdded.map { id => id -> Agent(FieldStatistics.empty) }.toMap
       currentStats = StatsMap(statsByCf)
       sinkBus.publish(currentStats)
+      statsAdded.foreach(fieldId => self ! MergeStats(fieldId))
+
+    case WriteStats(fieldId) =>
+      writeStats(fieldId)
+
+    case MergeStats(fieldId) =>
+      mergeStats(fieldId)
+  }
+
+  def writeStats(fieldId: String) {
+    currentStats.statsByCf.get(fieldId) match {
+      case Some(agent) =>
+        val mutation = keyspace.prepareMutationBatch()
+        val row = mutation.withRow(StatsManager.CF_META, fieldId)
+        val fieldStats = agent.get()
+        row.putColumn(new MetaKey(TERM_FREQUENCIES, nodeId), writeTermFrequencies(fieldStats.termFrequencies), ttl)
+        row.putColumn(new MetaKey(FIELD_CARDINALITY, nodeId), writeFieldCardinality(fieldStats.fieldCardinality), ttl)
+        row.putColumn(new MetaKey(TERM_SET, nodeId), writeTermSet(fieldStats.termSet), ttl)
+        row.putColumn(new MetaKey(TERM_COUNT, nodeId), writeTermCount(fieldStats.termCount), ttl)
+        val result = mutation.execute()
+        val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+        log.debug("wrote meta for {} in {}", fieldId, latency)
+      case None =>  // do nothing if we have no record of the fieldId
+    }
+  }
+
+  def mergeStats(fieldId: String) {
+    currentStats.statsByCf.get(fieldId) match {
+      case Some(agent) =>
+        val result = keyspace.prepareQuery(StatsManager.CF_META).getKey(fieldId).execute()
+        val columnList = result.getResult
+        val latency = Duration(result.getLatency(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+        var statsByNode: Map[UUID,Map[String,Array[Byte]]] = Map.empty
+        columnList.getColumnNames.foreach { metaKey =>
+          val nodeStats = statsByNode.getOrElse(metaKey.nodeId, Map.empty) ++ Map(metaKey.metaType -> columnList.getByteArrayValue(metaKey, Array.empty))
+          statsByNode = statsByNode ++ Map(metaKey.nodeId -> nodeStats)
+        }
+        val fieldStats = FieldStatistics.merge(statsByNode.values.map { stats =>
+          val termFrequencies = if (stats.contains(TERM_FREQUENCIES)) readTermFrequencies(stats(TERM_FREQUENCIES)) else FieldStatistics.empty.termFrequencies
+          val fieldCardinality = if (stats.contains(FIELD_CARDINALITY)) readFieldCardinality(stats(FIELD_CARDINALITY)) else FieldStatistics.empty.fieldCardinality
+          val termSet = if (stats.contains(TERM_SET)) readTermSet(stats(TERM_SET)) else FieldStatistics.empty.termSet
+          val termCount = if (stats.contains(TERM_COUNT)) readTermCount(stats("term-count")) else FieldStatistics.empty.termCount
+          FieldStatistics(termFrequencies, fieldCardinality, termSet, termCount, FieldStatistics.empty.fieldSignature)
+        })
+        agent.send(fieldStats)
+        log.debug("merged meta for {} in {}", fieldId, latency)
+      case None =>  // do nothing if we have no record of the fieldId
+    }
+  }
+
+  override def postStop() {
+    currentStats.statsByCf.keys.foreach(writeStats)
   }
 }
 
@@ -63,7 +128,115 @@ object StatsManager {
     Props(classOf[StatsManager], store, keyspace, sinkBus, fieldManager)
   }
 
+  /**
+   * deserialize a byte-array into a count-min sketch containing term frequencies
+   */
+  def readTermFrequencies(bytes: Array[Byte]): CMS = {
+    val bstream = new ByteArrayInputStream(bytes)
+    val istream = new ObjectInputStream(bstream)
+    val termFrequencies = istream.readObject().asInstanceOf[CMS]
+    istream.close()
+    bstream.close()
+    termFrequencies
+  }
+
+  /**
+   * serialize term frequencies (a count-min sketch) into a byte-array
+   */
+  def writeTermFrequencies(termFrequencies: CMS): Array[Byte] = {
+    val bstream = new ByteArrayOutputStream()
+    val ostream = new ObjectOutputStream(bstream)
+    ostream.writeObject(termFrequencies)
+    val bytes = bstream.toByteArray
+    ostream.close()
+    bstream.close()
+    bytes
+  }
+
+  /**
+   * deserialize a byte-array into a hyper-log-log containing the field cardinality
+   */
+  def readFieldCardinality(bytes: Array[Byte]): HLL = {
+    val bstream = new ByteArrayInputStream(bytes)
+    val istream = new ObjectInputStream(bstream)
+    val fieldCardinality = istream.readObject().asInstanceOf[HLL]
+    istream.close()
+    bstream.close()
+    fieldCardinality
+  }
+
+  /**
+   * serialize field cardinality (a hyper-log-log) into a byte-array
+   */
+  def writeFieldCardinality(fieldCardinality: HLL): Array[Byte] = {
+    val bstream = new ByteArrayOutputStream()
+    val ostream = new ObjectOutputStream(bstream)
+    ostream.writeObject(fieldCardinality)
+    val bytes = bstream.toByteArray
+    ostream.close()
+    bstream.close()
+    bytes
+  }
+
+  /**
+   * deserialize a byte-array into a bloom filter containing the term set
+   */
+  def readTermSet(bytes: Array[Byte]): BF = {
+    val bstream = new ByteArrayInputStream(bytes)
+    val istream = new ObjectInputStream(bstream)
+    val termSet = istream.readObject().asInstanceOf[BF]
+    istream.close()
+    bstream.close()
+    termSet
+  }
+
+  /**
+   * serialize term set (a bloom filter) into a byte-array
+   */
+  def writeTermSet(termSet: BF): Array[Byte] = {
+    val bstream = new ByteArrayOutputStream()
+    val ostream = new ObjectOutputStream(bstream)
+    ostream.writeObject(termSet)
+    val bytes = bstream.toByteArray
+    ostream.close()
+    bstream.close()
+    bytes
+  }
+
+  /**
+   * deserialize a byte-array into a long containing the term count
+   */
+  def readTermCount(bytes: Array[Byte]): Long = {
+    val bstream = new ByteArrayInputStream(bytes)
+    val istream = new ObjectInputStream(bstream)
+    val termCount = istream.readLong()
+    istream.close()
+    bstream.close()
+    termCount
+  }
+
+  /**
+   * serialize term set (a bloom filter) into a byte-array
+   */
+  def writeTermCount(termCount: Long): Array[Byte] = {
+    val bstream = new ByteArrayOutputStream()
+    val ostream = new ObjectOutputStream(bstream)
+    ostream.writeLong(termCount)
+    val bytes = bstream.toByteArray
+    ostream.close()
+    bstream.close()
+    bytes
+  }
+
+  val CF_META = new ColumnFamily[String,MetaKey]("meta", StringSerializer.get(), Serializers.Meta)
+  val TERM_FREQUENCIES = "term-frequencies"
+  val FIELD_CARDINALITY = "field-cardinality"
+  val TERM_SET = "term-set"
+  val TERM_COUNT = "term-count"
+
   case object GetStats
+  case class WriteStats(fieldId: String)
+  case class MergeStats(fieldId: String)
 
   sealed trait StatsEvent extends SinkEvent
   sealed trait StatsNotification extends StatsEvent

@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.metadata.Store
-import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
+import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra, Serializers}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
 import com.syntaxjockey.terane.indexer.http.RetryLater
 import com.syntaxjockey.terane.indexer.Instrumented
@@ -173,7 +173,6 @@ object CassandraSink {
   def props(store: Store) = Props(classOf[CassandraSink], store)
 
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
-  val CF_META = new ColumnFamily[UUID,String]("meta", UUIDSerializer.get(), StringSerializer.get())
   val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
 
   case class StoreEvent(event: BierEvent, attempt: Int)

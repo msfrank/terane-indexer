@@ -124,37 +124,37 @@ class FieldManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus) exten
       val _fieldsChanged = fieldType match {
         case DataType.TEXT =>
           val fcf = new TypedFieldColumnFamily(fieldName, id, shardingFactor, new TextField(),
-            new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Text))
+            new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, Serializers.Text))
           val field = CassandraField(fieldId, created, text = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.LITERAL =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new LiteralField(),
-            new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, FieldSerializers.Literal))
+            new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, Serializers.Literal))
           val field = CassandraField(fieldId, created, literal = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.INTEGER =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new IntegerField(),
-            new ColumnFamily[java.lang.Long,LongPosting](id.toString, LongSerializer.get, FieldSerializers.Integer))
+            new ColumnFamily[java.lang.Long,LongPosting](id.toString, LongSerializer.get, Serializers.Integer))
           val field = CassandraField(fieldId, created, integer = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.FLOAT =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new FloatField(),
-            new ColumnFamily[java.lang.Long,DoublePosting](id.toString, LongSerializer.get, FieldSerializers.Float))
+            new ColumnFamily[java.lang.Long,DoublePosting](id.toString, LongSerializer.get, Serializers.Float))
           val field = CassandraField(fieldId, created, float = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.DATETIME =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new DatetimeField(),
-            new ColumnFamily[java.lang.Long,DatePosting](id.toString, LongSerializer.get, FieldSerializers.Datetime))
+            new ColumnFamily[java.lang.Long,DatePosting](id.toString, LongSerializer.get, Serializers.Datetime))
           val field = CassandraField(fieldId, created, datetime = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.ADDRESS =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new AddressField(),
-            new ColumnFamily[java.lang.Long,AddressPosting](id.toString, LongSerializer.get, FieldSerializers.Address))
+            new ColumnFamily[java.lang.Long,AddressPosting](id.toString, LongSerializer.get, Serializers.Address))
           val field = CassandraField(fieldId, created, address = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
         case DataType.HOSTNAME =>
           val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id.toString, shardingFactor, new HostnameField(),
-            new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, FieldSerializers.Hostname))
+            new ColumnFamily[java.lang.Long,StringPosting](id.toString, LongSerializer.get, Serializers.Hostname))
           val field = CassandraField(fieldId, created, hostname = Some(fcf))
           FieldMap(fieldsByIdent ++ Map(fieldId -> field), fieldsByCf ++ Map(fcf.id -> field))
       }
@@ -188,37 +188,37 @@ class FieldManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus) exten
           val createdField = fieldId.fieldType match {
             case DataType.TEXT =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new TextField(),
-                new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Text))
+                new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, Serializers.Text))
               val field = CassandraField(fieldId, created, text = Some(fcf))
               CreatedField(fieldId, field, fcf, createTextField(id).getResult)
             case DataType.LITERAL =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new LiteralField(),
-                new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Literal))
+                new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, Serializers.Literal))
               val field = CassandraField(fieldId, created, literal = Some(fcf))
               CreatedField(fieldId, field, fcf, createLiteralField(id).getResult)
             case DataType.INTEGER =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new IntegerField(),
-                new ColumnFamily[java.lang.Long,LongPosting](id, LongSerializer.get, FieldSerializers.Integer))
+                new ColumnFamily[java.lang.Long,LongPosting](id, LongSerializer.get, Serializers.Integer))
               val field = CassandraField(fieldId, created, integer = Some(fcf))
               CreatedField(fieldId, field, fcf, createIntegerField(id).getResult)
             case DataType.FLOAT =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new FloatField(),
-                new ColumnFamily[java.lang.Long,DoublePosting](id, LongSerializer.get, FieldSerializers.Float))
+                new ColumnFamily[java.lang.Long,DoublePosting](id, LongSerializer.get, Serializers.Float))
               val field = CassandraField(fieldId, created, float = Some(fcf))
               CreatedField(fieldId, field, fcf, createFloatField(id).getResult)
             case DataType.DATETIME =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new DatetimeField(),
-                new ColumnFamily[java.lang.Long,DatePosting](id, LongSerializer.get, FieldSerializers.Datetime))
+                new ColumnFamily[java.lang.Long,DatePosting](id, LongSerializer.get, Serializers.Datetime))
               val field = CassandraField(fieldId, created, datetime = Some(fcf))
               CreatedField(fieldId, field, fcf, createDatetimeField(id).getResult)
             case DataType.ADDRESS =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new AddressField(),
-                new ColumnFamily[java.lang.Long,AddressPosting](id, LongSerializer.get, FieldSerializers.Address))
+                new ColumnFamily[java.lang.Long,AddressPosting](id, LongSerializer.get, Serializers.Address))
               val field = CassandraField(fieldId, created, address = Some(fcf))
               CreatedField(fieldId, field, fcf, createAddressField(id).getResult)
             case DataType.HOSTNAME =>
               val fcf = new TypedFieldColumnFamily(fieldId.fieldName, id, shardingFactor, new HostnameField(),
-                new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, FieldSerializers.Hostname))
+                new ColumnFamily[java.lang.Long,StringPosting](id, LongSerializer.get, Serializers.Hostname))
               val field = CassandraField(fieldId, created, hostname = Some(fcf))
               CreatedField(fieldId, field, fcf, createHostnameField(id).getResult)
           }
