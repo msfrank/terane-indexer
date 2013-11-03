@@ -1,4 +1,4 @@
-package com.syntaxjockey.terane.indexer.syslog
+package com.syntaxjockey.terane.indexer.source
 
 import akka.actor._
 import akka.io._
@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 import java.net.InetSocketAddress
 import javax.net.ssl.SSLContext
 
-import com.syntaxjockey.terane.indexer.syslog.SyslogPipelineHandler.SyslogInit
+import com.syntaxjockey.terane.indexer.source.SyslogPipelineHandler.SyslogInit
 import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
 
 /**

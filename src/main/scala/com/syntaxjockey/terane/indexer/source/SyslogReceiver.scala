@@ -17,7 +17,7 @@
  * along with Terane.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.syntaxjockey.terane.indexer.syslog
+package com.syntaxjockey.terane.indexer.source
 
 import com.netflix.astyanax.util.TimeUUIDUtils
 import org.xbill.DNS.Name

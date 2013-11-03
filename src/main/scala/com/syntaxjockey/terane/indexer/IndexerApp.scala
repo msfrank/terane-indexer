@@ -26,7 +26,7 @@ import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance
 import scala.collection.JavaConversions._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.syslog.{SyslogTcpSource, SyslogUdpSource}
+import com.syntaxjockey.terane.indexer.source.{SyslogTcpSource, SyslogUdpSource}
 import com.syntaxjockey.terane.indexer.http.HttpServer
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 

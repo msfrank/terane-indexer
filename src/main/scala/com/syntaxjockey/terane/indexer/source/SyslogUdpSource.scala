@@ -17,7 +17,7 @@
  * along with Terane.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.syntaxjockey.terane.indexer.syslog
+package com.syntaxjockey.terane.indexer.source
 
 import com.typesafe.config.Config
 import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}

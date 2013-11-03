@@ -17,7 +17,7 @@
  * along with Terane.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.syntaxjockey.terane.indexer.syslog
+package com.syntaxjockey.terane.indexer.source
 
 import org.scalatest.matchers.MustMatchers
 import org.scalatest.WordSpec

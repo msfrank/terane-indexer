@@ -76,6 +76,10 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
       mergeStats(fieldId)
   }
 
+  /**
+   * write the field specified by fieldId to the meta column family.  if the field doesn't
+   * exist, then do nothing.
+   */
   def writeStats(fieldId: String) {
     currentStats.statsByCf.get(fieldId) match {
       case Some(agent) =>
@@ -93,6 +97,9 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
     }
   }
 
+  /**
+   * merge the field specified by fieldId from the meta column family into the FieldStatistics agent.
+   */
   def mergeStats(fieldId: String) {
     currentStats.statsByCf.get(fieldId) match {
       case Some(agent) =>
@@ -117,6 +124,9 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
     }
   }
 
+  /**
+   * write out all known fields to the meta column family before stopping.
+   */
   override def postStop() {
     currentStats.statsByCf.keys.foreach(writeStats)
   }
