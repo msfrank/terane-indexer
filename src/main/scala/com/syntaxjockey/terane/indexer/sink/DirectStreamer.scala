@@ -31,6 +31,7 @@ import com.syntaxjockey.terane.indexer.sink.DirectStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
+import java.nio.file.Files
 
 class DirectStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fields: FieldMap) extends Streamer(created, fields) with LoggingFSM[State,Data] {
   import DirectStreamer._
@@ -43,6 +44,7 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fiel
   val db = DBMaker.newFileDB(dbfile)
     .compressionEnable()
     .transactionDisable()
+    .deleteFilesAfterClose()
     .make()
   val events = db.createTreeMap("events")
     .nodeSize(16)
@@ -117,9 +119,7 @@ class DirectStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fiel
 
   onTermination {
     case StopEvent(_, _, _) =>
-      log.debug("deleting temp file " + dbfile.getAbsolutePath)
       db.close()
-      dbfile.delete()
   }
 }
 

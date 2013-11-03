@@ -35,6 +35,7 @@ import com.syntaxjockey.terane.indexer.sink.SortingStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
+import java.nio.file.Files
 
 class SortingStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fields: FieldMap) extends Streamer(created, fields) with LoggingFSM[State,Data] {
   import SortingStreamer._
@@ -50,6 +51,7 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fie
   val db = DBMaker.newFileDB(dbfile)
             .compressionEnable()
             .transactionDisable()
+            .deleteFilesAfterClose()
             .make()
   val events = db.createTreeMap("events")
     .nodeSize(16)
@@ -123,9 +125,7 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fie
 
   onTermination {
     case StopEvent(_, _, _) =>
-      log.debug("deleting sort file " + dbfile.getAbsolutePath)
       db.close()
-      dbfile.delete()   // FIXME: file doesn't seem to get deleted
   }
 
   def makeKey(event: BierEvent): EventKey = {
