@@ -25,18 +25,22 @@ import com.netflix.curator.framework.CuratorFramework
 import com.netflix.curator.framework.state.ConnectionState
 import com.netflix.curator.x.discovery.{ServiceCache, ServiceInstance, ServiceDiscoveryBuilder}
 import com.netflix.curator.x.discovery.details.ServiceCacheListener
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{FiniteDuration, Duration}
 import scala.collection.JavaConversions._
 import java.util.UUID
+import scala.util.Random
 
 /**
  * Gossiper is responsible for disseminating gossip information from the parent actor
- * to all registered peers of the same gossipType in the specified zookeeper services path
+ * to all registered peers of the same gossipType in the specified zookeeper services path.
+ * Gossiper periodically sends a RequestGossip message to its parent, and expects a Gossip
+ * message back containing the current state of the node.
  */
-class Gossiper(gossipType: String, servicesPath: String, interval: Duration) extends Actor with ActorLogging {
+class Gossiper(gossipType: String, servicesPath: String, interval: FiniteDuration) extends Actor with ActorLogging {
   import Gossiper._
+  import context.dispatcher
 
-  /* */
+  /* describe ourselves */
   val selfAddress = Cluster(context.system).selfAddress
   val serviceInstance = ServiceInstance.builder[Void]()
       .name(gossipType)
@@ -58,11 +62,15 @@ class Gossiper(gossipType: String, servicesPath: String, interval: Duration) ext
   serviceCache.addListener(new GossipServiceListener(serviceCache, self))
   serviceCache.start()
 
+  // state
   var currentPeers = GossipPeers(Seq.empty)
   var currentData: Option[Serializable] = None
+  var parent = context.parent
+  var requestGossip: Option[Cancellable] = Some(context.system.scheduler.schedule(interval, interval)(() => parent ! RequestGossip))
 
   def receive = {
 
+    /* peers have been added or removed */
     case PeersChanged =>
       log.debug("gossip peers changed")
       currentPeers = GossipPeers(serviceCache.getInstances.map(instance => context.actorSelection(instance.getAddress)))
@@ -72,7 +80,12 @@ class Gossiper(gossipType: String, servicesPath: String, interval: Duration) ext
       log.debug("received gossip payload from {}", sender.toString())
       context.parent ! gossip
 
+    /* state from parent */
     case Gossip(data) =>
+      if (!currentPeers.peers.isEmpty) {
+        val randomPeer = currentPeers.peers(Random.nextInt(currentPeers.peers.length))
+        randomPeer ! data
+      }
 
     /* connection state changed */
     case StateChanged(state) =>
@@ -80,13 +93,15 @@ class Gossiper(gossipType: String, servicesPath: String, interval: Duration) ext
   }
 
   override def postStop() {
+    for (cancellable <- requestGossip)
+      cancellable.cancel()
     serviceCache.close()
     serviceDiscovery.close()
   }
 }
 
 object Gossiper {
-  def props(gossipType: String, servicesPath: String, interval: Duration) = Props(classOf[Gossiper], gossipType, servicesPath, interval)
+  def props(gossipType: String, servicesPath: String, interval: FiniteDuration) = Props(classOf[Gossiper], gossipType, servicesPath, interval)
 
   case class GossipPayload(gossip: Gossip)
   case class GossipPeers(peers: Seq[ActorSelection])
@@ -95,7 +110,12 @@ object Gossiper {
 }
 
 case class Gossip(data: Serializable)
+case object RequestGossip
 
+/**
+ * Listens for changes to the service cache, notifies the Gossiper if peers have changed or
+ * the connection state has changed.
+ */
 class GossipServiceListener(cache: ServiceCache[Void], manager: ActorRef) extends ServiceCacheListener {
   import Gossiper._
   def cacheChanged() {

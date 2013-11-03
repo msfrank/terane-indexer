@@ -33,8 +33,9 @@ import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
-import com.syntaxjockey.terane.indexer.zookeeper.Gossiper
+import com.syntaxjockey.terane.indexer.zookeeper.{Gossip, RequestGossip, Gossiper}
 import com.syntaxjockey.terane.indexer.cassandra.{Serializers, MetaKey}
+import scala.util.Random
 
 /**
  * StatsManager handles store, field and posting statistics, which are used for
@@ -48,14 +49,14 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
   // config
   val servicesPath = "/stores/" + store.name + "/services"
   val nodeId = UUID.randomUUID()  // FIXME: get real node id
-  val ttl = 0
-
   val gossiper = context.actorOf(Gossiper.props("stats", servicesPath, 60.seconds), "gossip")
+  val ttl = 0
 
   // state
   var currentStats = StatsMap(Map.empty)
   var fieldsByCf: Map[String,CassandraField] = Map.empty
 
+  /* register to be notified of field changes */
   sinkBus.subscribe(self, classOf[FieldNotification])
   fieldManager ! GetFields
 
@@ -69,9 +70,29 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
       sinkBus.publish(currentStats)
       statsAdded.foreach(fieldId => self ! MergeStats(fieldId))
 
+    /* pick a random field to share with a peer */
+    case RequestGossip =>
+      if (!currentStats.statsByCf.isEmpty) {
+        val statsSeq = currentStats.statsByCf.toSeq
+        val (fieldId: String, agent: Agent[FieldStatistics]) = statsSeq(Random.nextInt(statsSeq.length))
+        log.debug("picked field {} to gossip", fieldId)
+        sender ! Gossip(StatGossip(fieldId, agent.get()))
+      }
+
+    /* merge peer gossip with */
+    case Gossip(StatGossip(fieldId, stats)) =>
+      log.debug("received gossip about {}", fieldId)
+      currentStats.statsByCf.get(fieldId) match {
+        case Some(agent) =>
+          agent.send(_ + stats)
+        case None =>  // do nothing if we have no record of the fieldId
+      }
+
+    /* write stats to persistent storage */
     case WriteStats(fieldId) =>
       writeStats(fieldId)
 
+    /* read stats from persistent storage */
     case MergeStats(fieldId) =>
       mergeStats(fieldId)
   }
@@ -252,3 +273,5 @@ object StatsManager {
   sealed trait StatsNotification extends StatsEvent
   case class StatsMap(statsByCf: Map[String,Agent[FieldStatistics]]) extends StatsNotification
 }
+
+case class StatGossip(fieldId: String, stats: FieldStatistics)
