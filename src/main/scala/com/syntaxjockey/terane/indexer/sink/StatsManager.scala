@@ -77,7 +77,8 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
         val (fieldId: String, agent: Agent[FieldStatistics]) = statsSeq(Random.nextInt(statsSeq.length))
         log.debug("picked field {} to gossip", fieldId)
         sender ! Gossip(StatGossip(fieldId, agent.get()))
-      }
+      } else log.debug("ignoring gossip request, no stats to share")
+
 
     /* merge peer gossip with */
     case Gossip(StatGossip(fieldId, stats)) =>
@@ -86,6 +87,7 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
         case Some(agent) =>
           agent.send(_ + stats)
         case None =>  // do nothing if we have no record of the fieldId
+          log.debug("field {} is not known, ignoring gossip")
       }
 
     /* write stats to persistent storage */

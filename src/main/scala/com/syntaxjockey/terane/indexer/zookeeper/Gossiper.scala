@@ -65,27 +65,29 @@ class Gossiper(gossipType: String, servicesPath: String, interval: FiniteDuratio
   // state
   var currentPeers = GossipPeers(Seq.empty)
   var currentData: Option[Serializable] = None
-  var parent = context.parent
-  var requestGossip: Option[Cancellable] = Some(context.system.scheduler.schedule(interval, interval)(() => parent ! RequestGossip))
+  var requestGossip: Option[Cancellable] = Some(context.system.scheduler.schedule(interval, interval, self, RequestGossip))
 
   def receive = {
 
     /* peers have been added or removed */
     case PeersChanged =>
-      log.debug("gossip peers changed")
       currentPeers = GossipPeers(serviceCache.getInstances.map(instance => context.actorSelection(instance.getAddress)))
+      log.debug("gossip peers changed, new map is {}", currentPeers.peers)
 
     /* peer gossip */
     case GossipPayload(gossip) =>
       log.debug("received gossip payload from {}", sender.toString())
-      context.parent ! gossip
+      context.parent ! Gossip(gossip)
+
+    case RequestGossip =>
+      context.parent ! RequestGossip
 
     /* state from parent */
     case Gossip(data) =>
       if (!currentPeers.peers.isEmpty) {
         val randomPeer = currentPeers.peers(Random.nextInt(currentPeers.peers.length))
-        randomPeer ! data
-      }
+        randomPeer ! GossipPayload(data)
+      } else log.debug("ignoring gossip, no remote peers to share with")
 
     /* connection state changed */
     case StateChanged(state) =>
@@ -103,7 +105,7 @@ class Gossiper(gossipType: String, servicesPath: String, interval: FiniteDuratio
 object Gossiper {
   def props(gossipType: String, servicesPath: String, interval: FiniteDuration) = Props(classOf[Gossiper], gossipType, servicesPath, interval)
 
-  case class GossipPayload(gossip: Gossip)
+  case class GossipPayload(gossip: Serializable)
   case class GossipPeers(peers: Seq[ActorSelection])
   case object SendGossip
   case object PeersChanged

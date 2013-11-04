@@ -21,6 +21,7 @@ object TeraneIndexerBuild extends Build {
       name := "terane-indexer",
       version := teraneVersion,
       scalaVersion := "2.10.3",
+      javacOptions ++= Seq("-source", "1.7"),
       resolvers ++= Seq(
         "spray repo" at "http://repo.spray.io",
         "spray nightlies" at "http://nightlies.spray.io"
