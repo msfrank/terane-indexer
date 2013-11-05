@@ -12,7 +12,7 @@ object CassandraConfig extends ComposableConfig {
     |    connection-pool-name = "Default Connection Pool"
     |    port = 9160
     |    max-conns-per-host = 1
-    |    seeds = [ "127.0.0.1:9160" ]
+    |    servers = [ "127.0.0.1:9160" ]
     |    cluster-name = "Default Cluster"
     |  }
     |}

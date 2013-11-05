@@ -30,8 +30,8 @@ import spray.can.Http
 import spray.http._
 import spray.http.HttpHeaders.Location
 import spray.util.LoggingContext
+import akka.util.Timeout._
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.sink.Query._
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
@@ -39,6 +39,7 @@ import com.syntaxjockey.terane.indexer.sink.Query.EventSet
 import com.syntaxjockey.terane.indexer.sink.Query.QueryStatistics
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreatedQuery
+import com.syntaxjockey.terane.indexer.IndexerConfig
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -46,20 +47,17 @@ import reflect.ClassTag
 /**
  *
  */
-class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
+class HttpServer(settings: HttpSettings, val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
 
-  val httpPort = config.getInt("port")
-  val httpInterface = config.getString("interface")
-  val httpBacklog = config.getInt("backlog")
-  val timeout: Timeout = Timeout(config.getMilliseconds("request-timeout"), TimeUnit.MILLISECONDS)
+  val timeout: Timeout = settings.requestTimeout
 
   implicit val system = context.system
   implicit val dispatcher = context.dispatcher
   val actorRefFactory = context
 
   override def preStart() {
-    log.debug("binding to %s:%d with backlog %d".format(httpInterface, httpPort, httpBacklog))
-    IO(Http) ! Http.Bind(self, httpInterface, port = httpPort, backlog = httpBacklog)
+    IO(Http) ! Http.Bind(self, settings.interface, port = settings.port, backlog = settings.backlog)
+    log.debug("binding to %s:%d with backlog %d".format(settings.interface, settings.port, settings.backlog))
   }
 
   def receive = runRoute(routes) orElse {
@@ -68,7 +66,7 @@ class HttpServer(config: Config, val eventRouter: ActorRef) extends Actor with A
 }
 
 object HttpServer {
-  def props(config: Config, eventRouter: ActorRef) = Props(classOf[HttpServer], config, eventRouter)
+  def props(settings: HttpSettings, eventRouter: ActorRef) = Props(classOf[HttpServer], settings, eventRouter)
 }
 
 trait ApiService extends HttpService {

@@ -26,7 +26,7 @@ import com.netflix.astyanax.connectionpool.NodeDiscoveryType
 import com.netflix.astyanax.connectionpool.impl.{CountingConnectionPoolMonitor, ConnectionPoolConfigurationImpl}
 import com.netflix.astyanax.{Cluster, AstyanaxContext}
 import com.netflix.astyanax.thrift.ThriftFamilyFactory
-import scala.collection.JavaConversions._
+import com.syntaxjockey.terane.indexer.IndexerConfig
 
 class CassandraManager(_context: AstyanaxContext[Cluster]) extends Actor with ActorLogging {
 
@@ -54,25 +54,23 @@ class CassandraExtension(system: ActorSystem) extends Extension {
 
   private val log = LoggerFactory.getLogger(classOf[CassandraExtension])
 
-  val config = system.settings.config.getConfig("terane.cassandra")
+  val settings = IndexerConfig(system).settings.cassandra
 
   val configuration = new AstyanaxConfigurationImpl()
     .setDiscoveryType(NodeDiscoveryType.RING_DESCRIBE)
-  val seeds = config.getStringList("seeds").mkString(",")
-  val poolConfiguration = new ConnectionPoolConfigurationImpl(config.getString("connection-pool-name"))
-    .setPort(config.getInt("port"))
-    .setMaxConnsPerHost(config.getInt("max-conns-per-host"))
-    .setSeeds(seeds)
+  val poolConfiguration = new ConnectionPoolConfigurationImpl(settings.poolName)
+    .setPort(settings.port)
+    .setMaxConnsPerHost(settings.maxConnsPerHost)
+    .setSeeds(settings.servers.mkString(","))
   val connectionPoolMonitor = new CountingConnectionPoolMonitor()
-  val clusterName = config.getString("cluster-name")
   val context = new AstyanaxContext.Builder()
-    .forCluster(clusterName)
+    .forCluster(settings.clusterName)
     .withAstyanaxConfiguration(configuration)
     .withConnectionPoolConfiguration(poolConfiguration)
     .withConnectionPoolMonitor(connectionPoolMonitor)
     .buildCluster(ThriftFamilyFactory.getInstance())
 
-  log.info("connecting to cluster {}", clusterName)
+  log.info("connecting to cluster {}", settings.clusterName)
   context.start()
 
   val manager = system.actorOf(CassandraManager.props(context), "cassandra-manager")

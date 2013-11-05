@@ -31,7 +31,7 @@ import com.syntaxjockey.terane.indexer.{Instrumented, EventRouter}
  * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
  * http://tools.ietf.org/html/rfc5424
  */
-class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging with Instrumented {
+class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging with Instrumented {
   import EventRouter._
   import context.system
 
@@ -39,14 +39,7 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
   val messagesReceived = metrics.meter("messages-received", "messages")
   val messagesDropped = metrics.meter("messages-dropped", "messages")
 
-  // config
-  val syslogPort = config.getInt("port")
-  val syslogInterface = config.getString("interface")
-  val defaultSink = config.getString("use-sink")
-  val allowSinkRouting = config.getBoolean("allow-sink-routing")
-  val allowSinkCreate = config.getBoolean("allow-sink-creation")
-
-  val localAddr = new InetSocketAddress(syslogInterface, syslogPort)
+  val localAddr = new InetSocketAddress(settings.interface, settings.port)
   log.debug("attempting to bind to {}", localAddr)
   IO(Udp) ! Bind(self, localAddr)
 
@@ -66,7 +59,7 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
         event match {
           case message: Message =>
             log.debug("received {}", message)
-            eventRouter ! StoreEvent(defaultSink, message)
+            eventRouter ! StoreEvent(settings.useSink, message)
             messagesReceived.mark()
           case failure: SyslogFailure =>
             messagesDropped.mark()
@@ -78,5 +71,5 @@ class SyslogUdpSource(config: Config, eventRouter: ActorRef) extends Actor with 
 }
 
 object SyslogUdpSource {
-  def props(config: Config, eventRouter: ActorRef) = Props(classOf[SyslogUdpSource], config, eventRouter)
+  def props(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) = Props(classOf[SyslogUdpSource], settings, eventRouter)
 }

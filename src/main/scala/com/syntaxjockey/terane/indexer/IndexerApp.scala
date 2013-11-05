@@ -21,14 +21,13 @@ package com.syntaxjockey.terane.indexer
 
 import akka.actor.{AddressFromURIString, ActorRef, ActorSystem}
 import akka.cluster.Cluster
-import com.typesafe.config._
 import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.collection.JavaConversions._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.source.{SyslogTcpSource, SyslogUdpSource}
-import com.syntaxjockey.terane.indexer.http.HttpServer
+import com.syntaxjockey.terane.indexer.source._
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import com.syntaxjockey.terane.indexer.http.HttpServer
 
 /**
  * Indexer application entry point
@@ -41,30 +40,28 @@ object IndexerApp extends App {
   /* start the actor system */
   val system = ActorSystem("terane-indexer", config)
 
+  val settings = IndexerConfig(system).settings
+
   /* start the sinks */
   val eventRouter = system.actorOf(EventRouter.props(), "event-router")
 
   /* start the sources */
-  val sources: Seq[ActorRef] = if (config.hasPath("terane.sources"))
-    config.getConfig("terane.sources").root()
-      .filter { case (name: String, configValue: ConfigValue) => configValue.valueType() == ConfigValueType.OBJECT }
-      .map { case (name: String, configValue: ConfigValue) =>
-        val source = configValue.asInstanceOf[ConfigObject].toConfig
-        source.getString("source-type") match {
-          case "syslog-udp" =>
-            system.actorOf(SyslogUdpSource.props(source, eventRouter), "source-" + name)
-          case "syslog-tcp" =>
-            system.actorOf(SyslogTcpSource.props(source, eventRouter), "source-" + name)
-          case other =>
-            throw new Exception("unknown source-type " + other)
-        }
-      }.toSeq
-  else Seq.empty
+  val sources: Seq[ActorRef] = settings.sources.map { case (name: String, sourceSettings: SourceSettings) =>
+    sourceSettings match {
+      case syslogTcpSourceSettings: SyslogTcpSourceSettings =>
+        system.actorOf(SyslogTcpSource.props(syslogTcpSourceSettings, eventRouter), "source-" + name)
+      case syslogUdpSourceSettings: SyslogUdpSourceSettings =>
+        system.actorOf(SyslogUdpSource.props(syslogUdpSourceSettings, eventRouter), "source-" + name)
+    }
+  }.toSeq
 
-  /* start the api */
-  val httpApi = if (config.hasPath("terane.http"))
-    Some(system.actorOf(HttpServer.props(config.getConfig("terane.http"), eventRouter), "http-api"))
-  else None
+  /* start the HTTP service if configured */
+  val http = settings.http match {
+    case Some(httpSettings) =>
+      Some(system.actorOf(HttpServer.props(httpSettings, eventRouter), "http-api"))
+    case None =>
+      None
+  }
 
   /* register as a cluster seed */
   val selfAddress = Cluster(system).selfAddress

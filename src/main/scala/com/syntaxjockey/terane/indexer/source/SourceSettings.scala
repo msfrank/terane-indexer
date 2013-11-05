@@ -1,7 +1,7 @@
 package com.syntaxjockey.terane.indexer.source
 
 import com.typesafe.config.Config
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{FiniteDuration, Duration}
 import com.syntaxjockey.terane.indexer.IndexerConfigException
 import java.util.concurrent.TimeUnit
 
@@ -72,7 +72,7 @@ object SyslogTcpTlsSettings {
 class SyslogTcpSourceSettings(
   override val interface: String,
   override val port: Int,
-  val idleTimeout: Option[Duration],
+  val idleTimeout: Option[FiniteDuration],
   val maxConnections: Option[Int],
   val maxMessageSize: Option[Long],
   val tlsSettings: Option[SyslogTcpTlsSettings],
@@ -85,7 +85,7 @@ object SyslogTcpSourceSettings {
   def parse(config: Config): SyslogTcpSourceSettings = {
     val interface = config.getString("interface")
     val port = config.getInt("port")
-    val idleTimeout = if (config.hasPath("idle-timeout")) Some(Duration(config.getMilliseconds("idle-timeout"), TimeUnit.MILLISECONDS)) else None
+    val idleTimeout = if (config.hasPath("idle-timeout")) Some(FiniteDuration(config.getMilliseconds("idle-timeout"), TimeUnit.MILLISECONDS)) else None
     val maxMessageSize = if (config.hasPath("max-message-size")) Some(config.getBytes("max-message-size").toLong) else None
     val maxConnections = if (config.hasPath("max-connections")) Some(config.getInt("max-connections")) else None
     val defaultSink = config.getString("use-sink")

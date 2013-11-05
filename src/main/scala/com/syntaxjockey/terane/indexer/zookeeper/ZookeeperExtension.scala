@@ -25,32 +25,25 @@ import com.netflix.curator.retry.ExponentialBackoffRetry
 import com.netflix.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import scala.collection.JavaConversions._
 import java.nio.charset.Charset
+import com.syntaxjockey.terane.indexer.IndexerConfig
 
 class ZookeeperExtension(system: ActorSystem) extends Extension {
 
   private val log = LoggerFactory.getLogger(classOf[ZookeeperExtension])
 
-  val config = system.settings.config.getConfig("terane.zookeeper")
+  val settings = IndexerConfig(system).settings.zookeeper
 
   /* configure zookeeper */
-  private val retryPolicy = new ExponentialBackoffRetry(
-    config.getMilliseconds("retry-sleep-time").toInt,
-    config.getInt("retry-count"))
-  log.debug("retryPolicy = {}", retryPolicy)
-
-  private val connectionString = config.getStringList("servers").mkString(",")
-  log.debug("connectionString = {}", connectionString)
-
-  private val namespace = config.getString("namespace")
-  log.debug("namespace = {}", namespace)
-
   val client = {
-    val _client = CuratorFrameworkFactory.newClient(connectionString, retryPolicy)
-    log.info("connecting to zookeeper servers {}", connectionString)
-    _client.start()
-    if (config.hasPath("namespace"))
-      _client.usingNamespace(config.getString("namespace"))
-    else _client
+    val retryPolicy = new ExponentialBackoffRetry(settings.retrySleepTime.toMillis.toInt, settings.retryCount)
+    val client = CuratorFrameworkFactory.newClient(settings.servers.mkString(","), retryPolicy)
+    client.start()
+    settings.namespace match {
+      case Some(_namespace) =>
+        client.usingNamespace(_namespace)
+      case None =>
+        client
+    }
   }
 
   /* create zookeeper manager */

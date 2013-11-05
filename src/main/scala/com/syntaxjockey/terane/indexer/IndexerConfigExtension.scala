@@ -1,7 +1,7 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
-import com.typesafe.config.{Config, ConfigObject, ConfigValue, ConfigFactory}
+import com.typesafe.config._
 import org.slf4j.LoggerFactory
 import scala.collection.JavaConversions._
 import java.io.File
@@ -52,6 +52,8 @@ class IndexerConfigExtension(system: ActorSystem) extends Extension {
   } catch {
     case ex: IndexerConfigException =>
       throw ex
+    case ex: ConfigException =>
+      throw new IndexerConfigException("failed to parse config: %s".format(ex.getMessage), ex)
     case ex: Throwable =>
       throw new IndexerConfigException("unexpected exception while parsing configuration", ex)
   }

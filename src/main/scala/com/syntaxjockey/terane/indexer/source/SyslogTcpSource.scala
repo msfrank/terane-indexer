@@ -9,6 +9,9 @@ import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
 import java.net.InetSocketAddress
 import javax.net.ssl.SSLContext
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
+import java.security.KeyStore
+import java.io.FileInputStream
 
 import com.syntaxjockey.terane.indexer.source.SyslogPipelineHandler.SyslogInit
 import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
@@ -20,61 +23,35 @@ import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
  * if "enable-tls" is true, then the actor implements TLS for transport security
  * in accordance with RFC5425: http://tools.ietf.org/html/rfc5425
  */
-class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with ActorLogging {
+class SyslogTcpSource(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) extends Actor with ActorLogging {
   import akka.io.Tcp._
   import akka.io.{TcpReadWriteAdapter, BackpressureBuffer}
   import context.system
-
-  // config
-  val syslogPort = config.getInt("port")
-  val syslogInterface = config.getString("interface")
-  val enableTls = if (config.hasPath("enable-tls")) config.getBoolean("enable-tls") else false
-  val idleTimeout = if (config.hasPath("idle-timeout")) Some(Duration(config.getMilliseconds("idle-timeout"), TimeUnit.MILLISECONDS)) else None
-  val maxMessageSize = if (config.hasPath("max-message-size")) Some(config.getBytes("max-message-size").toLong) else None
-  val maxConnections = if (config.hasPath("max-connections")) Some(config.getInt("max-connections")) else None
-  val defaultSink = config.getString("use-sink")
-  val allowSinkRouting = config.getBoolean("allow-sink-routing")
-  val allowSinkCreate = config.getBoolean("allow-sink-creation")
-
-  val keystoreFile = if (config.hasPath("tls-keystore")) Some(config.getString("tls-keystore")) else None
-  val truststoreFile = if (config.hasPath("tls-truststore")) Some(config.getString("tls-truststore")) else None
-  val password = if (config.hasPath("tls-password")) config.getString("tls-password") else null
-  val keystorePassword = if (config.hasPath("tls-keystore-password")) config.getString("tls-keystore-password") else password
-  val truststorePassword = if (config.hasPath("tls-truststore-password")) config.getString("tls-truststore-password") else password
-  val keymanagerPassword = if (config.hasPath("tls-keymanager-password")) config.getString("tls-keymanager-password") else password
-  val tlsClientAuth = if (config.hasPath("tls-client-auth")) {
-    config.getString("tls-client-auth") match {
-      case "required" => "required"
-      case "requested" => "requested"
-      case "ignored" => "ignored"
-      case unknown => throw new Exception("unknown tls-client auth mode '%s'".format(unknown))
-    }
-  } else "requested"
 
   // state
   var connections: Set[ActorRef] = Set.empty
 
   // if tls is enabled, then create an SSLContext
-  val sslContext: Option[SSLContext] = if (enableTls) {
-    import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
-    import java.security.KeyStore
-    import java.io.FileInputStream
-    val keystore = KeyStore.getInstance("JKS")
-    keystore.load(new FileInputStream(keystoreFile.get), keystorePassword.toCharArray)
-    val truststore = KeyStore.getInstance("JKS")
-    truststore.load(new FileInputStream(truststoreFile.get), truststorePassword.toCharArray)
-    val keymanagerFactory = KeyManagerFactory.getInstance("SunX509")
-    keymanagerFactory.init(keystore, keymanagerPassword.toCharArray)
-    val trustmanagerFactory = TrustManagerFactory.getInstance("SunX509")
-    trustmanagerFactory.init(truststore)
-    val sslContext = SSLContext.getInstance("TLS")
-    sslContext.init(keymanagerFactory.getKeyManagers, trustmanagerFactory.getTrustManagers, null)
-    log.debug("enabling TLS for source")
-    Some(sslContext)
-  } else None
+  val sslContext: Option[SSLContext] = settings.tlsSettings match {
+    case Some(tlsSettings) =>
+      val keystore = KeyStore.getInstance("JKS")
+      keystore.load(new FileInputStream(tlsSettings.tlsKeystore), tlsSettings.tlsKeystorePassword.toCharArray)
+      val truststore = KeyStore.getInstance("JKS")
+      truststore.load(new FileInputStream(tlsSettings.tlsTruststore), tlsSettings.tlsTruststorePassword.toCharArray)
+      val keymanagerFactory = KeyManagerFactory.getInstance("SunX509")
+      keymanagerFactory.init(keystore, tlsSettings.tlsKeymanagerPassword.toCharArray)
+      val trustmanagerFactory = TrustManagerFactory.getInstance("SunX509")
+      trustmanagerFactory.init(truststore)
+      val sslContext = SSLContext.getInstance("TLS")
+      sslContext.init(keymanagerFactory.getKeyManagers, trustmanagerFactory.getTrustManagers, null)
+      log.debug("enabling TLS for source")
+      Some(sslContext)
+    case None =>
+      None
+  }
 
   // start the bind process
-  val localAddr = new InetSocketAddress(syslogInterface, syslogPort)
+  val localAddr = new InetSocketAddress(settings.interface, settings.port)
   log.debug("attempting to bind to {}", localAddr)
   akka.io.IO(Tcp) ! Bind(self, localAddr)
 
@@ -91,7 +68,7 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
 
     case Connected(remote, local) =>
       val connection = sender
-      maxConnections match {
+      settings.maxConnections match {
         case Some(_maxConnections) if connections.size == _maxConnections =>
           val handler = context.actorOf(ImmediateCloseHandler.props(connection))
           connection ! Tcp.Register(handler)
@@ -100,11 +77,10 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
             case Some(ctx) =>
               val sslEngine = ctx.createSSLEngine()
               sslEngine.setUseClientMode(false)
-              tlsClientAuth match {
-                case "required" => sslEngine.setNeedClientAuth(true)
-                case "requested" => sslEngine.setWantClientAuth(true)
-                case "ignored" =>
-                case default => sslEngine.setWantClientAuth(true)
+              settings.tlsSettings.get.tlsClientAuth match {
+                case TlsClientAuth.REQUIRED => sslEngine.setNeedClientAuth(true)
+                case TlsClientAuth.REQUESTED => sslEngine.setWantClientAuth(true)
+                case TlsClientAuth.IGNORED =>
               }
               new ProcessFrames() >>
                 new ProcessTcp() >>
@@ -117,8 +93,8 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
                 new TcpReadWriteAdapter() >>
                 new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
           }
-          val init = SyslogPipelineHandler.init(log, stages, maxMessageSize)
-          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, defaultSink, idleTimeout))
+          val init = SyslogPipelineHandler.init(log, stages, settings.maxMessageSize)
+          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, settings.useSink, settings.idleTimeout))
           val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler))
           connection ! Tcp.Register(pipeline)   // FIXME: enable keepOpenOnPeerClosed?
           context.watch(handler)
@@ -133,7 +109,7 @@ class SyslogTcpSource(config: Config, eventRouter: ActorRef) extends Actor with 
 }
 
 object SyslogTcpSource {
-  def props(config: Config, eventRouter: ActorRef) = Props(classOf[SyslogTcpSource], config, eventRouter)
+  def props(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) = Props(classOf[SyslogTcpSource], settings, eventRouter)
 }
 
 /**

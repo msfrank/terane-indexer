@@ -3,7 +3,7 @@ package com.syntaxjockey.terane.indexer.cassandra
 import com.typesafe.config.Config
 import scala.collection.JavaConversions._
 
-class CassandraSettings(val servers: Seq[String], val port: Int, poolName: String, maxConnsPerHost: Int, clusterName: String)
+class CassandraSettings(val servers: Seq[String], val port: Int, val poolName: String, val maxConnsPerHost: Int, val clusterName: String)
 
 object CassandraSettings {
   def parse(config: Config): CassandraSettings = {
