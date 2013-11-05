@@ -74,8 +74,6 @@ class StoreManager extends Actor with ActorLogging {
 
   /**
    * Asynchronously retrieve the list of stores.
-   *
-   * @return
    */
   def getStores = Future[StoreMap] {
     zk.checkExists().forPath("/stores") match {
@@ -102,9 +100,6 @@ class StoreManager extends Actor with ActorLogging {
   /**
    * Asynchronously create a store, or return the store if one exists with the
    * specified name.
-   *
-   * @param name
-   * @return
    */
   def createStore(name: String) = Future[CreatedStore] {
     val path = "/stores/" + name

@@ -26,26 +26,27 @@ import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.metadata.{Store, StoreManager}
-import com.syntaxjockey.terane.indexer.sink.CassandraSink
+import com.syntaxjockey.terane.indexer.sink.{CassandraSinkSettings, SinkSettings, CassandraSink}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 
 class EventRouter extends Actor with ActorLogging with Instrumented {
   import EventRouter._
   import StoreManager._
 
+  val storeManager = context.actorOf(Props[StoreManager], "store-manager")
+
+  // state
   var storesById = Map.empty[String,Store]
   var storesByName = Map.empty[String,Store]
   val sinksByName = scala.collection.mutable.HashMap[String,ActorRef]()
 
-  val storeManager = context.actorOf(Props[StoreManager], "store-manager")
-
   /* make sure all specified sinks have been created */
-  if (context.system.settings.config.hasPath("terane.sinks"))
-    context.system.settings.config.getConfig("terane.sinks").root()
-      .filter { entry => entry._2.valueType() == ConfigValueType.OBJECT }
-      .foreach { entry => storeManager ! CreateStore(entry._1) }
-
-  log.debug("started {}", self.path.name)
+  IndexerConfig(context.system).settings.sinks.map { case (name: String, sinkSettings: SinkSettings) =>
+    sinkSettings match {
+      case cassandraSinkSettings: CassandraSinkSettings =>
+        storeManager ! CreateStore(name)
+    }
+  }
 
   def receive = {
 

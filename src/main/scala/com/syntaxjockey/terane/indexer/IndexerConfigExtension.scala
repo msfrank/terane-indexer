@@ -4,8 +4,9 @@ import akka.actor._
 import com.typesafe.config._
 import org.slf4j.LoggerFactory
 import scala.collection.JavaConversions._
-import java.io.File
+import java.io.{FileOutputStream, FileInputStream, File}
 import java.nio.file.{Files, FileSystems}
+import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.source.SourceSettings
 import com.syntaxjockey.terane.indexer.sink.SinkSettings
@@ -47,7 +48,35 @@ class IndexerConfigExtension(system: ActorSystem) extends Extension {
     /* parse cassandra settings */
     val cassandraSettings = CassandraSettings.parse(config.getConfig("cassandra"))
 
-    IndexerConfigSettings(sourceSettings, sinkSettings, httpSettings, zookeeperSettings, cassandraSettings)
+    /* get the node UUID */
+    val nodeId = {
+      val file = new File("nodeid")
+      /* if the 'nodeid' file exists, then read the UUID from it */
+      if (Files.exists(file.toPath)) {
+        val istream = new FileInputStream(file)
+        val bytes = new Array[Byte](36)
+        try {
+          val nread = istream.read(bytes)
+          UUID.fromString(new String(bytes))
+        } finally {
+          istream.close()
+        }
+      }
+      /* otherwise if the file does not exist, then generate a new UUID and write it out */
+      else {
+        val nodeId = UUID.randomUUID()
+        val ostream = new FileOutputStream(file)
+        try {
+        ostream.write(nodeId.toString.getBytes)
+        } finally {
+          ostream.close()
+        }
+        nodeId
+      }
+    }
+    log.debug("node UUID is " + nodeId.toString)
+
+    IndexerConfigSettings(nodeId, sourceSettings, sinkSettings, httpSettings, zookeeperSettings, cassandraSettings)
 
   } catch {
     case ex: IndexerConfigException =>
@@ -81,16 +110,19 @@ object IndexerConfig extends ExtensionId[IndexerConfigExtension] with ExtensionI
           ConfigFactory.parseFile(rootFilePath.toFile)
         else ConfigFactory.empty()
     }
-    config.withFallback(baseConfig).getConfig("terane")
+    config.withFallback(baseConfig)
   } catch {
     case ex: IndexerConfigException =>
       throw ex
+    case ex: ConfigException =>
+      throw new IndexerConfigException("failed to parse config: %s".format(ex.getMessage), ex)
     case ex: Throwable =>
       throw new IndexerConfigException("unexpected exception while parsing configuration", ex)
   }
 }
 
 case class IndexerConfigSettings(
+  nodeId: UUID,
   sources: Map[String,SourceSettings],
   sinks: Map[String,SinkSettings],
   http: Option[HttpSettings],

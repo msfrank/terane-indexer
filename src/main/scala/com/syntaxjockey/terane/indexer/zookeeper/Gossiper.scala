@@ -29,6 +29,7 @@ import scala.concurrent.duration.{FiniteDuration, Duration}
 import scala.collection.JavaConversions._
 import java.util.UUID
 import scala.util.Random
+import com.syntaxjockey.terane.indexer.IndexerConfig
 
 /**
  * Gossiper is responsible for disseminating gossip information from the parent actor
@@ -44,7 +45,7 @@ class Gossiper(gossipType: String, servicesPath: String, interval: FiniteDuratio
   val selfAddress = Cluster(context.system).selfAddress
   val serviceInstance = ServiceInstance.builder[Void]()
       .name(gossipType)
-      .id(UUID.randomUUID().toString)
+      .id(IndexerConfig(context.system).settings.nodeId.toString)
       .address(self.path.toStringWithAddress(selfAddress))
       .build()
 

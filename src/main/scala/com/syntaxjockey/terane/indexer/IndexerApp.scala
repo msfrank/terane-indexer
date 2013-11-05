@@ -23,7 +23,6 @@ import akka.actor.{AddressFromURIString, ActorRef, ActorSystem}
 import akka.cluster.Cluster
 import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.collection.JavaConversions._
-import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.source._
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
@@ -58,7 +57,7 @@ object IndexerApp extends App {
   /* start the HTTP service if configured */
   val http = settings.http match {
     case Some(httpSettings) =>
-      Some(system.actorOf(HttpServer.props(httpSettings, eventRouter), "http-api"))
+      Some(system.actorOf(HttpServer.props(httpSettings, eventRouter), "http"))
     case None =>
       None
   }
@@ -67,7 +66,7 @@ object IndexerApp extends App {
   val selfAddress = Cluster(system).selfAddress
   val serviceInstance = ServiceInstance.builder[Void]()
       .name("node")
-      .id(UUID.randomUUID().toString)
+      .id(settings.nodeId.toString)
       .address(selfAddress.toString)
       .build()
   val serviceDiscovery = ServiceDiscoveryBuilder
