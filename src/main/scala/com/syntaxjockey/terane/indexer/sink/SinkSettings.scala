@@ -18,12 +18,12 @@ object CassandraSinkSettings {
 
 object SinkSettings {
   def parse(config: Config): SinkSettings = {
-    if (!config.hasPath("sink-type")) throw new IndexerConfigException("missing required parameter 'sink-type'")
+    if (!config.hasPath("sink-type")) throw IndexerConfigException("missing required parameter 'sink-type'")
     config.getString("sink-type") match {
       case "cassandra" =>
         CassandraSinkSettings.parse(config)
       case unknown =>
-        throw new IndexerConfigException("unknown sink-type '%s'".format(unknown))
+        throw IndexerConfigException("unknown sink-type '%s'".format(unknown))
     }
   }
 }

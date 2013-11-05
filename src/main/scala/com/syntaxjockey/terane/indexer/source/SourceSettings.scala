@@ -62,7 +62,7 @@ object SyslogTcpTlsSettings {
         case "required" => TlsClientAuth.REQUIRED
         case "requested" => TlsClientAuth.REQUESTED
         case "ignored" => TlsClientAuth.IGNORED
-        case unknown => throw new IndexerConfigException("unknown tls-client auth mode '%s'".format(unknown))
+        case unknown => throw IndexerConfigException("unknown tls-client auth mode '%s'".format(unknown))
       }
     } else TlsClientAuth.REQUESTED
     new SyslogTcpTlsSettings(tlsClientAuth, tlsKeystore, tlsTruststore, tlsKeystorePassword, tlsTruststorePassword, tlsKeymanagerPassword)
@@ -98,14 +98,14 @@ object SyslogTcpSourceSettings {
 
 object SourceSettings {
   def parse(config: Config): SourceSettings = {
-    if (!config.hasPath("source-type")) throw new IndexerConfigException("missing required parameter 'source-type'")
+    if (!config.hasPath("source-type")) throw IndexerConfigException("missing required parameter 'source-type'")
     config.getString("source-type") match {
       case "syslog-udp" =>
         SyslogUdpSourceSettings.parse(config)
       case "syslog-tcp" =>
         SyslogTcpSourceSettings.parse(config)
       case unknown =>
-        throw new IndexerConfigException("unknown source-type '%s'".format(unknown))
+        throw IndexerConfigException("unknown source-type '%s'".format(unknown))
     }
   }
 }

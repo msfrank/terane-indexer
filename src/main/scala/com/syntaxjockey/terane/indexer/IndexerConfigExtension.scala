@@ -82,9 +82,9 @@ class IndexerConfigExtension(system: ActorSystem) extends Extension {
     case ex: IndexerConfigException =>
       throw ex
     case ex: ConfigException =>
-      throw new IndexerConfigException("failed to parse config: %s".format(ex.getMessage), ex)
+      throw IndexerConfigException(ex)
     case ex: Throwable =>
-      throw new IndexerConfigException("unexpected exception while parsing configuration", ex)
+      throw IndexerConfigException("unexpected exception while parsing configuration", ex)
   }
 }
 
@@ -115,9 +115,9 @@ object IndexerConfig extends ExtensionId[IndexerConfigExtension] with ExtensionI
     case ex: IndexerConfigException =>
       throw ex
     case ex: ConfigException =>
-      throw new IndexerConfigException("failed to parse config: %s".format(ex.getMessage), ex)
+      throw IndexerConfigException(ex)
     case ex: Throwable =>
-      throw new IndexerConfigException("unexpected exception while parsing configuration", ex)
+      throw IndexerConfigException("unexpected exception while parsing configuration", ex)
   }
 }
 
@@ -129,6 +129,9 @@ case class IndexerConfigSettings(
   zookeeper: ZookeeperSettings,
   cassandra: CassandraSettings)
 
-class IndexerConfigException(message: String, cause: Throwable) extends Exception(message, cause) {
-  def this(message: String) = this(message, null)
+case class IndexerConfigException(message: String, cause: Throwable) extends Exception(message, cause)
+
+object IndexerConfigException {
+  def apply(message: String): IndexerConfigException = new IndexerConfigException(message, null)
+  def apply(cause: ConfigException): IndexerConfigException = IndexerConfigException("failed to parse config: " + cause.getMessage, cause)
 }
