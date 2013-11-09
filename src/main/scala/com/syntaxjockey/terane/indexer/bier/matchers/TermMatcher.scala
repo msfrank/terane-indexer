@@ -30,10 +30,6 @@ import com.syntaxjockey.terane.indexer.bier.Matchers
  * placeholder for the backend-specific term matcher, which has more information about
  * the actual term storage, and thus can make better decisions about how to implement
  * the interface methods.
- *
- * @param fieldId
- * @param term
- * @tparam T
  */
 case class TermMatcher[T](fieldId: FieldIdentifier, term: T) extends Matchers {
   def estimateCost = 0L
