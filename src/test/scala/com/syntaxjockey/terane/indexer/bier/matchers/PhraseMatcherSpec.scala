@@ -42,6 +42,7 @@ class PhraseMatcherSpec extends TestCluster("PhraseMatcherSpec") with WordSpec w
   val id05 = UUID.randomUUID()
   val id06 = UUID.randomUUID()
   val id07 = UUID.randomUUID()
+  val id08 = UUID.randomUUID()
 
   "A PhraseMatcher" must {
 
@@ -52,14 +53,15 @@ class PhraseMatcherSpec extends TestCluster("PhraseMatcherSpec") with WordSpec w
           Posting(id02, PostingMetadata(Some(scala.collection.mutable.Set(1)))),
           Posting(id03, PostingMetadata(Some(scala.collection.mutable.Set(1)))),
           Posting(id04, PostingMetadata(Some(scala.collection.mutable.Set(1)))),
-          Posting(id06, PostingMetadata(Some(scala.collection.mutable.Set(1))))
+          Posting(id06, PostingMetadata(Some(scala.collection.mutable.Set(5))))
         )),
         TestTermMatcher(List(
           Posting(id02, PostingMetadata(Some(scala.collection.mutable.Set(2)))),
           Posting(id03, PostingMetadata(Some(scala.collection.mutable.Set(3)))),
           Posting(id05, PostingMetadata(Some(scala.collection.mutable.Set(2)))),
-          Posting(id06, PostingMetadata(Some(scala.collection.mutable.Set(2)))),
-          Posting(id07, PostingMetadata(Some(scala.collection.mutable.Set(3))))
+          Posting(id06, PostingMetadata(Some(scala.collection.mutable.Set(6)))),
+          Posting(id07, PostingMetadata(Some(scala.collection.mutable.Set(2)))),
+          Posting(id08, PostingMetadata(Some(scala.collection.mutable.Set(5))))
         ))
       ))
       inside(Await.result(phraseMatcher.nextPosting, 10 seconds)) {

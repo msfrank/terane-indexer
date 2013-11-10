@@ -94,7 +94,7 @@ class PhraseIterator(scanner: Matchers, finders: List[Matchers], phrase: Seq[Mat
         self ! ScanToNext
 
     case FindPosting(id) =>
-      val futures = finders.map { matcher =>
+      val futures = children.map { matcher =>
         matcher.findPosting(id).map(WrappedMatchResult(_, matcher))
       }
       findMatching(futures).pipeTo(sender)
@@ -104,7 +104,7 @@ class PhraseIterator(scanner: Matchers, finders: List[Matchers], phrase: Seq[Mat
     case Left(NoMoreMatches) =>
       Future.successful(Left(NoMoreMatches))
     case Right(Posting(id, _)) =>
-      val futures = finders.map { matcher =>
+      val futures = Future.successful(WrappedMatchResult(matchResult, scanner)) +: finders.map { matcher =>
         matcher.findPosting(id).map(WrappedMatchResult(_, matcher))
       }
       findMatching(futures).map {
@@ -130,8 +130,9 @@ class PhraseIterator(scanner: Matchers, finders: List[Matchers], phrase: Seq[Mat
    */
   def checkPositions(matchResults: List[WrappedMatchResult]): MatchResult = {
     // create an array of term position sets, in phrase term order
-    val positions: Array[Option[Set[Int]]] = Array.fill(matchResults.length)(None)
-    matchResults.foreach { case WrappedMatchResult(Right(Posting(_, metadata)), matcher) =>
+    val positions: Array[Option[Set[Int]]] = Array.fill(phrase.length)(None)
+    matchResults.foreach {
+      case WrappedMatchResult(Right(Posting(_, metadata)), matcher) =>
       metadata match {
         case PostingMetadata(Some(_positions)) =>
           positions(phrasePositions(matcher)) = Some(_positions.toSet)
