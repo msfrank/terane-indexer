@@ -42,7 +42,7 @@ case class PhraseMatcher(phrase: Seq[Matchers])(implicit factory: ActorRefFactor
 
   implicit val timeout = Timeout(5 seconds)
 
-  private[this] val children = phrase.sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }.toList
+  private[this] val children = phrase.filter(_ != TermPlaceholder).sortWith {(m1,m2) => m1.estimateCost < m2.estimateCost }.toList
   lazy val iterator = factory.actorOf(PhraseIterator.props(children.head, children.tail, phrase))
 
   def estimateCost: Long = phrase.head.estimateCost

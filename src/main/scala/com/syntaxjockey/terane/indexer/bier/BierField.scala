@@ -29,7 +29,7 @@ import java.net.InetAddress
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.{TermMatcher, AndMatcher}
+import com.syntaxjockey.terane.indexer.bier.matchers.{TermPlaceholder, PhraseMatcher, TermMatcher, AndMatcher}
 import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
 import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
 
@@ -74,7 +74,13 @@ class TextField extends BierField {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.TEXT)
     expression.predicate match {
       case PredicateEquals(TargetText(target)) =>
-        AndMatcher(tokenizeValue(Text(target)).map { case term => TermMatcher(fieldId, term) }.toSet[Matchers])(factory)
+        val phrase = tokenizeValue(Text(target)).map {
+          case "_" =>
+            TermPlaceholder
+          case term =>
+            TermMatcher(fieldId, term)
+        }
+        PhraseMatcher(phrase)(factory)
       case other => throw new Exception("parse failure")
     }
   }

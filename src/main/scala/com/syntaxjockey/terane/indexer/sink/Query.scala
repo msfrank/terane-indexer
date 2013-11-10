@@ -244,20 +244,25 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
             None
         }
 
-      case every: EveryMatcher =>
+      case _: EveryMatcher =>
         Some(Every(keyspace))
 
-      case andGroup @ AndMatcher(children) =>
-        AndMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
-          case AndMatcher(_children) if _children.isEmpty =>
-            None
-          case AndMatcher(_children) if _children.size == 1 =>
-            Some(_children.head)
-          case andMatcher: AndMatcher =>
-            Some(andMatcher)
-        }
+      case AndMatcher(children) =>
+        val _children = children.map { child => buildTerms(child, keyspace, fields, stats) }.flatten
+        if (_children.size == children.size)
+          Some(AndMatcher(_children))
+        else None
 
-      case orGroup @ OrMatcher(children) =>
+      case PhraseMatcher(children) =>
+        val _children = children.map { child => buildTerms(child, keyspace, fields, stats) }.flatten
+        if (_children.length == children.length)
+          Some(PhraseMatcher(_children))
+        else None
+
+      case TermPlaceholder =>
+        Some(TermPlaceholder)
+
+      case OrMatcher(children) =>
         OrMatcher(children map { child => buildTerms(child, keyspace, fields, stats) } flatten) match {
           case OrMatcher(_children) if _children.isEmpty =>
             None
@@ -268,6 +273,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
         }
 
       case NotMatcher(every: EveryMatcher, filter: Matchers) =>
+        // FIXME: needs implementation
         throw new Exception("EveryMatcher is not implemented")
 
       case notMatcher: NotMatcher =>
@@ -364,6 +370,13 @@ object Query {
         sb.append(" " * indent)
         sb.append("AND\n")
         children.foreach(prettyPrintImpl(sb, _, indent + 2))
+      case PhraseMatcher(children) =>
+        sb.append(" " * indent)
+        sb.append("PHRASE\n")
+        children.foreach(prettyPrintImpl(sb, _, indent + 2))
+      case TermPlaceholder =>
+        sb.append(" " * indent)
+        sb.append("_\n")
       case OrMatcher(children) =>
         sb.append(" " * indent)
         sb.append("OR\n")

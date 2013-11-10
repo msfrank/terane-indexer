@@ -75,5 +75,44 @@ class PhraseMatcherSpec extends TestCluster("PhraseMatcherSpec") with WordSpec w
       Await.result(phraseMatcher.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
     }
 
+    "match a three term phrase" in {
+      val phraseMatcher = PhraseMatcher(Seq(
+        TestTermMatcher(List(
+          Posting(id01, PostingMetadata(Some(scala.collection.mutable.Set(12, 4, 9, 46))))
+        )),
+        TestTermMatcher(List(
+          Posting(id01, PostingMetadata(Some(scala.collection.mutable.Set(5, 23))))
+        )),
+        TestTermMatcher(List(
+          Posting(id01, PostingMetadata(Some(scala.collection.mutable.Set(2, 24, 48, 6))))
+        ))
+      ))
+      inside(Await.result(phraseMatcher.nextPosting, 10 seconds)) {
+        case Right(Posting(id, _)) =>
+          id must be(id01)
+      }
+      Await.result(phraseMatcher.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
+    }
+
+
+    "match a four term phrase with a placeholder" in {
+      val phraseMatcher = PhraseMatcher(Seq(
+        TestTermMatcher(List(
+          Posting(id01, PostingMetadata(Some(scala.collection.mutable.Set(12, 4, 9, 46))))
+        )),
+        TestTermMatcher(List(
+          Posting(id01, PostingMetadata(Some(scala.collection.mutable.Set(5, 23, 13))))
+        )),
+        TermPlaceholder,
+        TestTermMatcher(List(
+          Posting(id01, PostingMetadata(Some(scala.collection.mutable.Set(2, 24, 48, 6, 15))))
+        ))
+      ))
+      inside(Await.result(phraseMatcher.nextPosting, 10 seconds)) {
+        case Right(Posting(id, _)) =>
+          id must be(id01)
+      }
+      Await.result(phraseMatcher.nextPosting, 10 seconds) must be(Left(NoMoreMatches))
+    }
   }
 }

@@ -22,6 +22,7 @@ package com.syntaxjockey.terane.indexer.bier
 import org.scalatest.matchers.MustMatchers
 import org.scalatest.WordSpec
 import org.scalatest.Inside._
+import org.slf4j.LoggerFactory
 import org.joda.time.{DateTimeZone, DateTime}
 import org.xbill.DNS.{Address => DNSAddress}
 import scala.Some
@@ -29,9 +30,8 @@ import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.{AndMatcher, TermMatcher}
+import com.syntaxjockey.terane.indexer.bier.matchers.{TermPlaceholder, PhraseMatcher, AndMatcher, TermMatcher}
 import com.syntaxjockey.terane.indexer.TestCluster
-import org.slf4j.LoggerFactory
 
 class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec with MustMatchers {
 
@@ -339,11 +339,24 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       val matchers = TickleParser.buildMatchers(
         """:fieldname = "foo bar baz" """.stripMargin, params)
       inside(matchers) {
-        case Some(AndMatcher(children)) =>
+        case Some(PhraseMatcher(children)) =>
           children must have size(3)
           children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
           children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
           children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
+      }
+    }
+
+    "parse a phrase with a placeholder" in {
+      val matchers = TickleParser.buildMatchers(
+        """:fieldname = "foo bar _ baz" """.stripMargin, params)
+      inside(matchers) {
+        case Some(PhraseMatcher(children)) =>
+          children must have size(4)
+          children(0) must be(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
+          children(1) must be(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
+          children(2) must be(TermPlaceholder)
+          children(3) must be(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
       }
     }
 
