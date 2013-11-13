@@ -13,6 +13,7 @@ import com.syntaxjockey.terane.indexer.sink.SinkSettings
 import com.syntaxjockey.terane.indexer.http.HttpSettings
 import com.syntaxjockey.terane.indexer.zookeeper.ZookeeperSettings
 import com.syntaxjockey.terane.indexer.cassandra.CassandraSettings
+import com.typesafe.config.ConfigException.WrongType
 
 /**
  *
@@ -98,19 +99,8 @@ object IndexerConfig extends ExtensionId[IndexerConfigExtension] with ExtensionI
   /* build the runtime configuration */
   val config = try {
     val baseConfig = ConfigFactory.load()
-    val config = sys.props.get("terane.config.file") match {
-      case Some(propConfFile) =>
-        ConfigFactory.parseFile(new File(propConfFile))
-      case None =>
-        val confFilePath = FileSystems.getDefault.getPath("conf", "terane.conf")
-        val rootFilePath = FileSystems.getDefault.getPath("terane.conf")
-        if (Files.isReadable(confFilePath))
-          ConfigFactory.parseFile(confFilePath.toFile)
-        else if (Files.isReadable(rootFilePath))
-          ConfigFactory.parseFile(rootFilePath.toFile)
-        else ConfigFactory.empty()
-    }
-    config.withFallback(baseConfig)
+    val teraneConfig = loadConfigFile(baseConfig)
+    ConfigFactory.defaultOverrides.withFallback(teraneConfig.withFallback(baseConfig))
   } catch {
     case ex: IndexerConfigException =>
       throw ex
@@ -119,7 +109,30 @@ object IndexerConfig extends ExtensionId[IndexerConfigExtension] with ExtensionI
     case ex: Throwable =>
       throw IndexerConfigException("unexpected exception while parsing configuration", ex)
   }
+
+  /**
+   * load the terane config file from the location specified by the terane.config.file config
+   * value in baseConfig.  this config value can be a string (e.g. from system property -Dterane.config.file)
+   * or a string list.
+   */
+  def loadConfigFile(baseConfig: Config): Config = {
+    val possibleConfigFiles = try {
+      if (!baseConfig.hasPath("terane.config.file"))
+        throw IndexerConfigException("terane.config.file is not specified")
+      baseConfig.getStringList("terane.config.file").map(new File(_))
+    } catch {
+      case ex: WrongType =>
+        Seq(new File(baseConfig.getString("terane.config.file")))
+    }
+    var config: Option[Config] = None
+    for (file <- possibleConfigFiles if config.isEmpty) {
+      if (file.canRead)
+        config = Some(ConfigFactory.parseFile(file))
+    }
+    config.getOrElse(throw IndexerConfigException("failed to find a readable config file"))
+  }
 }
+
 
 case class IndexerConfigSettings(
   nodeId: UUID,
