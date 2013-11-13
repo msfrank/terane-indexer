@@ -20,13 +20,12 @@
 package com.syntaxjockey.terane.indexer.bier
 
 import akka.actor.ActorRefFactory
+import org.slf4j.{Logger, LoggerFactory}
 import scala.util.parsing.combinator.JavaTokenParsers
 import org.xbill.DNS.{Name, Address => DNSAddress}
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.{EveryMatcher, OrMatcher, AndMatcher, NotMatcher}
-import akka.event.slf4j.Logger
-import org.slf4j.{Logger, LoggerFactory}
+import com.syntaxjockey.terane.indexer.bier.matchers._
 
 /**
  * Tickle EBNF Grammar
@@ -353,6 +352,10 @@ object TickleParser extends TickleParser {
         if (children.isEmpty)
           None
         else if (children.size == 1) Some(children.head) else orMatcher
+      case phraseMatcher @ Some(PhraseMatcher(children)) =>
+        if (children.isEmpty)
+          None
+        else if (children.size == 1) Some(children.head) else phraseMatcher
       case other: Some[Matchers] =>
         other
       case None =>

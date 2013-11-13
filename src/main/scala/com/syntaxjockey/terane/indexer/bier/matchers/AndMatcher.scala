@@ -58,6 +58,9 @@ case class AndMatcher(children: Set[Matchers])(implicit factory: ActorRefFactory
   def hashString: String = "%s:(%s)".format(this.getClass.getName, children.toList.map(_.hashString).sorted.mkString(","))
 }
 
+/**
+ *
+ */
 class AndIterator(scanner: Matchers, finders: List[Matchers]) extends Actor with ActorLogging {
   import AndIterator._
   import context.dispatcher
