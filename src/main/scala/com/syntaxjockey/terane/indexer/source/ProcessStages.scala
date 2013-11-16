@@ -26,13 +26,19 @@ import akka.event.LoggingAdapter
 import akka.util.{ByteIterator, ByteString}
 import org.joda.time.{DateTimeZone, DateTime}
 import org.joda.time.tz.CachedDateTimeZone
+import org.xbill.DNS.Name
 import java.nio.charset.Charset
+
+import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
+import com.netflix.astyanax.util.TimeUUIDUtils
+import com.syntaxjockey.terane.indexer.bier.datatypes._
 
 /**
  * Context when performing pipeline processing.
  */
 class SyslogContext(logging: LoggingAdapter, context: ActorContext, val maxMessageSize: Option[Long] = None) extends PipelineContext with WithinActorContext {
   var leftover = ByteString.empty
+  var schema = Map.empty[String,FieldIdentifier]
   def getLogger = logging
   def getContext = context
 }
@@ -70,18 +76,19 @@ object SyslogProcessingOps {
   val UTF_8_CHARSET = Charset.forName("UTF-8")
 }
 
-trait SyslogEvent
-case class SyslogFrame(frame: ByteString) extends SyslogEvent
-case object SyslogIncomplete extends SyslogEvent
-class SyslogFailure(cause: Throwable) extends Exception(cause) with SyslogEvent
+trait SyslogProcessingEvent
+case class SyslogEvent(event: BierEvent) extends SyslogProcessingEvent
+case class SyslogFrame(frame: ByteString) extends SyslogProcessingEvent
+case object SyslogProcessingIncomplete extends SyslogProcessingEvent
+class SyslogProcessingFailure(cause: Throwable) extends Exception(cause) with SyslogProcessingEvent
 
 /**
  * Consume a ByteString containing zero or more framed syslog messages, and emit a
  * SyslogFrames object containing the frames and any leftover unprocessed data.
  */
-class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, ByteString] with SyslogProcessingOps {
+class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogProcessingEvent, ByteString] with SyslogProcessingOps {
 
-  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogEvent, ByteString] {
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogProcessingEvent, ByteString] {
 
     /* we don't process commands */
     override def commandPipeline = {frames => throw new IllegalArgumentException() }
@@ -98,9 +105,9 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
     }
 
     /* return the framed messages or SyslogIncomplete */
-    def processFrames(data: ByteString): Seq[SyslogEvent] = {
+    def processFrames(data: ByteString): Seq[SyslogProcessingEvent] = {
       ctx.leftover = ctx.leftover ++ data
-      var events = Seq.empty[SyslogEvent]
+      var events = Seq.empty[SyslogProcessingEvent]
       var finished = false
       while (!ctx.leftover.isEmpty && !finished) {
         try {
@@ -121,7 +128,7 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
           // process the frame
           if (bytesleft.length < msglen) {
             finished = true
-            events = events ++ Seq(SyslogIncomplete)
+            events = events ++ Seq(SyslogProcessingIncomplete)
           } else {
             ctx.leftover = bytesleft.drop(msglen)
             events = events ++ Seq(SyslogFrame(bytesleft.take(msglen)))
@@ -130,10 +137,10 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
           // if the iterator has no more data
           case ex: NoSuchElementException =>
             finished = true
-            events = events ++ Seq(SyslogIncomplete)
+            events = events ++ Seq(SyslogProcessingIncomplete)
           case ex: Throwable =>
             finished = true
-            events = events ++ Seq(new SyslogFailure(ex))
+            events = events ++ Seq(new SyslogProcessingFailure(ex))
         }
       }
       events
@@ -149,9 +156,9 @@ class ProcessTcp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
  * Consume a ByteString containing one framed syslog message, and emit a SyslogFrames
  * object containing the frame.
  */
-class ProcessUdp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, ByteString] with SyslogProcessingOps {
+class ProcessUdp extends SymmetricPipelineStage[SyslogContext, SyslogProcessingEvent, ByteString] with SyslogProcessingOps {
 
-  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogEvent, ByteString] {
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogProcessingEvent, ByteString] {
 
     /* we don't process commands */
     override def commandPipeline = {frames => throw new IllegalArgumentException() }
@@ -167,9 +174,9 @@ class ProcessUdp extends SymmetricPipelineStage[SyslogContext, SyslogEvent, Byte
  * Consume a SyslogFrames object containing a sequence of frames, and emit a sequence
  * of SyslogEvents.
  */
-class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, SyslogEvent] with SyslogProcessingOps {
+class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogProcessingEvent, SyslogProcessingEvent] with SyslogProcessingOps {
 
-  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogEvent, SyslogEvent] {
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogProcessingEvent, SyslogProcessingEvent] {
 
     /* we don't process commands */
     override def commandPipeline = {messages => throw new IllegalArgumentException() }
@@ -180,15 +187,15 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
         val event = try {
           processFrame(frame)
         } catch {
-          case cause: Throwable => new SyslogFailure(cause)
+          case cause: Throwable => new SyslogProcessingFailure(cause)
         }
         ctx.singleEvent(event)
-      case event: SyslogEvent =>
+      case event: SyslogProcessingEvent =>
         ctx.singleEvent(event)
     }
 
     /* process a single frame */
-    def processFrame(frame: ByteString): Message = {
+    def processFrame(frame: ByteString): SyslogMessage = {
       val iterator = frame.iterator
 
       /* process the PRI */
@@ -267,7 +274,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
       /* process STRUCTURED-DATA */
       val elements: Map[SDIdentifier,SDElement] = if (version.isDefined) {
         val elements = scala.collection.mutable.HashMap[SDIdentifier, SDElement]()
-        if (!iterator.hasNext) new SyslogFailure(new IllegalArgumentException("failed to parse STRUCTURED-DATA"))
+        if (!iterator.hasNext) new SyslogProcessingFailure(new IllegalArgumentException("failed to parse STRUCTURED-DATA"))
         while (iterator.hasNext && (iterator.getByte match {
           case ' ' => false
           case '-' =>
@@ -288,7 +295,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
         } else None
       }
 
-      Message(hostname, timestamp, priority, elements, appName, procId, msgId, msg)
+      SyslogMessage(hostname, timestamp, priority, elements, appName, procId, msgId, msg)
     }
 
     /* process a single structured data instance */
@@ -351,6 +358,108 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogEvent, S
         }
       }
       throw new IllegalArgumentException("failed to parse PARAM-VALUE")
+    }
+  }
+}
+
+
+/**
+ * Consume a SyslogMessage and emit a SyslogEvent object containing the BierEvent.
+ */
+class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcessingEvent, SyslogProcessingEvent] with SyslogProcessingOps {
+  import com.syntaxjockey.terane.indexer.bier.BierEvent._
+  import com.syntaxjockey.terane.indexer.bier.Value
+  import scala.util.{Success, Failure}
+
+  override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogProcessingEvent, SyslogProcessingEvent] {
+
+    /* we don't process commands */
+    override def commandPipeline = {frames => throw new IllegalArgumentException() }
+
+    /* return a single frame from a stream of bytes */
+    override def eventPipeline = {
+      case message: SyslogMessage =>
+        val event = try {
+          processMessage(message)
+        } catch {
+          case cause: Throwable => new SyslogProcessingFailure(cause)
+        }
+        ctx.singleEvent(event)
+      case event: SyslogProcessingEvent =>
+        ctx.singleEvent(event)
+    }
+
+    def processMessage(message: SyslogMessage): SyslogEvent = {
+
+      // add standard RFC5424 fields to event
+      val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
+      var event = BierEvent(Some(id)) ++ Seq(
+        "origin" -> Hostname(new Name(message.origin)),
+        "timestamp" -> Datetime(message.timestamp),
+        "facility" -> Literal(message.priority.facilityString),
+        "severity" -> Literal(message.priority.severityString)
+      )
+      if (message.appName.isDefined)
+        event = event + ("appname" -> Literal(message.appName.get))
+      if (message.procId.isDefined)
+        event = event + ("procid" -> Literal(message.procId.get))
+      if (message.msgId.isDefined)
+        event = event + ("msgid" -> Literal(message.msgId.get))
+      if (message.message.isDefined)
+        event = event + ("message" -> Text(message.message.get))
+
+      // if there is a schema SDElement, then add fields to ctx
+      message.elements.get(SDIdentifier.SCHEMA) match {
+        case Some(SDElement(_, params)) =>
+          val schema: Map[String,FieldIdentifier] = params.map { case (ident, fieldspec) =>
+            FieldIdentifier.fromSpec(fieldspec) match {
+              case Success(fieldId) =>
+                ident -> fieldId
+              case Failure(ex) =>
+                throw ex
+            }
+          }.toMap
+          // FIXME: what do we do if ident has already been used?
+          ctx.schema = ctx.schema ++ schema
+          ctx.getLogger.debug("updated schema for this connection: {}", ctx.schema)
+        case None =>  // do nothing
+      }
+
+      // if there is a values SDElement, then add fields to event
+      val values: Seq[KeyValue] = message.elements.get(SDIdentifier.VALUES) match {
+        case Some(SDElement(_, params)) =>
+          params.flatMap { case (ident, value) =>
+            ctx.schema.get(ident) match {
+              case Some(fieldId: FieldIdentifier) =>
+                Some(processField(fieldId, value))
+              case None =>
+                None
+            }
+          }.toSeq
+        case None =>
+          Seq.empty
+      }
+
+      SyslogEvent(event ++ values)
+    }
+
+    def processField(fieldId: FieldIdentifier, value: String): KeyValue = {
+      fieldId.fieldType match {
+        case DataType.TEXT =>
+          fieldId -> Value(text = Some(Text(value)))
+        case DataType.LITERAL =>
+          fieldId -> Value(literal = Some(Literal(value)))
+        case DataType.INTEGER =>
+          fieldId -> Value(integer = Some(Integer(value)))
+        case DataType.FLOAT =>
+          fieldId -> Value(float = Some(Float(value)))
+        case DataType.DATETIME =>
+          fieldId -> Value(datetime = Some(Datetime(value)))
+        case DataType.HOSTNAME =>
+          fieldId -> Value(hostname = Some(Hostname(value)))
+        case DataType.ADDRESS =>
+          fieldId -> Value(address = Some(Address(value)))
+      }
     }
   }
 }

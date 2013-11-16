@@ -35,11 +35,21 @@ import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
 
 /**
  * Identifies a field by name and type.
- *
- * @param fieldName
- * @param fieldType
  */
 case class FieldIdentifier(fieldName: String, fieldType: DataType.Value)
+
+object FieldIdentifier {
+  import scala.util.{Try,Success,Failure}
+
+  def fromSpec(spec: String): Try[FieldIdentifier] = try {
+    val fieldParts = spec.split(':')
+    val fieldType = fieldParts(0)
+    val fieldName = fieldParts(1)
+    Success(FieldIdentifier(fieldName, DataType.withName(fieldType.toUpperCase)))
+  } catch {
+    case ex: Throwable => Failure(ex)
+  }
+}
 
 abstract class BierField
 

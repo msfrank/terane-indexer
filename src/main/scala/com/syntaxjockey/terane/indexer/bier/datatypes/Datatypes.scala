@@ -51,6 +51,7 @@ class Integer(val underlying: Long) extends AnyVal with Comparable[Integer] {
 object Integer {
   def apply(long: scala.Long) = new Integer(long)
   def apply(int: scala.Int) = new Integer(int.toLong)
+  def apply(string: String) = new Integer(string.toLong)
 }
 
 class Float(val underlying: Double) extends AnyVal with Comparable[Float] {
@@ -60,6 +61,7 @@ class Float(val underlying: Double) extends AnyVal with Comparable[Float] {
 object Float {
   def apply(double: scala.Double) = new Float(double)
   def apply(float: scala.Float) = new Float(float.toDouble)
+  def apply(string: String) = new Float(string.toDouble)
 }
 
 class Datetime(val underlying: DateTime) extends AnyVal with Comparable[Datetime] {
@@ -68,6 +70,7 @@ class Datetime(val underlying: DateTime) extends AnyVal with Comparable[Datetime
 
 object Datetime {
   def apply(datetime: DateTime) = new Datetime(datetime)
+  def apply(string: String) = new Datetime(new DateTime(string.toLong))
 }
 
 class Address(val underlying: InetAddress) extends AnyVal with Comparable[Address] {

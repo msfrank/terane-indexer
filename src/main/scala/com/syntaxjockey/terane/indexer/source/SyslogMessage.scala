@@ -85,6 +85,8 @@ case object SDIdentifier {
   val TIME_QUALITY = SDIdentifier("timeQuality", None)
   val ORIGIN = SDIdentifier("origin", None)
   val META = SDIdentifier("meta", None)
+  val SCHEMA = SDIdentifier("schema", Some("42785"))
+  val VALUES = SDIdentifier("values", Some("42785"))
 }
 
 case class SDElement(id: SDIdentifier, params: Map[String,String])
@@ -102,7 +104,7 @@ case object SDElement {
   val PARAM_LANGUAGE = "language"
 }
 
-case class Message(
+case class SyslogMessage(
   origin: String,
   timestamp: DateTime,
   priority: Priority,
@@ -110,7 +112,7 @@ case class Message(
   appName: Option[String] = None,
   procId: Option[String] = None,
   msgId: Option[String] = None,
-  message: Option[String] = None) extends SyslogEvent {
+  message: Option[String] = None) extends SyslogProcessingEvent {
 
   override def toString: String = {
     val sb = new StringBuilder()
@@ -124,7 +126,7 @@ case class Message(
     for (element <- elements.values) {
       sb.append(" [%s".format(element.id))
       for ((name,value) <- element.params)
-        sb.append(" %s=%s".format(name, value))
+        sb.append(" %s='%s'".format(name, value))
       sb.append("]")
     }
     for (v <- message)

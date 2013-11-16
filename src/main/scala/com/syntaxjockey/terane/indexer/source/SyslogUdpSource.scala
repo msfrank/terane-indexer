@@ -31,7 +31,7 @@ import com.syntaxjockey.terane.indexer.{Instrumented, EventRouter}
  * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
  * http://tools.ietf.org/html/rfc5424
  */
-class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) extends Actor with SyslogReceiver with ActorLogging with Instrumented {
+class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) extends Actor with ActorLogging with Instrumented {
   import EventRouter._
   import context.system
 
@@ -43,7 +43,7 @@ class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) 
   log.debug("attempting to bind to {}", localAddr)
   IO(Udp) ! Bind(self, localAddr)
 
-  val stages = new ProcessFrames() >> new ProcessUdp()
+  val stages = new ProcessMessage >> new ProcessFrames() >> new ProcessUdp()
   val PipelinePorts(cmd, evt, mgmt) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, context), stages)
 
   def receive = {
@@ -57,11 +57,11 @@ class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) 
       val (events,_) = evt(data)
       for (event <- events) {
         event match {
-          case message: Message =>
-            log.debug("received {}", message)
-            eventRouter ! StoreEvent(settings.useSink, message)
+          case SyslogEvent(_event) =>
+            log.debug("received {}", _event)
+            eventRouter ! StoreEvent(settings.useSink, _event)
             messagesReceived.mark()
-          case failure: SyslogFailure =>
+          case failure: SyslogProcessingFailure =>
             messagesDropped.mark()
             log.debug("failed to process UDP message: {}", failure.getCause.getMessage)
           case _ => // ignore other events

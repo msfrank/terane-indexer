@@ -39,29 +39,29 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     new SyslogContext(log, ctx, maxMessageSize)
   }
 
-  def runFrame(body: String): SyslogEvent = {
+  def runFrame(body: String): SyslogProcessingEvent = {
     val actor = TestActorRef[Blackhole]
     val log = actor.underlyingActor.log
     val ctx = actor.underlyingActor.context
     val stages = new ProcessFrames()
     val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, ctx), stages)
-    val (_events: Iterable[SyslogEvent], _) = evt(SyslogFrame(ByteString(body, "UTF-8")))
+    val (_events: Iterable[SyslogProcessingEvent], _) = evt(SyslogFrame(ByteString(body, "UTF-8")))
     val events = _events.toSeq
     events must have length 1
     events(0)
   }
 
-  def runTcp(body: String, context: SyslogContext): Seq[SyslogEvent] = {
+  def runTcp(body: String, context: SyslogContext): Seq[SyslogProcessingEvent] = {
     val stages = new ProcessFrames() >> new ProcessTcp()
     val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(context, stages)
-    val (_events: Iterable[SyslogEvent], _) = evt(ByteString(body, "UTF-8"))
+    val (_events: Iterable[SyslogProcessingEvent], _) = evt(ByteString(body, "UTF-8"))
     _events.toSeq
   }
   
-  def runUdp(body: String, context: SyslogContext): Seq[SyslogEvent] = {
+  def runUdp(body: String, context: SyslogContext): Seq[SyslogProcessingEvent] = {
     val stages = new ProcessFrames() >> new ProcessUdp()
     val PipelinePorts(_, evt, _) = PipelineFactory.buildFunctionTriple(context, stages)
-    val (_events: Iterable[SyslogEvent], _) = evt(ByteString(body, "UTF-8"))
+    val (_events: Iterable[SyslogProcessingEvent], _) = evt(ByteString(body, "UTF-8"))
     _events.toSeq
   }
   
@@ -78,43 +78,43 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a single length-prefixed message" in {
       val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext())
       events must have length 1
-      events(0).isInstanceOf[Message] must be(true)
+      events(0).isInstanceOf[SyslogMessage] must be(true)
     }
 
     "parse multiple length-prefixed messages" in {
       val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...", makeContext())
       events must have length 2
-      events(0).isInstanceOf[Message] must be(true)
-      events(1).isInstanceOf[Message] must be(true)
+      events(0).isInstanceOf[SyslogMessage] must be(true)
+      events(1).isInstanceOf[SyslogMessage] must be(true)
     }
 
     "parse multiple length-prefixed messages with trailing incomplete data" in {
       val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!65 <0> 2012-01-01T12:00:00Z localhost Hello, world this is a test...54 <0> 2012-01-01T12:", makeContext())
       events must have length 3
-      events(0).isInstanceOf[Message] must be(true)
-      events(1).isInstanceOf[Message] must be(true)
-      events(2) must be(SyslogIncomplete)
+      events(0).isInstanceOf[SyslogMessage] must be(true)
+      events(1).isInstanceOf[SyslogMessage] must be(true)
+      events(2) must be(SyslogProcessingIncomplete)
     }
 
     "parse an incomplete message" in {
       val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello", makeContext())
       events must have length 1
-      events(0) must be(SyslogIncomplete)
+      events(0) must be(SyslogProcessingIncomplete)
     }
 
     "parse a fragmented message" in {
       val context = makeContext()
-      runTcp("48 <0> 2012-01-01T12:00:00Z local", context) must be(Seq(SyslogIncomplete))
-      runTcp("host Hello", context) must be(Seq(SyslogIncomplete))
+      runTcp("48 <0> 2012-01-01T12:00:00Z local", context) must be(Seq(SyslogProcessingIncomplete))
+      runTcp("host Hello", context) must be(Seq(SyslogProcessingIncomplete))
       val events = runTcp(", world!", context)
       events must have length 1
-      events(0).isInstanceOf[Message] must be(true)
+      events(0).isInstanceOf[SyslogMessage] must be(true)
     }
 
     "return failure if message is too large" in {
       val events = runTcp("48 <0> 2012-01-01T12:00:00Z localhost Hello, world!", makeContext(Some(10)))
       events must have length 1
-      events(0).isInstanceOf[SyslogFailure] must be(true)
+      events(0).isInstanceOf[SyslogProcessingFailure] must be(true)
     }
   }
 
@@ -127,7 +127,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a basic version 1 message" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00Z localhost - - - - Hello, world!")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           message.priority.facility must be(0)
           message.priority.severity must be(0)
           message.timestamp must be === new DateTime(2012, 1, 1, 12, 0, 0, 0, DateTimeZone.UTC)
@@ -143,7 +143,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a version 1 message with fractional seconds" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1Z localhost - - - - Hello, world!")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           message.timestamp.getMillisOfSecond must be === 100
       }
     }
@@ -151,14 +151,14 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a version 1 message with non-UTC timezone" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - - Hello, world!")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
       }
     }
 
     "parse a version 1 message with a single structured data element and a message" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"bar\"] Hello, world!")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           val id = SDIdentifier("id", None)
           message.elements must contain key id
           val element = message.elements(id)
@@ -170,7 +170,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a version 1 message with a single structured data element and no message" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"bar\"]")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           val id = SDIdentifier("id", None)
           message.elements must contain key id
           val element = message.elements(id)
@@ -182,7 +182,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a version 1 message with a structured data element which has a reserved identifier" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [reserved foo=\"bar\"]")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           val id = SDIdentifier("reserved", None)
           message.elements must contain key id
           val element = message.elements(id)
@@ -193,7 +193,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a version 1 message with a structured data element which has a non-reserved identifier" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id@31337 foo=\"bar\"]")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           val id = SDIdentifier("id", Some("31337"))
           message.elements must contain key id
           val element = message.elements(id)
@@ -204,7 +204,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
     "parse a version 1 message with a structured data element which has escaped characters in the param value" in {
       val event = runFrame("<0>1 2012-01-01T12:00:00.1-08:00 localhost - - - [id foo=\"\\] \\\" \\\\ \"]")
       inside(event) {
-        case message: Message =>
+        case message: SyslogMessage =>
           val id = SDIdentifier("id", None)
           message.elements must contain key id
           val element = message.elements(id)

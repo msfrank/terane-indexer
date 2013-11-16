@@ -82,13 +82,15 @@ class SyslogTcpSource(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) 
                 case TlsClientAuth.REQUESTED => sslEngine.setWantClientAuth(true)
                 case TlsClientAuth.IGNORED =>
               }
-              new ProcessFrames() >>
+              new ProcessMessage() >>
+                new ProcessFrames() >>
                 new ProcessTcp() >>
                 new TcpReadWriteAdapter() >>
                 new SslTlsSupport(sslEngine) >>
                 new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
             case None =>
-              new ProcessFrames() >>
+              new ProcessMessage() >>
+                new ProcessFrames() >>
                 new ProcessTcp() >>
                 new TcpReadWriteAdapter() >>
                 new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
@@ -133,12 +135,12 @@ object ImmediateCloseHandler {
 /**
  * actor responsible for running data through the pipeline specified in SyslogInit.
  */
-class SyslogPipelineHandler(init: SyslogInit, conn: ActorRef, handler: ActorRef) extends TcpPipelineHandler[SyslogContext,SyslogEvent,SyslogEvent](init, conn, handler)
+class SyslogPipelineHandler(init: SyslogInit, conn: ActorRef, handler: ActorRef) extends TcpPipelineHandler[SyslogContext,SyslogProcessingEvent,SyslogProcessingEvent](init, conn, handler)
 
 object SyslogPipelineHandler {
 
-  type SyslogInit = Init[SyslogContext, SyslogEvent, SyslogEvent]
-  type SyslogPipelineStage = PipelineStage[SyslogContext, SyslogEvent, Tcp.Command, SyslogEvent, Tcp.Event]
+  type SyslogInit = Init[SyslogContext, SyslogProcessingEvent, SyslogProcessingEvent]
+  type SyslogPipelineStage = PipelineStage[SyslogContext, SyslogProcessingEvent, Tcp.Command, SyslogProcessingEvent, Tcp.Event]
 
   def init(log: LoggingAdapter, stages: SyslogPipelineStage, maxMessageSize: Option[Long]): SyslogInit = {
     new SyslogInit(stages) {
@@ -150,7 +152,7 @@ object SyslogPipelineHandler {
 /**
  * actor responsible for managing events from a single TCP connection.
  */
-class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) extends Actor with SyslogReceiver with ActorLogging {
+class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) extends Actor with ActorLogging {
   import init._
   import Tcp.{ConnectionClosed, Abort, Close}
   import context.dispatcher
@@ -163,20 +165,20 @@ class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: 
 
   def receive = {
 
-    case Event(message: Message) =>
-      log.debug("received {}", message)
+    case Event(SyslogEvent(event)) =>
+      log.debug("received {}", event)
       for (cancellable <- idleTimer) { cancellable.cancel() }
-      eventRouter ! StoreEvent(defaultSink, message)
+      eventRouter ! StoreEvent(defaultSink, event)
       idleTimer = idleTimeout match {
         case Some(timeout) =>
           Some(context.system.scheduler.scheduleOnce(timeout, connection, Close))
         case None => None
       }
 
-    case Event(SyslogIncomplete) =>
+    case Event(SyslogProcessingIncomplete) =>
       // ignore SyslogIncomplete messages
 
-    case Event(failure: SyslogFailure) =>
+    case Event(failure: SyslogProcessingFailure) =>
       log.debug("failed to process TCP message: {}", failure.getCause.getMessage)
       // there is no way to notify the client of error other than simply terminating the connection
       connection ! Abort
