@@ -26,16 +26,25 @@ import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.bier.Matchers
 
 /**
- * Match the term of the specified type in the specified field.
+ * Match the term range of the specified type in the specified field.
  *
- * This class is a placeholder for the backend-specific term matcher, which has
- * more information about the actual term storage, and thus can make better
+ * This class is a placeholder for the backend-specific term matcher, which
+ * has more information about the actual term storage, and thus can make better
  * decisions about how to implement the interface methods.
  */
-case class TermMatcher[T](fieldId: FieldIdentifier, term: T) extends Matchers {
+case class RangeMatcher[T](fieldId: FieldIdentifier, termStart: T, termEnd: T, inclusiveStart: Boolean, inclusiveEnd: Boolean) extends Matchers {
   def estimateCost = 0L
-  def nextPosting = Future.failed(new NotImplementedError("TermMatcher doesn't implement nextPosting"))
-  def findPosting(id: UUID) = Future.failed(new NotImplementedError("TermMatcher doesn't implement findPosting"))
+  def nextPosting = Future.failed(new NotImplementedError("RangeMatcher doesn't implement nextPosting"))
+  def findPosting(id: UUID) = Future.failed(new NotImplementedError("RangeMatcher doesn't implement findPosting"))
   def close() {}
-  def hashString: String = "%s:%s[%s]=\"%s\"".format(this.getClass.getName, fieldId.fieldName, fieldId.fieldType.toString.toLowerCase, term.toString)
+  def hashString: String = {
+    "%s:%s[%s]=%s\"%s\",\"%s\"%s".format(this.getClass.getName,
+      fieldId.fieldName,
+      fieldId.fieldType.toString.toLowerCase,
+      if (inclusiveStart) "[" else "{",
+      termStart.toString,
+      termEnd.toString,
+      if (inclusiveEnd) "]" else "}"
+      )
+  }
 }

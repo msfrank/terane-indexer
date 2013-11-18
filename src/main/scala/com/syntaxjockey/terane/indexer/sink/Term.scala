@@ -124,43 +124,43 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
     term match {
       case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
         val range = Serializers.Text.buildRange().greaterThanEquals(text).lessThanEquals(text).build()
-        term.keyspace.prepareQuery(term.field.text.get.cf)
+        term.keyspace.prepareQuery(term.field.text.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
         val range = Serializers.Literal.buildRange().greaterThanEquals(literal).lessThanEquals(literal).build()
-        term.keyspace.prepareQuery(term.field.literal.get.cf)
+        term.keyspace.prepareQuery(term.field.literal.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
         val range = Serializers.Integer.buildRange().greaterThanEquals(integer).lessThanEquals(integer).build()
-        term.keyspace.prepareQuery(term.field.integer.get.cf)
+        term.keyspace.prepareQuery(term.field.integer.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
         val range = Serializers.Float.buildRange().greaterThanEquals(float).lessThanEquals(float).build()
-        term.keyspace.prepareQuery(term.field.float.get.cf)
+        term.keyspace.prepareQuery(term.field.float.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
         val range = Serializers.Datetime.buildRange().greaterThanEquals(datetime).lessThanEquals(datetime).build()
-        term.keyspace.prepareQuery(term.field.datetime.get.cf)
+        term.keyspace.prepareQuery(term.field.datetime.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
         val range = Serializers.Address.buildRange().greaterThanEquals(address).lessThanEquals(address).build()
-        term.keyspace.prepareQuery(term.field.address.get.cf)
+        term.keyspace.prepareQuery(term.field.address.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
       case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
         val range = Serializers.Hostname.buildRange().greaterThanEquals(hostname).lessThanEquals(hostname).build()
-        term.keyspace.prepareQuery(term.field.hostname.get.cf)
+        term.keyspace.prepareQuery(term.field.hostname.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
@@ -178,31 +178,31 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
   def findPosting(id: UUID, term: Term[T], shard: Int): ColumnQuery[_] = {
     term match {
       case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
-        term.keyspace.prepareQuery(term.field.text.get.cf)
+        term.keyspace.prepareQuery(term.field.text.get.terms)
           .getKey(shard)
           .getColumn(new StringPosting(text, id))
       case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
-        term.keyspace.prepareQuery(term.field.literal.get.cf)
+        term.keyspace.prepareQuery(term.field.literal.get.terms)
           .getKey(shard)
           .getColumn(new StringPosting(literal, id))
       case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
-        term.keyspace.prepareQuery(term.field.integer.get.cf)
+        term.keyspace.prepareQuery(term.field.integer.get.terms)
           .getKey(shard)
           .getColumn(new LongPosting(integer, id))
       case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
-        term.keyspace.prepareQuery(term.field.float.get.cf)
+        term.keyspace.prepareQuery(term.field.float.get.terms)
           .getKey(shard)
           .getColumn(new DoublePosting(float, id))
       case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
-        term.keyspace.prepareQuery(term.field.datetime.get.cf)
+        term.keyspace.prepareQuery(term.field.datetime.get.terms)
           .getKey(shard)
           .getColumn(new DatePosting(datetime, id))
       case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
-        term.keyspace.prepareQuery(term.field.address.get.cf)
+        term.keyspace.prepareQuery(term.field.address.get.terms)
           .getKey(shard)
           .getColumn(new AddressPosting(address, id))
       case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
-        term.keyspace.prepareQuery(term.field.hostname.get.cf)
+        term.keyspace.prepareQuery(term.field.hostname.get.terms)
           .getKey(shard)
           .getColumn(new StringPosting(hostname, id))
       case unknown => throw new Exception("can't make Term finder for " + term.toString)

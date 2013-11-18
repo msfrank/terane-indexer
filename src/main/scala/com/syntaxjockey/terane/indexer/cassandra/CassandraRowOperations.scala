@@ -30,144 +30,117 @@ import com.syntaxjockey.terane.indexer.sink._
 
 trait CassandraRowOperations {
 
-  implicit val keyspace: Keyspace
+  val keyspace: Keyspace
+  val ttl = new java.lang.Integer(0)
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param text
-   * @param id
+   * Add text posting to the specified mutation batch.
    */
-  def writeTextPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[TextField,StringPosting], text: Text, id: UUID): FieldStatistics = {
+  def writeTextPosting(mutation: MutationBatch, fcf: TextFieldCF, text: Text, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[String] = fcf.field.parseValue(text)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new StringPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new StringPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param literal
-   * @param id
+   * Add literal posting to the specified mutation batch.
    */
-  def writeLiteralPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[LiteralField,StringPosting], literal: Literal, id: UUID): FieldStatistics = {
+  def writeLiteralPosting(mutation: MutationBatch, fcf: LiteralFieldCF, literal: Literal, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[String] = fcf.field.parseValue(literal)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new StringPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new StringPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param integer
-   * @param id
+   * Add integer posting to the specified mutation batch.
    */
-  def writeIntegerPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[IntegerField,LongPosting], integer: Integer, id: UUID): FieldStatistics = {
+  def writeIntegerPosting(mutation: MutationBatch, fcf: IntegerFieldCF, integer: Integer, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[Long] = fcf.field.parseValue(integer)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new LongPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new LongPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param float
-   * @param id
+   * Add float posting to the specified mutation batch.
    */
-  def writeFloatPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[FloatField,DoublePosting], float: Float, id: UUID): FieldStatistics = {
+  def writeFloatPosting(mutation: MutationBatch, fcf: FloatFieldCF, float: Float, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[Double] = fcf.field.parseValue(float)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new DoublePosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new DoublePosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param datetime
-   * @param id
+   * Add datetime posting to the specified mutation batch.
    */
-  def writeDatetimePosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[DatetimeField,DatePosting], datetime: Datetime, id: UUID): FieldStatistics = {
+  def writeDatetimePosting(mutation: MutationBatch, fcf: DatetimeFieldCF, datetime: Datetime, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[Date] = fcf.field.parseValue(datetime)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new DatePosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new DatePosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param address
-   * @param id
+   * Add address posting to the specified mutation batch.
    */
-  def writeAddressPosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[AddressField,AddressPosting], address: Address, id: UUID): FieldStatistics = {
+  def writeAddressPosting(mutation: MutationBatch, fcf: AddressFieldCF, address: Address, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[Array[Byte]] = fcf.field.parseValue(address)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new AddressPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new AddressPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
 
   /**
-   *
-   * @param mutation
-   * @param fcf
-   * @param hostname
-   * @param id
+   * Add hostname posting to the specified mutation batch.
    */
-  def writeHostnamePosting(mutation: MutationBatch, fcf: TypedFieldColumnFamily[HostnameField,StringPosting], hostname: Hostname, id: UUID): FieldStatistics = {
+  def writeHostnamePosting(mutation: MutationBatch, fcf: HostnameFieldCF, hostname: Hostname, id: UUID): FieldStatistics = {
     val parsed: ParsedValue[String] = fcf.field.parseValue(hostname)
     for ((term,postingMetadata) <- parsed.postings) {
       val positions: java.util.Set[java.lang.Integer] = postingMetadata.positions.getOrElse(Set[Int]()).map { pos =>
         pos:java.lang.Integer
       }
       val shard = getShardKey(id, fcf)
-      val ttl = new java.lang.Integer(0)
-      mutation.withRow(fcf.cf, shard).putColumn(new StringPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      mutation.withRow(fcf.terms, shard).putColumn(new StringPosting(term, id), positions, CassandraSink.SER_POSITIONS, ttl)
+      fcf.postings.foreach(postings => mutation.withRow(postings, id).putEmptyColumn(term, ttl))
     }
     parsed.statistics
   }
