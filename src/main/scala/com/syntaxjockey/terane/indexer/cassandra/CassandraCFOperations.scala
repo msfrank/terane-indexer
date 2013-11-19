@@ -20,8 +20,6 @@
 package com.syntaxjockey.terane.indexer.cassandra
 
 import com.netflix.astyanax.Keyspace
-import com.netflix.astyanax.connectionpool.OperationResult
-import com.netflix.astyanax.ddl.SchemaChangeResult
 import scala.util.{Success, Failure, Try}
 
 trait CassandraCFOperations {
@@ -37,139 +35,166 @@ trait CassandraCFOperations {
   }
 
   /**
-   * Create the column families for the specified field.  Returns Success(Unit)
+   * Create the column families for the specified field.  Returns the wrapped fcf
    * on success, otherwise returns Failure[Throwable].
    */
-  def createTextField(fcf: TextFieldCF): Try[Unit] = {
+  def createTextField(fcf: TextFieldColumnFamily): Try[TextFieldColumnFamily] = {
     val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
+    termsOpts.put("name", fcf.terms.getName)
+    termsOpts.put("key_validation_class", "BytesType")                          // Row Key
+    termsOpts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")    // Column Key
+    termsOpts.put("default_validation_class", "BytesType")                      // Column Value
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")                        // Row Key
+    postingsOpts.put("comparator_type", "UTF8Type")                             // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case failure @ Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
+    }
+  }
+
+  def createTextField(name: String, id: String, width: Long): Try[TextFieldColumnFamily] = createTextField(new TextFieldColumnFamily(name, id, width))
+
+  /**
+   * Create the column families for the specified field.  Returns the wrapped fcf
+   * on success, otherwise returns Failure[Throwable].
+   */
+  def createLiteralField(fcf: LiteralFieldColumnFamily): Try[LiteralFieldColumnFamily] = {
+    val termsOpts = new java.util.HashMap[String,Object]()
+    termsOpts.put("name", fcf.terms.getName)
     termsOpts.put("key_validation_class", "BytesType")                           // Row Key
     termsOpts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")     // Column Key
     termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "UTF8Type")         // Column Key
-      opts = opts :+ postingsOpts
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
+    postingsOpts.put("comparator_type", "UTF8Type")         // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
     }
-    fcf.kgrams.foreach { cf =>
-      val kgramsOpts = new java.util.HashMap[String,Object]()
-      kgramsOpts.put("name", fcf.id + "_k")
-      kgramsOpts.put("key_validation_class", "UTF8Type")    // Row Key
-      kgramsOpts.put("comparator_type", "UTF8Type")         // Column Key
-      opts = opts :+ kgramsOpts
-    }
-    createColumnFamilies(opts)
   }
 
-  def createLiteralField(fcf: LiteralFieldCF): Try[Unit] = {
-    val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
-    termsOpts.put("key_validation_class", "BytesType")                           // Row Key
-    termsOpts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")     // Column Key
-    termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "UTF8Type")         // Column Key
-      opts = opts :+ postingsOpts
-    }
-    fcf.kgrams.foreach { cf =>
-      val kgramsOpts = new java.util.HashMap[String,Object]()
-      kgramsOpts.put("name", fcf.id + "_k")
-      kgramsOpts.put("key_validation_class", "UTF8Type")    // Row Key
-      kgramsOpts.put("comparator_type", "UTF8Type")         // Column Key
-      opts = opts :+ kgramsOpts
-    }
-    createColumnFamilies(opts)
-  }
+  def createLiteralField(name: String, id: String, width: Long): Try[LiteralFieldColumnFamily] = createLiteralField(new LiteralFieldColumnFamily(name, id, width))
 
-  def createIntegerField(fcf: IntegerFieldCF): Try[Unit] = {
+  /**
+   *
+   */
+  /**
+   * Create the column families for the specified field.  Returns the wrapped fcf
+   * on success, otherwise returns Failure[Throwable].
+   */
+  def createIntegerField(fcf: IntegerFieldColumnFamily): Try[IntegerFieldColumnFamily] = {
     val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
+    termsOpts.put("name", fcf.terms.getName)
     termsOpts.put("key_validation_class", "BytesType")                           // Row Key
     termsOpts.put("comparator_type", "CompositeType(LongType,TimeUUIDType)")     // Column Key
     termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "LongType")         // Column Key
-      opts = opts :+ postingsOpts
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
+    postingsOpts.put("comparator_type", "LongType")         // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
     }
-    createColumnFamilies(opts)
   }
 
-  def createFloatField(fcf: FloatFieldCF): Try[Unit] = {
+  def createIntegerField(name: String, id: String, width: Long): Try[IntegerFieldColumnFamily] = createIntegerField(new IntegerFieldColumnFamily(name, id, width))
+
+  /**
+   * Create the column families for the specified field.  Returns the wrapped fcf
+   * on success, otherwise returns Failure[Throwable].
+   */
+  def createFloatField(fcf: FloatFieldColumnFamily): Try[FloatFieldColumnFamily] = {
     val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
+    termsOpts.put("name", fcf.terms.getName)
     termsOpts.put("key_validation_class", "BytesType")                           // Row Key
     termsOpts.put("comparator_type", "CompositeType(DoubleType,TimeUUIDType)")   // Column Key
     termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "DoubleType")       // Column Key
-      opts = opts :+ postingsOpts
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
+    postingsOpts.put("comparator_type", "DoubleType")       // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
     }
-    createColumnFamilies(opts)
   }
 
-  def createDatetimeField(fcf: DatetimeFieldCF): Try[Unit] = {
+  def createFloatField(name: String, id: String, width: Long): Try[FloatFieldColumnFamily] = createFloatField(new FloatFieldColumnFamily(name, id, width))
+
+  /**
+   * Create the column families for the specified field.  Returns the wrapped fcf
+   * on success, otherwise returns Failure[Throwable].
+   */
+  def createDatetimeField(fcf: DatetimeFieldColumnFamily): Try[DatetimeFieldColumnFamily] = {
     val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
+    termsOpts.put("name", fcf.terms.getName)
     termsOpts.put("key_validation_class", "BytesType")                           // Row Key
     termsOpts.put("comparator_type", "CompositeType(DateType,TimeUUIDType)")     // Column Key
     termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "DateType")         // Column Key
-      opts = opts :+ postingsOpts
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
+    postingsOpts.put("comparator_type", "DateType")         // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
     }
-    createColumnFamilies(opts)
   }
 
-  def createAddressField(fcf: AddressFieldCF): Try[Unit] = {
+  def createDatetimeField(name: String, id: String, width: Long): Try[DatetimeFieldColumnFamily] = createDatetimeField(new DatetimeFieldColumnFamily(name, id, width))
+
+  /**
+   * Create the column families for the specified field.  Returns the wrapped fcf
+   * on success, otherwise returns Failure[Throwable].
+   */
+  def createAddressField(fcf: AddressFieldColumnFamily): Try[AddressFieldColumnFamily] = {
     val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
+    termsOpts.put("name", fcf.terms.getName)
     termsOpts.put("key_validation_class", "BytesType")                           // Row Key
     termsOpts.put("comparator_type", "CompositeType(BytesType,TimeUUIDType)")    // Column Key
     termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "BytesType")        // Column Key
-      opts = opts :+ postingsOpts
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
+    postingsOpts.put("comparator_type", "BytesType")        // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
     }
-    createColumnFamilies(opts)
   }
 
-  def createHostnameField(fcf: HostnameFieldCF): Try[Unit] = {
+  def createAddressField(name: String, id: String, width: Long): Try[AddressFieldColumnFamily] = createAddressField(new AddressFieldColumnFamily(name, id, width))
+
+  /**
+   * Create the column families for the specified field.  Returns the wrapped fcf
+   * on success, otherwise returns Failure[Throwable].
+   */
+  def createHostnameField(fcf: HostnameFieldColumnFamily): Try[HostnameFieldColumnFamily] = {
     val termsOpts = new java.util.HashMap[String,Object]()
-    termsOpts.put("name", fcf.id)
+    termsOpts.put("name", fcf.terms.getName)
     termsOpts.put("key_validation_class", "BytesType")                           // Row Key
     termsOpts.put("comparator_type", "CompositeType(UTF8Type,TimeUUIDType)")     // Column Key
     termsOpts.put("default_validation_class", "BytesType")                       // Column Value
-    var opts = Seq(termsOpts)
-    fcf.postings.foreach { cf =>
-      val postingsOpts = new java.util.HashMap[String,Object]()
-      postingsOpts.put("name", fcf.id + "_p")
-      postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
-      postingsOpts.put("comparator_type", "UTF8Type")         // Column Key
-      opts = opts :+ postingsOpts
+    val postingsOpts = new java.util.HashMap[String,Object]()
+    postingsOpts.put("name", fcf.postings.getName)
+    postingsOpts.put("key_validation_class", "UUIDType")    // Row Key
+    postingsOpts.put("comparator_type", "UTF8Type")         // Column Key
+    createColumnFamilies(Seq(termsOpts, postingsOpts)) match {
+      case Failure(ex) =>
+        Failure(ex)
+      case _ => Success(fcf)
     }
-    createColumnFamilies(opts)
   }
+
+  def createHostnameField(name: String, id: String, width: Long): Try[HostnameFieldColumnFamily] = createHostnameField(new HostnameFieldColumnFamily(name, id, width))
 }

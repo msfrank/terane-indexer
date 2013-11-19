@@ -52,45 +52,31 @@ abstract class TestCluster(_system: ActorSystem) extends TestKit(_system) with I
   }
 
   val textId = FieldIdentifier("text_field", DataType.TEXT)
-  val textCf = TextFieldCF(textId.fieldName, "text_field", 0, new TextField(),
-    new ColumnFamily[java.lang.Long,StringPosting]("text_field", LongSerializer.get, Serializers.Text),
-    None, None)
+  val textCf = new TextFieldColumnFamily(textId.fieldName, "text_field", 0)
   val textField = CassandraField(textId, DateTime.now(), text = Some(textCf))
 
   val literalId = FieldIdentifier("literal_field", DataType.LITERAL)
-  val literalCf = LiteralFieldCF(literalId.fieldName, "literal_field", 0, new LiteralField(),
-    new ColumnFamily[java.lang.Long,StringPosting]("literal_field", LongSerializer.get, Serializers.Literal),
-    None, None)
+  val literalCf = new LiteralFieldColumnFamily(literalId.fieldName, "literal_field", 0)
   val literalField = CassandraField(literalId, DateTime.now(), literal = Some(literalCf))
 
   val integerId = FieldIdentifier("integer_field", DataType.INTEGER)
-  val integerCf = IntegerFieldCF(integerId.fieldName, "integer_field", 0, new IntegerField(),
-    new ColumnFamily[java.lang.Long,LongPosting]("integer_field", LongSerializer.get, Serializers.Integer),
-    None)
+  val integerCf = new IntegerFieldColumnFamily(integerId.fieldName, "integer_field", 0)
   val integerField = CassandraField(integerId, DateTime.now(), integer = Some(integerCf))
 
   val floatId = FieldIdentifier("float_field", DataType.FLOAT)
-  val floatCf = FloatFieldCF(floatId.fieldName, "float_field", 0, new FloatField(),
-    new ColumnFamily[java.lang.Long,DoublePosting]("float_field", LongSerializer.get, Serializers.Float),
-    None)
+  val floatCf = new FloatFieldColumnFamily(floatId.fieldName, "float_field", 0)
   val floatField = CassandraField(floatId, DateTime.now(), float = Some(floatCf))
 
   val datetimeId = FieldIdentifier("datetime_field", DataType.DATETIME)
-  val datetimeCf = DatetimeFieldCF(datetimeId.fieldName, "datetime_field", 0, new DatetimeField(),
-    new ColumnFamily[java.lang.Long,DatePosting]("datetime_field", LongSerializer.get, Serializers.Datetime),
-    None)
+  val datetimeCf = new DatetimeFieldColumnFamily(datetimeId.fieldName, "datetime_field", 0)
   val datetimeField = CassandraField(datetimeId, DateTime.now(), datetime = Some(datetimeCf))
 
   val addressId = FieldIdentifier("address_field", DataType.ADDRESS)
-  val addressCf = AddressFieldCF(addressId.fieldName, "address_field", 0, new AddressField(),
-    new ColumnFamily[java.lang.Long,AddressPosting]("address_field", LongSerializer.get, Serializers.Address),
-    None)
+  val addressCf = new AddressFieldColumnFamily(addressId.fieldName, "address_field", 0)
   val addressField = CassandraField(addressId, DateTime.now(), address = Some(addressCf))
 
   val hostnameId = FieldIdentifier("hostname_field", DataType.HOSTNAME)
-  val hostnameCf = HostnameFieldCF(hostnameId.fieldName, "hostname_field", 0, new HostnameField(),
-    new ColumnFamily[java.lang.Long,StringPosting]("hostname_field", LongSerializer.get, Serializers.Hostname),
-    None)
+  val hostnameCf = new HostnameFieldColumnFamily(hostnameId.fieldName, "hostname_field", 0)
   val hostnameField = CassandraField(hostnameId, DateTime.now(), hostname = Some(hostnameCf))
 
   def getZookeeperClient = Zookeeper(_system).client

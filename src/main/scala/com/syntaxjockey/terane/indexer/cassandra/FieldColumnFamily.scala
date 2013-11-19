@@ -19,6 +19,7 @@
 
 package com.syntaxjockey.terane.indexer.cassandra
 
+import com.netflix.astyanax.serializers._
 import com.netflix.astyanax.model.ColumnFamily
 import java.util.{Date, UUID}
 
@@ -33,71 +34,68 @@ sealed trait FieldColumnFamily {
 sealed trait TypedFieldColumnFamily[F,P,T] extends FieldColumnFamily {
   val field: F
   val terms: ColumnFamily[java.lang.Long,P]
-  val postings: Option[ColumnFamily[UUID,T]]
-  val kgrams: Option[ColumnFamily[T,T]]
+  val postings: ColumnFamily[UUID,T]
 }
 
-final case class TextFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: TextField,
-  terms: ColumnFamily[java.lang.Long,StringPosting],
-  postings: Option[ColumnFamily[UUID,String]],
-  kgrams: Option[ColumnFamily[String,String]])
-extends TypedFieldColumnFamily[TextField,StringPosting,String]
+/**
+ *
+ */
+class TextFieldColumnFamily(val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[TextField,StringPosting,String] {
+  val field = new TextField()
+  val terms = new ColumnFamily[java.lang.Long,StringPosting](id + "_t", LongSerializer.get, Serializers.Text)
+  val postings = new ColumnFamily[UUID,String](id + "_p", TimeUUIDSerializer.get, StringSerializer.get)
+}
 
-final case class LiteralFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: LiteralField,
-  terms: ColumnFamily[java.lang.Long,StringPosting],
-  postings: Option[ColumnFamily[UUID,String]],
-  kgrams: Option[ColumnFamily[String,String]])
-extends TypedFieldColumnFamily[LiteralField,StringPosting,String]
+/**
+ *
+ */
+class LiteralFieldColumnFamily(val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[LiteralField,StringPosting,String] {
+  val field = new LiteralField()
+  val terms = new ColumnFamily[java.lang.Long,StringPosting](id + "_t", LongSerializer.get, Serializers.Literal)
+  val postings = new ColumnFamily[UUID,String](id + "_p", TimeUUIDSerializer.get, StringSerializer.get)
+}
 
-final case class IntegerFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: IntegerField,
-  terms: ColumnFamily[java.lang.Long,LongPosting],
-  postings: Option[ColumnFamily[UUID,Long]])
-extends TypedFieldColumnFamily[IntegerField,LongPosting,Long] { val kgrams = None }
+/**
+ *
+ */
+class IntegerFieldColumnFamily(val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[IntegerField,LongPosting,java.lang.Long] {
+  val field = new IntegerField()
+  val terms = new ColumnFamily[java.lang.Long,LongPosting](id + "_t", LongSerializer.get, Serializers.Integer)
+  val postings = new ColumnFamily[UUID,java.lang.Long](id + "_p", TimeUUIDSerializer.get, LongSerializer.get)
+}
 
-final case class FloatFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: FloatField,
-  terms: ColumnFamily[java.lang.Long,DoublePosting],
-  postings: Option[ColumnFamily[UUID,Double]])
-extends TypedFieldColumnFamily[FloatField,DoublePosting,Double] { val kgrams = None }
+/**
+ *
+ */
+class FloatFieldColumnFamily(val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[FloatField,DoublePosting,java.lang.Double] {
+  val field = new FloatField()
+  val terms =  new ColumnFamily[java.lang.Long,DoublePosting](id + "_t", LongSerializer.get, Serializers.Float)
+  val postings = new ColumnFamily[UUID,java.lang.Double](id + "_p", TimeUUIDSerializer.get, DoubleSerializer.get)
+}
 
-final case class DatetimeFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: DatetimeField,
-  terms: ColumnFamily[java.lang.Long,DatePosting],
-  postings: Option[ColumnFamily[UUID,Date]])
-extends TypedFieldColumnFamily[DatetimeField,DatePosting,Date] { val kgrams = None }
+/**
+ *
+ */
+class DatetimeFieldColumnFamily( val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[DatetimeField,DatePosting,Date] {
+  val field = new DatetimeField()
+  val terms = new ColumnFamily[java.lang.Long,DatePosting](id + "_t", LongSerializer.get, Serializers.Datetime)
+  val postings = new ColumnFamily[UUID,Date](id + "_p", TimeUUIDSerializer.get, DateSerializer.get)
+}
 
-final case class AddressFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: AddressField,
-  terms: ColumnFamily[java.lang.Long,AddressPosting],
-  postings: Option[ColumnFamily[UUID,Array[Byte]]])
-extends TypedFieldColumnFamily[AddressField,AddressPosting,Array[Byte]] { val kgrams = None }
+/**
+ *
+ */
+class AddressFieldColumnFamily( val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[AddressField,AddressPosting,Array[Byte]] {
+  val field = new AddressField()
+  val terms = new ColumnFamily[java.lang.Long,AddressPosting](id + "_t", LongSerializer.get, Serializers.Address)
+  val postings = new ColumnFamily[UUID,Array[Byte]](id + "_p", TimeUUIDSerializer.get, BytesArraySerializer.get)
+}
 
-final case class HostnameFieldCF(
-  name: String,
-  id: String,
-  width: Long,
-  field: HostnameField,
-  terms: ColumnFamily[java.lang.Long,StringPosting],
-  postings: Option[ColumnFamily[UUID,String]])
-extends TypedFieldColumnFamily[HostnameField,StringPosting,String] { val kgrams = None }
+/**
+ *
+ */
+class HostnameFieldColumnFamily( val name: String, val id: String, val width: Long) extends TypedFieldColumnFamily[HostnameField,StringPosting,String] {
+  val field = new HostnameField()
+  val terms = new ColumnFamily[java.lang.Long,StringPosting](id + "_t", LongSerializer.get, Serializers.Hostname)
+  val postings = new ColumnFamily[UUID,String](id + "_p", TimeUUIDSerializer.get, StringSerializer.get)
+}
