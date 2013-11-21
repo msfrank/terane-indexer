@@ -244,13 +244,18 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
       case rangeMatcher @ RangeMatcher(fieldId, _) =>
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
-            fieldId.fieldType match {
-              case DataType.DATETIME =>
-                val stat = stats.statsByCf.get(field.datetime.get.id)
-                Some(Range(fieldId, rangeMatcher.spec, keyspace, field, stat))
+            val stat = fieldId.fieldType match {
+              case DataType.TEXT => stats.statsByCf.get(field.text.get.id)
+              case DataType.LITERAL => stats.statsByCf.get(field.literal.get.id)
+              case DataType.INTEGER => stats.statsByCf.get(field.integer.get.id)
+              case DataType.FLOAT => stats.statsByCf.get(field.float.get.id)
+              case DataType.DATETIME => stats.statsByCf.get(field.datetime.get.id)
+              case DataType.ADDRESS => stats.statsByCf.get(field.address.get.id)
+              case DataType.HOSTNAME => stats.statsByCf.get(field.hostname.get.id)
               case unknown =>
                 throw new Exception("unknown field type or value type for " + rangeMatcher.toString)
             }
+            Some(Range(fieldId, rangeMatcher.spec, keyspace, field, stat))
           case missing =>
             None
         }

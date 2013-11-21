@@ -138,11 +138,11 @@ class LiteralField extends BierField {
   }
 
   def parseRange(fieldId: FieldIdentifier, targetRange: TargetRange): Matchers = targetRange match {
-    case TargetRange(Some(TargetLiteral(start)), Some(TargetLiteral(end)), DataType.INTEGER, startExcl, endExcl) =>
+    case TargetRange(Some(TargetLiteral(start)), Some(TargetLiteral(end)), DataType.LITERAL, startExcl, endExcl) =>
       RangeMatcher(fieldId, ClosedRangeSpec(toMatchTerm(start), toMatchTerm(end), startExcl, endExcl))
-    case TargetRange(None, Some(TargetLiteral(end)), DataType.INTEGER, startExcl, endExcl) =>
+    case TargetRange(None, Some(TargetLiteral(end)), DataType.LITERAL, startExcl, endExcl) =>
       RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(end), endExcl))
-    case TargetRange(Some(TargetLiteral(start)), None, DataType.INTEGER, startExcl, endExcl) =>
+    case TargetRange(Some(TargetLiteral(start)), None, DataType.LITERAL, startExcl, endExcl) =>
       RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(start), startExcl))
   }
 }
