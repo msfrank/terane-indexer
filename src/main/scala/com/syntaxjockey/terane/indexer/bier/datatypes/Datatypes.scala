@@ -22,13 +22,16 @@ package com.syntaxjockey.terane.indexer.bier.datatypes
 import org.joda.time.DateTime
 import org.xbill.DNS.Name
 import java.net.InetAddress
+import java.util.Date
 
 object DataType extends Enumeration {
   type DataType = Value
   val TEXT, LITERAL, INTEGER, FLOAT, DATETIME, ADDRESS, HOSTNAME = Value
 }
 
-class Text(val underlying: String) extends AnyVal with Comparable[Text] {
+sealed trait DataValue extends Any
+
+class Text(val underlying: String) extends AnyVal with Comparable[Text] with DataValue {
   def compareTo(other: Text) = underlying.compareTo(other.underlying)
 }
 
@@ -36,7 +39,7 @@ object Text {
   def apply(string: String) = new Text(string)
 }
 
-class Literal(val underlying: String) extends AnyVal with Comparable[Literal] {
+class Literal(val underlying: String) extends AnyVal with Comparable[Literal] with DataValue {
   def compareTo(other: Literal) = underlying.compareTo(other.underlying)
 }
 
@@ -44,7 +47,7 @@ object Literal {
   def apply(string: String) = new Literal(string)
 }
 
-class Integer(val underlying: Long) extends AnyVal with Comparable[Integer] {
+class Integer(val underlying: Long) extends AnyVal with Comparable[Integer] with DataValue {
   def compareTo(other: Integer) = underlying.compareTo(other.underlying)
 }
 
@@ -54,7 +57,7 @@ object Integer {
   def apply(string: String) = new Integer(string.toLong)
 }
 
-class Float(val underlying: Double) extends AnyVal with Comparable[Float] {
+class Float(val underlying: Double) extends AnyVal with Comparable[Float] with DataValue {
   def compareTo(other: Float) = underlying.compareTo(other.underlying)
 }
 
@@ -64,16 +67,17 @@ object Float {
   def apply(string: String) = new Float(string.toDouble)
 }
 
-class Datetime(val underlying: DateTime) extends AnyVal with Comparable[Datetime] {
+class Datetime(val underlying: DateTime) extends AnyVal with Comparable[Datetime] with DataValue {
   def compareTo(other: Datetime) = underlying.compareTo(other.underlying)
 }
 
 object Datetime {
+  def apply(date: Date) = new Datetime(new DateTime(date))
   def apply(datetime: DateTime) = new Datetime(datetime)
   def apply(string: String) = new Datetime(new DateTime(string.toLong))
 }
 
-class Address(val underlying: InetAddress) extends AnyVal with Comparable[Address] {
+class Address(val underlying: InetAddress) extends AnyVal with Comparable[Address] with DataValue {
   def compareTo(other: Address): Int = {
     var a1 = underlying.getAddress
     var a2 = other.underlying.getAddress
@@ -102,11 +106,12 @@ object Address {
     0.toByte, 0.toByte, 0.toByte, 0.toByte,
     0.toByte, 0.toByte, 0xff.toByte, 0xff.toByte
   )
+  def apply(bytes: Array[Byte]) = new Address(InetAddress.getByAddress(bytes))
   def apply(inetaddress: InetAddress) = new Address(inetaddress)
   def apply(string: String) = new Address(org.xbill.DNS.Address.getByAddress(string))
 }
 
-class Hostname(val underlying: Name) extends AnyVal with Comparable[Hostname] {
+class Hostname(val underlying: Name) extends AnyVal with Comparable[Hostname] with DataValue {
   def compareTo(other: Hostname) = underlying.compareTo(other.underlying)
 }
 

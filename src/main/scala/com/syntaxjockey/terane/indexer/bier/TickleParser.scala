@@ -58,7 +58,7 @@ trait TickleParser extends JavaTokenParsers {
   val quotedText: Parser[TargetText] = stringLiteral ^^ { value => TargetText(value.tail.init) }
   val rawText: Parser[TargetValue] = _log(bareText | quotedText)("rawText")
 
-  val rawLiteral: Parser[TargetValue] = _log(regex("""'\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("rawLiteral") ^^ { value => TargetLiteral(value.tail) }
+  val rawLiteral: Parser[TargetValue] = _log(regex(""":([^\s\p{Cntrl}\[\]\(\)]*)""".r))("rawLiteral") ^^ { value => TargetLiteral(value.tail) }
 
   val rawNumber: Parser[TargetValue] = _log(decimalNumber | wholeNumber)("rawNumber") ^^ {
     case number if number.contains('.') => TargetFloat(number)
@@ -127,7 +127,7 @@ trait TickleParser extends JavaTokenParsers {
   /*
    * <Expression>         ::= <TargetExpression | <BareTarget>
    * <BareTarget>         ::= <TargetValue>
-   * <Subject>            ::= ':' <JavaIdentifier>
+   * <Subject>            ::= '?' <JavaIdentifier>
    * <JavaIdentifier>     ::= see http://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.8
    * <TargetExpression>   ::= <Equals> | <NotEquals> | <GreaterThan> | <LessThan> | <GreaterThanEquals> | <LessThanEquals>
    * <Equals>             ::= <Subject> '=' <TargetValue>
@@ -142,7 +142,7 @@ trait TickleParser extends JavaTokenParsers {
    */
 
   /* subject is a java token starting with a ':' */
-  val subject: Parser[String] = _log(regex(""":\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("subject") ^^ { _.tail }
+  val subject: Parser[String] = _log(regex("""\?\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("subject") ^^ { _.tail }
 
   /* bare target is just a value without field name or type */
   val bareTarget: Parser[Expression] = _log(targetValue)("bareTarget") ^^ { case target => Expression(None, PredicateEquals(target)) }

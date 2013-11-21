@@ -29,7 +29,7 @@ import java.net.InetAddress
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.TickleParser._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.matchers.{TermPlaceholder, PhraseMatcher, TermMatcher, AndMatcher}
+import com.syntaxjockey.terane.indexer.bier.matchers._
 import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
 import com.syntaxjockey.terane.indexer.bier.statistics.Analytical._
 
@@ -110,13 +110,40 @@ class LiteralField extends BierField {
     ParsedValue(Seq((literal.underlying, PostingMetadata(None))), FieldStatistics(Seq(literal.underlying)))
   }
 
+  def toMatchTerm(literal: String): MatchTerm = {
+    MatchTerm(literal = Some(tokenizeValue(Literal(literal))))
+  }
+
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.LITERAL)
     expression.predicate match {
       case PredicateEquals(TargetLiteral(target)) =>
         TermMatcher(fieldId, tokenizeValue(Literal(target)))
-      case other => throw new Exception("parse failure")
+      case PredicateNotEquals(TargetLiteral(target)) =>
+        NotMatcher(EveryMatcher(), TermMatcher(fieldId, tokenizeValue(Literal(target))))(factory)
+      case PredicateEqualsRange(targetRange: TargetRange) =>
+        parseRange(fieldId, targetRange)
+      case PredicateNotEqualsRange(targetRange: TargetRange) =>
+        NotMatcher(EveryMatcher(), parseRange(fieldId, targetRange))(factory)
+      case PredicateLessThan(TargetLiteral(target)) =>
+        RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(target), endExcl = true))
+      case PredicateLessThanEqualTo(TargetLiteral(target)) =>
+        RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(target), endExcl = false))
+      case PredicateGreaterThan(TargetLiteral(target)) =>
+        RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(target),startExcl = true))
+      case PredicateGreaterThanEqualTo(TargetLiteral(target)) =>
+        RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(target), startExcl = false))
+      case other => throw new Exception("Literal field parse failure")
     }
+  }
+
+  def parseRange(fieldId: FieldIdentifier, targetRange: TargetRange): Matchers = targetRange match {
+    case TargetRange(Some(TargetLiteral(start)), Some(TargetLiteral(end)), DataType.INTEGER, startExcl, endExcl) =>
+      RangeMatcher(fieldId, ClosedRangeSpec(toMatchTerm(start), toMatchTerm(end), startExcl, endExcl))
+    case TargetRange(None, Some(TargetLiteral(end)), DataType.INTEGER, startExcl, endExcl) =>
+      RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(end), endExcl))
+    case TargetRange(Some(TargetLiteral(start)), None, DataType.INTEGER, startExcl, endExcl) =>
+      RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(start), startExcl))
   }
 }
 object LiteralField extends LiteralField
@@ -133,13 +160,40 @@ class IntegerField extends BierField {
     ParsedValue(Seq((integer.underlying, PostingMetadata(None))), FieldStatistics(Seq(integer.underlying)))
   }
 
+  def toMatchTerm(integer: String): MatchTerm = {
+    MatchTerm(integer = Some(tokenizeValue(Integer(integer))))
+  }
+
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.INTEGER)
     expression.predicate match {
       case PredicateEquals(TargetInteger(target)) =>
         TermMatcher(fieldId, tokenizeValue(Integer(target.toLong)))
-      case other => throw new Exception("parse failure")
+      case PredicateNotEquals(TargetInteger(target)) =>
+        NotMatcher(EveryMatcher(), TermMatcher(fieldId, tokenizeValue(Integer(target.toLong))))(factory)
+      case PredicateEqualsRange(targetRange: TargetRange) =>
+        parseRange(fieldId, targetRange)
+      case PredicateNotEqualsRange(targetRange: TargetRange) =>
+        NotMatcher(EveryMatcher(), parseRange(fieldId, targetRange))(factory)
+      case PredicateLessThan(TargetInteger(target)) =>
+        RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(target), endExcl = true))
+      case PredicateLessThanEqualTo(TargetInteger(target)) =>
+        RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(target), endExcl = false))
+      case PredicateGreaterThan(TargetInteger(target)) =>
+        RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(target),startExcl = true))
+      case PredicateGreaterThanEqualTo(TargetInteger(target)) =>
+        RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(target), startExcl = false))
+      case other => throw new Exception("Integer field parse failure")
     }
+  }
+
+  def parseRange(fieldId: FieldIdentifier, targetRange: TargetRange): Matchers = targetRange match {
+    case TargetRange(Some(TargetInteger(start)), Some(TargetInteger(end)), DataType.INTEGER, startExcl, endExcl) =>
+      RangeMatcher(fieldId, ClosedRangeSpec(toMatchTerm(start), toMatchTerm(end), startExcl, endExcl))
+    case TargetRange(None, Some(TargetInteger(end)), DataType.INTEGER, startExcl, endExcl) =>
+      RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(end), endExcl))
+    case TargetRange(Some(TargetInteger(start)), None, DataType.INTEGER, startExcl, endExcl) =>
+      RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(start), startExcl))
   }
 }
 object IntegerField extends IntegerField
@@ -182,13 +236,40 @@ class DatetimeField extends BierField {
     DateTime.parse(s)
   }
 
+  def toMatchTerm(datetime: String): MatchTerm = {
+    MatchTerm(datetime = Some(tokenizeValue(Datetime(parseDatetimeString(datetime)))))
+  }
+
   def parseExpression(factory: ActorRefFactory, expression: Expression, params: TickleParserParams): Matchers = {
     val fieldId = FieldIdentifier(expression.subject.getOrElse(params.defaultField), DataType.DATETIME)
     expression.predicate match {
       case PredicateEquals(TargetDatetime(target)) =>
         TermMatcher(fieldId, tokenizeValue(Datetime(parseDatetimeString(target))))
+      case PredicateNotEquals(TargetDatetime(target)) =>
+        NotMatcher(EveryMatcher(), TermMatcher(fieldId, tokenizeValue(Datetime(parseDatetimeString(target)))))(factory)
+      case PredicateEqualsRange(targetRange: TargetRange) =>
+        parseRange(fieldId, targetRange)
+      case PredicateNotEqualsRange(targetRange: TargetRange) =>
+        NotMatcher(EveryMatcher(), parseRange(fieldId, targetRange))(factory)
+      case PredicateLessThan(TargetDatetime(target)) =>
+        RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(target), endExcl = true))
+      case PredicateLessThanEqualTo(TargetDatetime(target)) =>
+        RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(target), endExcl = false))
+      case PredicateGreaterThan(TargetDatetime(target)) =>
+        RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(target), startExcl = true))
+      case PredicateGreaterThanEqualTo(TargetDatetime(target)) =>
+        RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(target), startExcl = false))
       case other => throw new Exception("parse failure")
     }
+  }
+
+  def parseRange(fieldId: FieldIdentifier, targetRange: TargetRange): Matchers = targetRange match {
+    case TargetRange(Some(TargetDatetime(start)), Some(TargetDatetime(end)), DataType.DATETIME, startExcl, endExcl) =>
+      RangeMatcher(fieldId, ClosedRangeSpec(toMatchTerm(start), toMatchTerm(end), startExcl, endExcl))
+    case TargetRange(None, Some(TargetDatetime(end)), DataType.DATETIME, startExcl, endExcl) =>
+      RangeMatcher(fieldId, LeftOpenRangeSpec(toMatchTerm(end), endExcl))
+    case TargetRange(Some(TargetDatetime(start)), None, DataType.DATETIME, startExcl, endExcl) =>
+      RangeMatcher(fieldId, RightOpenRangeSpec(toMatchTerm(start), startExcl))
   }
 }
 object DatetimeField extends DatetimeField

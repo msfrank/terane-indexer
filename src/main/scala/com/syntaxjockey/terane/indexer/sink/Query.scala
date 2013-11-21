@@ -205,9 +205,6 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
    * Recursively descend the Matchers tree replacing TermMatchers with Terms and removing
    * leaves and branches if they are not capable or returning any matches.  Statistical information
    * is supplied to each matcher, so it can make query-planning decisions based on join costs.
-   *
-   * @param matchers
-   * @return
    */
   def buildTerms(matchers: Matchers, keyspace: Keyspace, fields: FieldMap, stats: StatsMap): Option[Matchers] = {
     matchers match {
@@ -239,6 +236,20 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
                 Some(new Term[String](fieldId, hostname, keyspace, field, stat))
               case unknown =>
                 throw new Exception("unknown field type or value type for " + termMatcher.toString)
+            }
+          case missing =>
+            None
+        }
+
+      case rangeMatcher @ RangeMatcher(fieldId, _) =>
+        fields.fieldsByIdent.get(fieldId) match {
+          case Some(field) =>
+            fieldId.fieldType match {
+              case DataType.DATETIME =>
+                val stat = stats.statsByCf.get(field.datetime.get.id)
+                Some(Range(fieldId, rangeMatcher.spec, keyspace, field, stat))
+              case unknown =>
+                throw new Exception("unknown field type or value type for " + rangeMatcher.toString)
             }
           case missing =>
             None
@@ -295,9 +306,6 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
   /**
    * Asynchronously retrieve the specified events from cassandra.
-   *
-   * @param eventId
-   * @return
    */
   def getEvent(eventId: UUID) = Future[Try[BierEvent]] {
     try {
@@ -312,28 +320,24 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
   /**
    * Parse a cassandra row and return an Event.
-   *
-   * @param id
-   * @param columnList
-   * @return
    */
   def readEvent(id: UUID, columnList: ColumnList[String]): BierEvent = {
-    val values: Map[FieldIdentifier,Value] = columnList.filter(column => fields.fieldsByCf.contains(column.getName)).map { column =>
+    val values: Map[FieldIdentifier,EventValue] = columnList.filter(column => fields.fieldsByCf.contains(column.getName)).map { column =>
       fields.fieldsByCf(column.getName).fieldId match {
         case ident @ FieldIdentifier(_, DataType.TEXT) =>
-          ident -> Value(text = Some(Text(column.getStringValue)))
+          ident -> EventValue(text = Some(Text(column.getStringValue)))
         case ident @ FieldIdentifier(_, DataType.LITERAL) =>
-          ident -> Value(literal = Some(Literal(column.getStringValue)))
+          ident -> EventValue(literal = Some(Literal(column.getStringValue)))
         case ident @ FieldIdentifier(_, DataType.INTEGER) =>
-          ident -> Value(integer = Some(Integer(column.getLongValue)))
+          ident -> EventValue(integer = Some(Integer(column.getLongValue)))
         case ident @ FieldIdentifier(_, DataType.FLOAT) =>
-          ident -> Value(float = Some(Float(column.getDoubleValue)))
+          ident -> EventValue(float = Some(Float(column.getDoubleValue)))
         case ident @ FieldIdentifier(_, DataType.DATETIME) =>
-          ident -> Value(datetime = Some(Datetime(new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))))
+          ident -> EventValue(datetime = Some(Datetime(new DateTime(column.getDateValue.getTime, DateTimeZone.UTC))))
         case ident @ FieldIdentifier(_, DataType.ADDRESS) =>
-          ident -> Value(address = Some(Address(InetAddress.getByAddress(column.getByteArrayValue))))
+          ident -> EventValue(address = Some(Address(InetAddress.getByAddress(column.getByteArrayValue))))
         case ident @ FieldIdentifier(_, DataType.HOSTNAME) =>
-          ident -> Value(hostname = Some(Hostname(Name.fromString(column.getStringValue))))
+          ident -> EventValue(hostname = Some(Hostname(Name.fromString(column.getStringValue))))
       }
     }.toMap
     new BierEvent(id, values)
@@ -360,6 +364,22 @@ object Query {
       case term: Term[_] =>
         sb.append(" " * indent)
         sb.append("%s=\"%s\"\n".format(term.fieldId, term.term.toString))
+      case range: RangeMatcher =>
+        sb.append(" " * indent)
+        sb.append("%s=%s\"%s\",\"%s\"%s\n".format(
+          range.fieldId,
+          if (range.spec.leftExcl) "{" else "[",
+          range.spec.left.getOrElse("").toString,
+          range.spec.right.getOrElse("").toString,
+          if (range.spec.rightExcl) "}" else "]"))
+      case range: Range =>
+        sb.append(" " * indent)
+        sb.append("%s=%s\"%s\",\"%s\"%s\n".format(
+          range.fieldId,
+          if (range.spec.leftExcl) "{" else "[",
+          range.spec.left.getOrElse("").toString,
+          range.spec.right.getOrElse("").toString,
+          if (range.spec.rightExcl) "}" else "]"))
       case every: EveryMatcher =>
         sb.append(" " * indent)
         sb.append("EVERY\n")

@@ -29,7 +29,7 @@ import java.net.InetAddress
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
-import com.syntaxjockey.terane.indexer.bier.{BierEvent, Value}
+import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue}
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.SortingStreamer.{State, Data}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
@@ -130,7 +130,7 @@ class SortingStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fie
 
   def makeKey(event: BierEvent): EventKey = {
     val keyvalues: Array[Option[BierEvent.KeyValue]] = sortFields.map { ident: FieldIdentifier =>
-      if (event.values.contains(ident)) Some(ident -> event.values(ident)) else Some(ident -> Value())
+      if (event.values.contains(ident)) Some(ident -> event.values(ident)) else Some(ident -> EventValue())
     }
     EventKey(keyvalues)
   }
@@ -164,7 +164,7 @@ case class EventKey(keyvalues: Array[Option[BierEvent.KeyValue]]) extends Compar
         throw new Exception("event keys are not symmetrical")
       case (None, Some(kv2: KeyValue)) =>
         throw new Exception("event keys are not symmetrical")
-      case (Some((ident1: FieldIdentifier, v1: Value)), Some((ident2: FieldIdentifier, v2: Value))) =>
+      case (Some((ident1: FieldIdentifier, v1: EventValue)), Some((ident2: FieldIdentifier, v2: EventValue))) =>
         if (ident1 != ident2)
           throw new Exception("can't compare %s and %s".format(ident1, ident2))
         val comparison: Int = ident1.fieldType match {
@@ -216,11 +216,11 @@ class EventKeySerializer(sortFields: Array[FieldIdentifier]) extends BTreeKeySer
     var keysLeft = eventKey.keyvalues.drop(8)
     while (keysTaken.length > 0) {
       var bitmap: Int = 0
-      0 until keysTaken.length foreach { i => if (keysTaken(i) != Value()) bitmap = bitmap | (1 << i) }
+      0 until keysTaken.length foreach { i => if (keysTaken(i) != EventValue()) bitmap = bitmap | (1 << i) }
       out.writeByte(bitmap)
       eventKey.keyvalues.foreach {
-        case Some((ident: FieldIdentifier, value: Value)) =>
-          if (value != Value()) ident.fieldType match {
+        case Some((ident: FieldIdentifier, value: EventValue)) =>
+          if (value != EventValue()) ident.fieldType match {
             case DataType.TEXT =>
               out.writeUTF(value.text.get.underlying)
             case DataType.LITERAL =>
@@ -260,24 +260,24 @@ class EventKeySerializer(sortFields: Array[FieldIdentifier]) extends BTreeKeySer
       if ((bitmap & (1 << i)) > 0) {
         ident.fieldType match {
           case DataType.TEXT =>
-            Some(ident -> Value(text = Some(Text(in.readUTF()))))
+            Some(ident -> EventValue(text = Some(Text(in.readUTF()))))
           case DataType.LITERAL =>
-            Some(ident -> Value(literal = Some(Literal(in.readUTF()))))
+            Some(ident -> EventValue(literal = Some(Literal(in.readUTF()))))
           case DataType.INTEGER =>
-            Some(ident -> Value(integer = Some(Integer(in.readLong()))))
+            Some(ident -> EventValue(integer = Some(Integer(in.readLong()))))
           case DataType.FLOAT =>
-            Some(ident -> Value(float = Some(Float(in.readDouble()))))
+            Some(ident -> EventValue(float = Some(Float(in.readDouble()))))
           case DataType.DATETIME =>
-            Some(ident -> Value(datetime = Some(Datetime(new DateTime(in.readLong(), DateTimeZone.UTC)))))
+            Some(ident -> EventValue(datetime = Some(Datetime(new DateTime(in.readLong(), DateTimeZone.UTC)))))
           case DataType.ADDRESS =>
             val length = in.readInt()
             val bytes = new Array[Byte](length)
             in.readFully(bytes)
-            Some(ident -> Value(address = Some(Address(InetAddress.getByAddress(bytes)))))
+            Some(ident -> EventValue(address = Some(Address(InetAddress.getByAddress(bytes)))))
           case DataType.HOSTNAME =>
-            Some(ident -> Value(hostname = Some(Hostname(Name.fromString(in.readUTF())))))
+            Some(ident -> EventValue(hostname = Some(Hostname(Name.fromString(in.readUTF())))))
         }
-      } else Some(ident -> Value())
+      } else Some(ident -> EventValue())
     }
     EventKey(keyvalues)
   }
@@ -292,7 +292,7 @@ class EventSerializer(lookup: Map[FieldIdentifier,Int]) extends Serializer[BierE
     out.writeLong(event.id.getMostSignificantBits)
     out.writeLong(event.id.getLeastSignificantBits)
     // write each field
-    event.values.foreach { case (ident: FieldIdentifier, value: Value) =>
+    event.values.foreach { case (ident: FieldIdentifier, value: EventValue) =>
       out.writeInt(lookup(ident))
       ident.fieldType match {
         case DataType.TEXT =>
@@ -318,28 +318,28 @@ class EventSerializer(lookup: Map[FieldIdentifier,Int]) extends Serializer[BierE
   override def deserialize(in: DataInput, available: Int): BierEvent = {
     // read id
     val id = new UUID(in.readLong(), in.readLong())
-    var keyvalues: Map[FieldIdentifier,Value] = Map.empty
+    var keyvalues: Map[FieldIdentifier,EventValue] = Map.empty
     while (available > 0) {
       // read lookup key
       val ident = reverse(in.readInt())
       val keyvalue = ident.fieldType match {
         case DataType.TEXT =>
-          ident -> Value(text = Some(Text(in.readUTF())))
+          ident -> EventValue(text = Some(Text(in.readUTF())))
         case DataType.LITERAL =>
-          ident -> Value(literal = Some(Literal(in.readUTF())))
+          ident -> EventValue(literal = Some(Literal(in.readUTF())))
         case DataType.INTEGER =>
-          ident -> Value(integer = Some(Integer(in.readLong())))
+          ident -> EventValue(integer = Some(Integer(in.readLong())))
         case DataType.FLOAT =>
-          ident -> Value(float = Some(Float(in.readDouble())))
+          ident -> EventValue(float = Some(Float(in.readDouble())))
         case DataType.DATETIME =>
-          ident -> Value(datetime = Some(Datetime(new DateTime(in.readLong(), DateTimeZone.UTC))))
+          ident -> EventValue(datetime = Some(Datetime(new DateTime(in.readLong(), DateTimeZone.UTC))))
         case DataType.ADDRESS =>
           val length = in.readInt()
           val bytes = new Array[Byte](length)
           in.readFully(bytes)
-          ident -> Value(address = Some(Address(InetAddress.getByAddress(bytes))))
+          ident -> EventValue(address = Some(Address(InetAddress.getByAddress(bytes))))
         case DataType.HOSTNAME =>
-          ident -> Value(hostname = Some(Hostname(Name.fromString(in.readUTF()))))
+          ident -> EventValue(hostname = Some(Hostname(Name.fromString(in.readUTF()))))
       }
       keyvalues = keyvalues + keyvalue
     }

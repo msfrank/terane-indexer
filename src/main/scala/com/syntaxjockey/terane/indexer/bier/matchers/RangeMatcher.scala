@@ -22,8 +22,7 @@ package com.syntaxjockey.terane.indexer.bier.matchers
 import scala.concurrent.Future
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.Matchers
+import com.syntaxjockey.terane.indexer.bier.{MatchTerm, FieldIdentifier, Matchers}
 
 /**
  * Match the term range of the specified type in the specified field.
@@ -32,7 +31,7 @@ import com.syntaxjockey.terane.indexer.bier.Matchers
  * has more information about the actual term storage, and thus can make better
  * decisions about how to implement the interface methods.
  */
-case class RangeMatcher[T](fieldId: FieldIdentifier, termStart: T, termEnd: T, inclusiveStart: Boolean, inclusiveEnd: Boolean) extends Matchers {
+case class RangeMatcher(fieldId: FieldIdentifier, spec: RangeSpec) extends Matchers {
   def estimateCost = 0L
   def nextPosting = Future.failed(new NotImplementedError("RangeMatcher doesn't implement nextPosting"))
   def findPosting(id: UUID) = Future.failed(new NotImplementedError("RangeMatcher doesn't implement findPosting"))
@@ -41,10 +40,38 @@ case class RangeMatcher[T](fieldId: FieldIdentifier, termStart: T, termEnd: T, i
     "%s:%s[%s]=%s\"%s\",\"%s\"%s".format(this.getClass.getName,
       fieldId.fieldName,
       fieldId.fieldType.toString.toLowerCase,
-      if (inclusiveStart) "[" else "{",
-      termStart.toString,
-      termEnd.toString,
-      if (inclusiveEnd) "]" else "}"
+      if (spec.leftExcl) "{" else "[",
+      spec.left.getOrElse("").toString,
+      spec.right.getOrElse("").toString,
+      if (spec.rightExcl) "}" else "]"
       )
   }
+}
+
+sealed trait RangeSpec {
+  val left: Option[MatchTerm]
+  val right: Option[MatchTerm]
+  val leftExcl: Boolean
+  val rightExcl: Boolean
+}
+
+case class ClosedRangeSpec(start: MatchTerm, end: MatchTerm, startExcl: Boolean, endExcl: Boolean) extends RangeSpec {
+  val left = Some(start)
+  val right = Some(end)
+  val leftExcl = startExcl
+  val rightExcl = endExcl
+}
+
+case class LeftOpenRangeSpec(end: MatchTerm, endExcl: Boolean) extends RangeSpec {
+  val left = None
+  val right = Some(end)
+  val leftExcl = false
+  val rightExcl = endExcl
+}
+
+case class RightOpenRangeSpec(start: MatchTerm, startExcl: Boolean) extends RangeSpec {
+  val left = Some(start)
+  val right = None
+  val leftExcl = startExcl
+  val rightExcl = false
 }

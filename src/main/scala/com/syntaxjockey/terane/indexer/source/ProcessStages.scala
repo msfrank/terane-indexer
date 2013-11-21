@@ -368,7 +368,7 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogProcessi
  */
 class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcessingEvent, SyslogProcessingEvent] with SyslogProcessingOps {
   import com.syntaxjockey.terane.indexer.bier.BierEvent._
-  import com.syntaxjockey.terane.indexer.bier.Value
+  import com.syntaxjockey.terane.indexer.bier.EventValue
   import scala.util.{Success, Failure}
 
   override def apply(ctx: SyslogContext) = new SymmetricPipePair[SyslogProcessingEvent, SyslogProcessingEvent] {
@@ -446,19 +446,19 @@ class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcess
     def processField(fieldId: FieldIdentifier, value: String): KeyValue = {
       fieldId.fieldType match {
         case DataType.TEXT =>
-          fieldId -> Value(text = Some(Text(value)))
+          fieldId -> EventValue(text = Some(Text(value)))
         case DataType.LITERAL =>
-          fieldId -> Value(literal = Some(Literal(value)))
+          fieldId -> EventValue(literal = Some(Literal(value)))
         case DataType.INTEGER =>
-          fieldId -> Value(integer = Some(Integer(value)))
+          fieldId -> EventValue(integer = Some(Integer(value)))
         case DataType.FLOAT =>
-          fieldId -> Value(float = Some(Float(value)))
+          fieldId -> EventValue(float = Some(Float(value)))
         case DataType.DATETIME =>
-          fieldId -> Value(datetime = Some(Datetime(value)))
+          fieldId -> EventValue(datetime = Some(Datetime(value)))
         case DataType.HOSTNAME =>
-          fieldId -> Value(hostname = Some(Hostname(value)))
+          fieldId -> EventValue(hostname = Some(Hostname(value)))
         case DataType.ADDRESS =>
-          fieldId -> Value(address = Some(Address(value)))
+          fieldId -> EventValue(address = Some(Address(value)))
       }
     }
   }

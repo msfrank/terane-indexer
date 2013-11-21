@@ -26,7 +26,7 @@ import org.joda.time.{DateTimeZone, DateTime}
 import scala.Some
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.{BierEvent, Value, FieldIdentifier}
+import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink.Query._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
@@ -72,11 +72,11 @@ class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSp
     "return events sorted by text field" in {
       val createQuery = CreateQuery("", "", None, Some(List(textId)), None, None)
       val sortingStreamer = createSortingStreamer(createQuery)
-      val event1 = BierEvent(values = Map(textId -> Value(text = Some(Text("message 1")))))
-      val event2 = BierEvent(values = Map(textId -> Value(text = Some(Text("message 2")))))
-      val event3 = BierEvent(values = Map(textId -> Value(text = Some(Text("message 3")))))
-      val event4 = BierEvent(values = Map(textId -> Value(text = Some(Text("message 4")))))
-      val event5 = BierEvent(values = Map(textId -> Value(text = Some(Text("message 5")))))
+      val event1 = BierEvent(values = Map(textId -> EventValue(text = Some(Text("message 1")))))
+      val event2 = BierEvent(values = Map(textId -> EventValue(text = Some(Text("message 2")))))
+      val event3 = BierEvent(values = Map(textId -> EventValue(text = Some(Text("message 3")))))
+      val event4 = BierEvent(values = Map(textId -> EventValue(text = Some(Text("message 4")))))
+      val event5 = BierEvent(values = Map(textId -> EventValue(text = Some(Text("message 5")))))
       sortingStreamer ! event1
       expectMsg(NextEvent)
       sortingStreamer ! event4
@@ -98,11 +98,11 @@ class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSp
     "return events sorted by integer field" in {
       val createQuery = CreateQuery("", "", None, Some(List(integerId)), None, None)
       val sortingStreamer = createSortingStreamer(createQuery)
-      val event1 = BierEvent(values = Map(integerId -> Value(integer = Some(Integer(1)))))
-      val event2 = BierEvent(values = Map(integerId -> Value(integer = Some(Integer(2)))))
-      val event3 = BierEvent(values = Map(integerId -> Value(integer = Some(Integer(3)))))
-      val event4 = BierEvent(values = Map(integerId -> Value(integer = Some(Integer(4)))))
-      val event5 = BierEvent(values = Map(integerId -> Value(integer = Some(Integer(5)))))
+      val event1 = BierEvent(values = Map(integerId -> EventValue(integer = Some(Integer(1)))))
+      val event2 = BierEvent(values = Map(integerId -> EventValue(integer = Some(Integer(2)))))
+      val event3 = BierEvent(values = Map(integerId -> EventValue(integer = Some(Integer(3)))))
+      val event4 = BierEvent(values = Map(integerId -> EventValue(integer = Some(Integer(4)))))
+      val event5 = BierEvent(values = Map(integerId -> EventValue(integer = Some(Integer(5)))))
       sortingStreamer ! event1
       expectMsg(NextEvent)
       sortingStreamer ! event4
@@ -124,11 +124,11 @@ class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSp
     "return events sorted by float field" in {
       val createQuery = CreateQuery("", "", None, Some(List(floatId)), None, None)
       val sortingStreamer = createSortingStreamer(createQuery)
-      val event1 = BierEvent(values = Map(floatId -> Value(float = Some(Float(0.1)))))
-      val event2 = BierEvent(values = Map(floatId -> Value(float = Some(Float(0.2)))))
-      val event3 = BierEvent(values = Map(floatId -> Value(float = Some(Float(0.3)))))
-      val event4 = BierEvent(values = Map(floatId -> Value(float = Some(Float(0.4)))))
-      val event5 = BierEvent(values = Map(floatId -> Value(float = Some(Float(0.5)))))
+      val event1 = BierEvent(values = Map(floatId -> EventValue(float = Some(Float(0.1)))))
+      val event2 = BierEvent(values = Map(floatId -> EventValue(float = Some(Float(0.2)))))
+      val event3 = BierEvent(values = Map(floatId -> EventValue(float = Some(Float(0.3)))))
+      val event4 = BierEvent(values = Map(floatId -> EventValue(float = Some(Float(0.4)))))
+      val event5 = BierEvent(values = Map(floatId -> EventValue(float = Some(Float(0.5)))))
       sortingStreamer ! event1
       expectMsg(NextEvent)
       sortingStreamer ! event4

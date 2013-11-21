@@ -62,7 +62,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a text predicate with a field name" in {
-      val query = TickleParser.parseQueryString(":fieldname = foobar")
+      val query = TickleParser.parseQueryString("?fieldname = foobar")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -82,7 +82,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a quoted text subject with a field name" in {
-      val query = TickleParser.parseQueryString(""" :fieldname = "hello, world!" """)
+      val query = TickleParser.parseQueryString(""" ?fieldname = "hello, world!" """)
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -92,7 +92,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a predicate coerced to text with a field name" in {
-      val query = TickleParser.parseQueryString(":fieldname = text(hello, world!)")
+      val query = TickleParser.parseQueryString("?fieldname = text(hello, world!)")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -222,7 +222,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a not-equals expression" in {
-      val query = TickleParser.parseQueryString(":fieldname != 42")
+      val query = TickleParser.parseQueryString("?fieldname != 42")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -232,7 +232,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a greater-than expression" in {
-      val query = TickleParser.parseQueryString(":fieldname > 42")
+      val query = TickleParser.parseQueryString("?fieldname > 42")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -242,7 +242,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a less-than expression" in {
-      val query = TickleParser.parseQueryString(":fieldname < 42")
+      val query = TickleParser.parseQueryString("?fieldname < 42")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -252,7 +252,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a greater-than-equals expression" in {
-      val query = TickleParser.parseQueryString(":fieldname >= 42")
+      val query = TickleParser.parseQueryString("?fieldname >= 42")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -262,7 +262,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a less-than-equals expression" in {
-      val query = TickleParser.parseQueryString(":fieldname <= 42")
+      val query = TickleParser.parseQueryString("?fieldname <= 42")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -272,7 +272,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse an equals-range expression" in {
-      val query = TickleParser.parseQueryString(":fieldname = [ 42 TO 44 ]")
+      val query = TickleParser.parseQueryString("?fieldname = [ 42 TO 44 ]")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -283,7 +283,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse an not-equals-range expression" in {
-      val query = TickleParser.parseQueryString(":fieldname != [ bar TO foo ]")
+      val query = TickleParser.parseQueryString("?fieldname != [ bar TO foo ]")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -294,7 +294,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a left-open range expression" in {
-      val query = TickleParser.parseQueryString(":fieldname = [ TO foo ]")
+      val query = TickleParser.parseQueryString("?fieldname = [ TO foo ]")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -305,7 +305,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a right-open range expression" in {
-      val query = TickleParser.parseQueryString(":fieldname = [ bar TO ]")
+      val query = TickleParser.parseQueryString("?fieldname = [ bar TO ]")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -316,7 +316,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse a function expression with no function arguments" in {
-      val query = TickleParser.parseQueryString(":fieldname -> function()")
+      val query = TickleParser.parseQueryString("?fieldname -> function()")
       logger.debug(TickleParser.prettyPrint(query))
       query must be(
         Query(
@@ -329,7 +329,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
   "TickleParser.buildMatchers()" must {
 
    "parse a text value with a single term" in {
-      val matchers = TickleParser.buildMatchers(":fieldname = foo", params)
+      val matchers = TickleParser.buildMatchers("?fieldname = foo", params)
       matchers must be(
         Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo"))
       )
@@ -337,7 +337,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a text value with multiple terms" in {
       val matchers = TickleParser.buildMatchers(
-        """:fieldname = "foo bar baz" """.stripMargin, params)
+        """?fieldname = "foo bar baz" """.stripMargin, params)
       inside(matchers) {
         case Some(PhraseMatcher(children)) =>
           children must have size(3)
@@ -349,7 +349,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
 
     "parse a phrase with a placeholder" in {
       val matchers = TickleParser.buildMatchers(
-        """:fieldname = "foo bar _ baz" """.stripMargin, params)
+        """?fieldname = "foo bar _ baz" """.stripMargin, params)
       inside(matchers) {
         case Some(PhraseMatcher(children)) =>
           children must have size(4)
@@ -360,51 +360,104 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       }
     }
 
-    "parse a literal value" in {
-      TickleParser.buildMatchers( """ :fieldname = literal(foo bar baz) """.stripMargin, params) must be(
+    "parse a shorthand literal value" in {
+      TickleParser.buildMatchers( """ ?fieldname = :foobar """.stripMargin, params) must be(
+        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foobar"))
+      )
+    }
+
+    "parse a coerced literal value" in {
+      TickleParser.buildMatchers( """ ?fieldname = literal(foo bar baz) """.stripMargin, params) must be(
         Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foo bar baz"))
       )
     }
 
-    "parse an integer value" in {
-      TickleParser.buildMatchers(":fieldname = 42", params) must be(
+    "parse a shorthand integer value" in {
+      TickleParser.buildMatchers("?fieldname = 42", params) must be(
         Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
       )
     }
 
-    "parse a float value" in {
-      TickleParser.buildMatchers( ":fieldname = 3.14159", params) must be(
+    "parse a coerced integer value" in {
+      TickleParser.buildMatchers("?fieldname = integer(42)", params) must be(
+        Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
+      )
+    }
+
+    "parse a shorthand float value" in {
+      TickleParser.buildMatchers( "?fieldname = 3.14159", params) must be(
         Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
       )
     }
 
-    "parse a datetime value" in {
+    "parse a coerced float value" in {
+      TickleParser.buildMatchers( "?fieldname = float(3.14159)", params) must be(
+        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
+      )
+    }
+
+    "parse a shorthand datetime value" in {
       val date = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC).toDate
-      TickleParser.buildMatchers(":fieldname = 1994-11-05T08:15:30.0Z", params) must be(
+      TickleParser.buildMatchers("?fieldname = 1994-11-05T08:15:30.0Z", params) must be(
         Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), date))
       )
     }
 
-    "parse an IPv4 address value" in {
+    "parse a coerced datetime value" in {
+      val date = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC).toDate
+      TickleParser.buildMatchers("?fieldname = datetime(1994-11-05T08:15:30.0Z)", params) must be(
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), date))
+      )
+    }
+
+    "parse a shorthand IPv4 address value" in {
       val address = DNSAddress.getByAddress("127.0.0.1")
-      val matchers = TickleParser.buildMatchers(":fieldname = @127.0.0.1", params)
+      val matchers = TickleParser.buildMatchers("?fieldname = @127.0.0.1", params)
       inside(matchers) {
         case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
           InetAddress.getByAddress(bytes) must be(address)
       }
     }
 
-    "parse an IPv6 address value" in {
+    "parse a coerced IPv4 address value" in {
+      val address = DNSAddress.getByAddress("127.0.0.1")
+      val matchers = TickleParser.buildMatchers("?fieldname = address(127.0.0.1)", params)
+      inside(matchers) {
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+          InetAddress.getByAddress(bytes) must be(address)
+      }
+    }
+
+    "parse a shorthand IPv6 address value" in {
       val address = DNSAddress.getByAddress("::1")
-      val matchers = TickleParser.buildMatchers(":fieldname = @::1", params)
+      val matchers = TickleParser.buildMatchers("?fieldname = @::1", params)
       inside(matchers) {
         case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
           InetAddress.getByAddress(bytes) must be(address)
       }
     }
 
-    "parse a hostname value" in {
-      TickleParser.buildMatchers(":fieldname = @www.google.com", params) must be(
+    "parse a coerced IPv6 address value" in {
+      val address = DNSAddress.getByAddress("::1")
+      val matchers = TickleParser.buildMatchers("?fieldname = address(::1)", params)
+      inside(matchers) {
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+          InetAddress.getByAddress(bytes) must be(address)
+      }
+    }
+
+    "parse a shorthand hostname value" in {
+      TickleParser.buildMatchers("?fieldname = @www.google.com", params) must be(
+        Some(AndMatcher(Set(
+          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "www").asInstanceOf[Matchers],
+          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "google").asInstanceOf[Matchers],
+          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "com").asInstanceOf[Matchers]
+        )))
+      )
+    }
+
+    "parse a coerced hostname value" in {
+      TickleParser.buildMatchers("?fieldname = hostname(www.google.com)", params) must be(
         Some(AndMatcher(Set(
           TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "www").asInstanceOf[Matchers],
           TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "google").asInstanceOf[Matchers],
@@ -414,7 +467,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
     }
 
     "parse the cidr function" in {
-       TickleParser.buildMatchers(""":fieldname -> cidr("192.168.0/24")""", params) must be(None)
+       TickleParser.buildMatchers("""?fieldname -> cidr("192.168.0/24")""", params) must be(None)
     }
   }
 }

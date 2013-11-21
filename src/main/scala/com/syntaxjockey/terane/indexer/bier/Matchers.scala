@@ -21,7 +21,7 @@ package com.syntaxjockey.terane.indexer.bier
 
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.bier.Matchers._
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.concurrent.Future
 
 /**
@@ -56,3 +56,12 @@ object Matchers {
   case class FindPosting(id: UUID)
 }
 
+
+case class MatchTerm(
+  text: Option[String] = None,
+  literal: Option[String] = None,
+  integer: Option[Long] = None,
+  float: Option[Double] = None,
+  datetime: Option[Date] = None,
+  address: Option[Array[Byte]] = None,
+  hostname: Option[String] = None)

@@ -24,7 +24,7 @@ import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 
-class BierEvent(val id: UUID, val values: Map[FieldIdentifier,Value]) {
+class BierEvent(val id: UUID, val values: Map[FieldIdentifier,EventValue]) {
   import BierEvent._
 
   def +(kv: KeyValue): BierEvent = {
@@ -65,25 +65,25 @@ class BierEvent(val id: UUID, val values: Map[FieldIdentifier,Value]) {
 object BierEvent {
   import scala.language.implicitConversions
 
-  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,Value] = Map.empty): BierEvent = {
+  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,EventValue] = Map.empty): BierEvent = {
     if (uuid.isDefined)
       new BierEvent(uuid.get, values)
     else
       new BierEvent(TimeUUIDUtils.getUniqueTimeUUIDinMicros, values)
   }
 
-  type KeyValue = (FieldIdentifier,Value)
+  type KeyValue = (FieldIdentifier,EventValue)
 
-  implicit def text2keyValue(kv: (String, Text)): KeyValue = (FieldIdentifier(kv._1, DataType.TEXT), Value(text = Some(kv._2)))
-  implicit def literal2keyValue(kv: (String, Literal)): KeyValue = (FieldIdentifier(kv._1, DataType.LITERAL), Value(literal = Some(kv._2)))
-  implicit def integer2keyValue(kv: (String, Integer)): KeyValue = (FieldIdentifier(kv._1, DataType.INTEGER), Value(integer = Some(kv._2)))
-  implicit def float2keyValue(kv: (String, Float)): KeyValue = (FieldIdentifier(kv._1, DataType.FLOAT), Value(float = Some(kv._2)))
-  implicit def datetime2keyValue(kv: (String, Datetime)): KeyValue = (FieldIdentifier(kv._1, DataType.DATETIME), Value(datetime = Some(kv._2)))
-  implicit def address2keyValue(kv: (String, Address)): KeyValue = (FieldIdentifier(kv._1, DataType.ADDRESS), Value(address = Some(kv._2)))
-  implicit def hostname2keyValue(kv: (String, Hostname)): KeyValue = (FieldIdentifier(kv._1, DataType.HOSTNAME), Value(hostname = Some(kv._2)))
+  implicit def text2keyValue(kv: (String, Text)): KeyValue = (FieldIdentifier(kv._1, DataType.TEXT), EventValue(text = Some(kv._2)))
+  implicit def literal2keyValue(kv: (String, Literal)): KeyValue = (FieldIdentifier(kv._1, DataType.LITERAL), EventValue(literal = Some(kv._2)))
+  implicit def integer2keyValue(kv: (String, Integer)): KeyValue = (FieldIdentifier(kv._1, DataType.INTEGER), EventValue(integer = Some(kv._2)))
+  implicit def float2keyValue(kv: (String, Float)): KeyValue = (FieldIdentifier(kv._1, DataType.FLOAT), EventValue(float = Some(kv._2)))
+  implicit def datetime2keyValue(kv: (String, Datetime)): KeyValue = (FieldIdentifier(kv._1, DataType.DATETIME), EventValue(datetime = Some(kv._2)))
+  implicit def address2keyValue(kv: (String, Address)): KeyValue = (FieldIdentifier(kv._1, DataType.ADDRESS), EventValue(address = Some(kv._2)))
+  implicit def hostname2keyValue(kv: (String, Hostname)): KeyValue = (FieldIdentifier(kv._1, DataType.HOSTNAME), EventValue(hostname = Some(kv._2)))
 }
 
-case class Value(
+case class EventValue(
   text: Option[Text] = None,
   literal: Option[Literal] = None,
   integer: Option[Integer] = None,

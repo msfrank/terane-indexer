@@ -82,6 +82,10 @@ class CassandraPoolMonitor(eventStream: EventStream) extends ConnectionPoolMonit
 
   def getHostDownCount: Long = 0
 
+  def getHostActiveCount: Long = 0
+
+  def getTransportErrorCount: Long = 0
+
   def onHostAdded(host: Host, pool: HostConnectionPool[_]) {}
 
   def onHostRemoved(host: Host) {}
@@ -91,4 +95,5 @@ class CassandraPoolMonitor(eventStream: EventStream) extends ConnectionPoolMonit
   def onHostReactivated(host: Host, pool: HostConnectionPool[_]) {}
 
   def getHostStats: util.Map[Host, HostStats] = Map.empty[Host,HostStats]
+
 }
