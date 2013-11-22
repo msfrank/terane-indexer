@@ -41,7 +41,7 @@ import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 import com.syntaxjockey.terane.indexer.cassandra._
 
 /**
- *
+ * Match the term range of the specified type in the specified field.
  */
 case class Range(fieldId: FieldIdentifier, spec: RangeSpec, keyspace: Keyspace, field: CassandraField, stats: Option[Agent[FieldStatistics]])(implicit val factory: ActorRefFactory) extends Matchers {
   import scala.language.postfixOps

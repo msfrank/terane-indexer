@@ -34,39 +34,49 @@ import scala.Some
 import scala.collection.JavaConversions._
 import java.util.{Date, UUID}
 
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.bier.{MatchTerm, FieldIdentifier, Matchers}
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer.bier.statistics.{Analytical, FieldStatistics}
-import com.syntaxjockey.terane.indexer.bier.Matchers
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, MatchResult, NextPosting, FindPosting}
 import com.syntaxjockey.terane.indexer.bier.BierField.PostingMetadata
 import com.syntaxjockey.terane.indexer.cassandra._
 
 /**
- *
+ * Match the term of the specified type in the specified field.
  */
-case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field: CassandraField, stats: Option[Agent[FieldStatistics]])(implicit val factory: ActorRefFactory) extends Matchers {
+case class Term(fieldId: FieldIdentifier, term: MatchTerm, keyspace: Keyspace, field: CassandraField, stats: Option[Agent[FieldStatistics]])(implicit val factory: ActorRefFactory) extends Matchers {
   import scala.language.postfixOps
   import Analytical._
 
   implicit val timeout = Timeout(5 seconds)
 
   // FIXME: create multiple iterators for each shard
-  lazy val iterator = factory.actorOf(Props(classOf[TermIterator[T]], this, 0))
+  lazy val iterator = factory.actorOf(Props(classOf[TermIterator], this, 0))
 
   def estimateCost: Long = {
     if (stats.isDefined) {
       val _stats = stats.get.get()
-      term match {
-        case v: String =>
+      fieldId.fieldType match {
+        case DataType.TEXT =>
+          val v = term.text.get
           if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
-        case v: Long =>
+        case DataType.LITERAL =>
+          val v = term.literal.get
           if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
-        case v: Double =>
+        case DataType.INTEGER =>
+          val v = term.integer.get
           if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
-        case v: Date =>
+        case DataType.FLOAT =>
+          val v = term.float.get
           if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
-        case v: Array[Byte] =>
+        case DataType.DATETIME =>
+          val v = term.datetime.get
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+        case DataType.ADDRESS =>
+          val v = term.address.get
+          if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
+        case DataType.HOSTNAME =>
+          val v = term.hostname.get
           if (_stats.estimateTermSetContains(v).isTrue) _stats.estimateTermFrequency(v).estimate else 0
       }
     } else 0
@@ -83,7 +93,10 @@ case class Term[T](fieldId: FieldIdentifier, term: T, keyspace: Keyspace, field:
   def hashString: String = "%s:%s[%s]=\"%s\"".format(this.getClass.getName, fieldId.fieldName, fieldId.fieldType.toString.toLowerCase, term.toString)
 }
 
-class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging {
+/**
+ *
+ */
+class TermIterator(term: Term, shard: Int) extends Actor with ActorLogging {
   import Matchers._
 
   val scanner = makeScanner(term, shard)
@@ -116,50 +129,47 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
 
   /**
    *
-   * @param term
-   * @param shard
-   * @return
    */
-  def makeScanner(term: Term[T], shard: Int) = {
-    term match {
-      case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
-        val range = Serializers.Text.buildRange().greaterThanEquals(text).lessThanEquals(text).build()
+  def makeScanner(term: Term, shard: Int) = {
+    term.fieldId.fieldType match {
+      case DataType.TEXT =>
+        val range = Serializers.Text.buildRange().greaterThanEquals(term.term.text.get).lessThanEquals(term.term.text.get).build()
         term.keyspace.prepareQuery(term.field.text.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
-        val range = Serializers.Literal.buildRange().greaterThanEquals(literal).lessThanEquals(literal).build()
+      case DataType.LITERAL =>
+        val range = Serializers.Literal.buildRange().greaterThanEquals(term.term.literal.get).lessThanEquals(term.term.literal.get).build()
         term.keyspace.prepareQuery(term.field.literal.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
-        val range = Serializers.Integer.buildRange().greaterThanEquals(integer).lessThanEquals(integer).build()
+      case DataType.INTEGER =>
+        val range = Serializers.Integer.buildRange().greaterThanEquals(term.term.integer.get).lessThanEquals(term.term.integer.get).build()
         term.keyspace.prepareQuery(term.field.integer.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
-        val range = Serializers.Float.buildRange().greaterThanEquals(float).lessThanEquals(float).build()
+      case DataType.FLOAT =>
+        val range = Serializers.Float.buildRange().greaterThanEquals(term.term.float.get).lessThanEquals(term.term.float.get).build()
         term.keyspace.prepareQuery(term.field.float.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
-        val range = Serializers.Datetime.buildRange().greaterThanEquals(datetime).lessThanEquals(datetime).build()
+      case DataType.DATETIME =>
+        val range = Serializers.Datetime.buildRange().greaterThanEquals(term.term.datetime.get).lessThanEquals(term.term.datetime.get).build()
         term.keyspace.prepareQuery(term.field.datetime.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
-        val range = Serializers.Address.buildRange().greaterThanEquals(address).lessThanEquals(address).build()
+      case DataType.ADDRESS =>
+        val range = Serializers.Address.buildRange().greaterThanEquals(term.term.address.get).lessThanEquals(term.term.address.get).build()
         term.keyspace.prepareQuery(term.field.address.get.terms)
           .getKey(shard)
           .withColumnRange(range)
           .autoPaginate(true)
-      case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
-        val range = Serializers.Hostname.buildRange().greaterThanEquals(hostname).lessThanEquals(hostname).build()
+      case DataType.HOSTNAME =>
+        val range = Serializers.Hostname.buildRange().greaterThanEquals(term.term.hostname.get).lessThanEquals(term.term.hostname.get).build()
         term.keyspace.prepareQuery(term.field.hostname.get.terms)
           .getKey(shard)
           .withColumnRange(range)
@@ -170,49 +180,43 @@ class TermIterator[T](term: Term[T], shard: Int) extends Actor with ActorLogging
 
   /**
    *
-   * @param id
-   * @param term
-   * @param shard
-   * @return
    */
-  def findPosting(id: UUID, term: Term[T], shard: Int): ColumnQuery[_] = {
-    term match {
-      case Term(FieldIdentifier(_, DataType.TEXT), text: String, _, _, _) =>
+  def findPosting(id: UUID, term: Term, shard: Int): ColumnQuery[_] = {
+    term.fieldId.fieldType match {
+      case DataType.TEXT =>
         term.keyspace.prepareQuery(term.field.text.get.terms)
           .getKey(shard)
-          .getColumn(new StringPosting(text, id))
-      case Term(FieldIdentifier(_, DataType.LITERAL), literal: String, _, _, _) =>
+          .getColumn(new StringPosting(term.term.text.get, id))
+      case DataType.LITERAL =>
         term.keyspace.prepareQuery(term.field.literal.get.terms)
           .getKey(shard)
-          .getColumn(new StringPosting(literal, id))
-      case Term(FieldIdentifier(_, DataType.INTEGER), integer: Long, _, _, _) =>
+          .getColumn(new StringPosting(term.term.literal.get, id))
+      case DataType.INTEGER =>
         term.keyspace.prepareQuery(term.field.integer.get.terms)
           .getKey(shard)
-          .getColumn(new LongPosting(integer, id))
-      case Term(FieldIdentifier(_, DataType.FLOAT), float: Double, _, _, _) =>
+          .getColumn(new LongPosting(term.term.integer.get, id))
+      case DataType.FLOAT =>
         term.keyspace.prepareQuery(term.field.float.get.terms)
           .getKey(shard)
-          .getColumn(new DoublePosting(float, id))
-      case Term(FieldIdentifier(_, DataType.DATETIME), datetime: Date, _, _, _) =>
+          .getColumn(new DoublePosting(term.term.float.get, id))
+      case DataType.DATETIME =>
         term.keyspace.prepareQuery(term.field.datetime.get.terms)
           .getKey(shard)
-          .getColumn(new DatePosting(datetime, id))
-      case Term(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte], _, _, _) =>
+          .getColumn(new DatePosting(term.term.datetime.get, id))
+      case DataType.ADDRESS =>
         term.keyspace.prepareQuery(term.field.address.get.terms)
           .getKey(shard)
-          .getColumn(new AddressPosting(address, id))
-      case Term(FieldIdentifier(_, DataType.HOSTNAME), hostname: String, _, _, _) =>
+          .getColumn(new AddressPosting(term.term.address.get, id))
+      case DataType.HOSTNAME =>
         term.keyspace.prepareQuery(term.field.hostname.get.terms)
           .getKey(shard)
-          .getColumn(new StringPosting(hostname, id))
+          .getColumn(new StringPosting(term.term.hostname.get, id))
       case unknown => throw new Exception("can't make Term finder for " + term.toString)
     }
   }
 
   /**
    *
-   * @param column
-   * @return
    */
   def makePosting(column: Column[_]): BierPosting = {
     val positions = column.getValue(CassandraSink.SER_POSITIONS) map { i => i.toInt }

@@ -37,6 +37,7 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.{RequiresTestCluster, TestCluster, UUIDLike}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
+import com.syntaxjockey.terane.indexer.bier.MatchTerm
 
 class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -61,7 +62,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val stats = keyspace.writeTextPosting(mutation, textCf, Text("foo"), id)
       mutation.execute().getResult
-      val term = Term(textId, "foo", keyspace, textField, Some(Agent(stats)))
+      val term = Term(textId, MatchTerm(text = Some("foo")), keyspace, textField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)
@@ -75,7 +76,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val stats = keyspace.writeLiteralPosting(mutation, literalCf, Literal("foo"), id)
       mutation.execute().getResult
-      val term = Term(literalId, "foo", keyspace, literalField, Some(Agent(stats)))
+      val term = Term(literalId, MatchTerm(literal = Some("foo")), keyspace, literalField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)
@@ -89,7 +90,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val stats = keyspace.writeIntegerPosting(mutation, integerCf, Integer(42), id)
       mutation.execute().getResult
-      val term = Term(integerId, 42L, keyspace, integerField, Some(Agent(stats)))
+      val term = Term(integerId, MatchTerm(integer = Some(42L)), keyspace, integerField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)
@@ -103,7 +104,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
       val stats = keyspace.writeFloatPosting(mutation, floatCf, Float(3.14159), id)
       mutation.execute().getResult
-      val term = Term(floatId, 3.14159, keyspace, floatField, Some(Agent(stats)))
+      val term = Term(floatId, MatchTerm(float = Some(3.14159)), keyspace, floatField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)
@@ -118,7 +119,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val now = DateTime.now()
       val stats = keyspace.writeDatetimePosting(mutation, datetimeCf, Datetime(now), id)
       mutation.execute().getResult
-      val term = Term(datetimeId, now.toDate, keyspace, datetimeField, Some(Agent(stats)))
+      val term = Term(datetimeId, MatchTerm(datetime = Some(now.toDate)), keyspace, datetimeField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)
@@ -133,7 +134,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val addr = InetAddress.getLocalHost
       val stats = keyspace.writeAddressPosting(mutation, addressCf, Address(addr), id)
       mutation.execute().getResult
-      val term = Term(addressId, addr.getAddress, keyspace, addressField, Some(Agent(stats)))
+      val term = Term(addressId, MatchTerm(address = Some(addr.getAddress)), keyspace, addressField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)
@@ -148,7 +149,7 @@ class TermSpec extends TestCluster("TermSpec") with WordSpec with MustMatchers {
       val host = Name.fromString("com")
       val stats = keyspace.writeHostnamePosting(mutation, hostnameCf, Hostname(host), id)
       mutation.execute().getResult
-      val term = Term(hostnameId, "com", keyspace, hostnameField, Some(Agent(stats)))
+      val term = Term(hostnameId, MatchTerm(hostname = Some("com")), keyspace, hostnameField, Some(Agent(stats)))
       inside(Await.result(term.nextPosting, 10 seconds)) {
         case Right(BierPosting(postingId, postingMetdata)) =>
           postingId must be(id)

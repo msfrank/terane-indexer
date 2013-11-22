@@ -209,39 +209,26 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
   def buildTerms(matchers: Matchers, keyspace: Keyspace, fields: FieldMap, stats: StatsMap): Option[Matchers] = {
     matchers match {
 
-      case termMatcher @ TermMatcher(fieldId: FieldIdentifier, _) =>
+      case termMatcher @ TermMatcher(fieldId: FieldIdentifier, term: MatchTerm) =>
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
-            termMatcher match {
-              case TermMatcher(FieldIdentifier(_, DataType.TEXT), text: String) =>
-                val stat = stats.statsByCf.get(field.text.get.id)
-                Some(new Term[String](fieldId, text, keyspace, field, stat))
-              case TermMatcher(FieldIdentifier(_, DataType.LITERAL), literal: String) =>
-                val stat = stats.statsByCf.get(field.literal.get.id)
-                Some(new Term[String](fieldId, literal, keyspace, field,  stat))
-              case TermMatcher(FieldIdentifier(_, DataType.INTEGER), integer: Long) =>
-                val stat = stats.statsByCf.get(field.integer.get.id)
-                Some(new Term[Long](fieldId, integer, keyspace, field, stat))
-              case TermMatcher(FieldIdentifier(_, DataType.FLOAT), float: Double) =>
-                val stat = stats.statsByCf.get(field.float.get.id)
-                Some(new Term[Double](fieldId, float, keyspace, field, stat))
-              case TermMatcher(FieldIdentifier(_, DataType.DATETIME), datetime: Date) =>
-                val stat = stats.statsByCf.get(field.datetime.get.id)
-                Some(new Term[Date](fieldId, datetime, keyspace, field, stat))
-              case TermMatcher(FieldIdentifier(_, DataType.ADDRESS), address: Array[Byte]) =>
-                val stat = stats.statsByCf.get(field.address.get.id)
-                Some(new Term[Array[Byte]](fieldId, address, keyspace, field, stat))
-              case TermMatcher(FieldIdentifier(_, DataType.HOSTNAME), hostname: String) =>
-                val stat = stats.statsByCf.get(field.hostname.get.id)
-                Some(new Term[String](fieldId, hostname, keyspace, field, stat))
+            val stat = fieldId.fieldType match {
+              case DataType.TEXT => stats.statsByCf.get(field.text.get.id)
+              case DataType.LITERAL => stats.statsByCf.get(field.literal.get.id)
+              case DataType.INTEGER => stats.statsByCf.get(field.integer.get.id)
+              case DataType.FLOAT => stats.statsByCf.get(field.float.get.id)
+              case DataType.DATETIME => stats.statsByCf.get(field.datetime.get.id)
+              case DataType.ADDRESS => stats.statsByCf.get(field.address.get.id)
+              case DataType.HOSTNAME => stats.statsByCf.get(field.hostname.get.id)
               case unknown =>
                 throw new Exception("unknown field type or value type for " + termMatcher.toString)
             }
+            Some(new Term(fieldId, term, keyspace, field, stat))
           case missing =>
             None
         }
 
-      case rangeMatcher @ RangeMatcher(fieldId, _) =>
+      case rangeMatcher @ RangeMatcher(fieldId, spec: RangeSpec) =>
         fields.fieldsByIdent.get(fieldId) match {
           case Some(field) =>
             val stat = fieldId.fieldType match {
@@ -255,7 +242,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
               case unknown =>
                 throw new Exception("unknown field type or value type for " + rangeMatcher.toString)
             }
-            Some(Range(fieldId, rangeMatcher.spec, keyspace, field, stat))
+            Some(Range(fieldId, spec, keyspace, field, stat))
           case missing =>
             None
         }
@@ -363,10 +350,10 @@ object Query {
   }
   private def prettyPrintImpl(sb: StringBuilder, matcher: Matchers, indent: Int): StringBuilder = {
     matcher match {
-      case term: TermMatcher[_] =>
+      case term: TermMatcher =>
         sb.append(" " * indent)
         sb.append("%s=\"%s\"\n".format(term.fieldId, term.term.toString))
-      case term: Term[_] =>
+      case term: Term =>
         sb.append(" " * indent)
         sb.append("%s=\"%s\"\n".format(term.fieldId, term.term.toString))
       case range: RangeMatcher =>

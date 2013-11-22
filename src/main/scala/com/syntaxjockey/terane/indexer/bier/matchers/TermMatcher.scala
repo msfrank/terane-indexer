@@ -22,8 +22,7 @@ package com.syntaxjockey.terane.indexer.bier.matchers
 import scala.concurrent.Future
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
-import com.syntaxjockey.terane.indexer.bier.Matchers
+import com.syntaxjockey.terane.indexer.bier.{MatchTerm, FieldIdentifier, Matchers}
 
 /**
  * Match the term of the specified type in the specified field.
@@ -32,7 +31,7 @@ import com.syntaxjockey.terane.indexer.bier.Matchers
  * more information about the actual term storage, and thus can make better
  * decisions about how to implement the interface methods.
  */
-case class TermMatcher[T](fieldId: FieldIdentifier, term: T) extends Matchers {
+case class TermMatcher(fieldId: FieldIdentifier, term: MatchTerm) extends Matchers {
   def estimateCost = 0L
   def nextPosting = Future.failed(new NotImplementedError("TermMatcher doesn't implement nextPosting"))
   def findPosting(id: UUID) = Future.failed(new NotImplementedError("TermMatcher doesn't implement findPosting"))

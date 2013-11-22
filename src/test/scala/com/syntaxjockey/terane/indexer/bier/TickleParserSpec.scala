@@ -331,7 +331,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
    "parse a text value with a single term" in {
       val matchers = TickleParser.buildMatchers("?fieldname = foo", params)
       matchers must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo"))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("foo"))))
       )
     }
 
@@ -341,9 +341,9 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       inside(matchers) {
         case Some(PhraseMatcher(children)) =>
           children must have size(3)
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
-          children must contain(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
+          children must contain(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("foo"))).asInstanceOf[Matchers])
+          children must contain(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("bar"))).asInstanceOf[Matchers])
+          children must contain(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("baz"))).asInstanceOf[Matchers])
       }
     }
 
@@ -353,60 +353,60 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       inside(matchers) {
         case Some(PhraseMatcher(children)) =>
           children must have size(4)
-          children(0) must be(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "foo").asInstanceOf[Matchers])
-          children(1) must be(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "bar").asInstanceOf[Matchers])
+          children(0) must be(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("foo"))).asInstanceOf[Matchers])
+          children(1) must be(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("bar"))).asInstanceOf[Matchers])
           children(2) must be(TermPlaceholder)
-          children(3) must be(TermMatcher[String](FieldIdentifier("fieldname", DataType.TEXT), "baz").asInstanceOf[Matchers])
+          children(3) must be(TermMatcher(FieldIdentifier("fieldname", DataType.TEXT), MatchTerm(text = Some("baz"))).asInstanceOf[Matchers])
       }
     }
 
     "parse a shorthand literal value" in {
       TickleParser.buildMatchers( """ ?fieldname = :foobar """.stripMargin, params) must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foobar"))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.LITERAL), MatchTerm(literal = Some("foobar"))))
       )
     }
 
     "parse a coerced literal value" in {
       TickleParser.buildMatchers( """ ?fieldname = literal(foo bar baz) """.stripMargin, params) must be(
-        Some(TermMatcher[String](FieldIdentifier("fieldname", DataType.LITERAL), "foo bar baz"))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.LITERAL), MatchTerm(literal = Some("foo bar baz"))))
       )
     }
 
     "parse a shorthand integer value" in {
       TickleParser.buildMatchers("?fieldname = 42", params) must be(
-        Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.INTEGER), MatchTerm(integer = Some(42L))))
       )
     }
 
     "parse a coerced integer value" in {
       TickleParser.buildMatchers("?fieldname = integer(42)", params) must be(
-        Some(TermMatcher[Long](FieldIdentifier("fieldname", DataType.INTEGER), 42L))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.INTEGER), MatchTerm(integer = Some(42L))))
       )
     }
 
     "parse a shorthand float value" in {
       TickleParser.buildMatchers( "?fieldname = 3.14159", params) must be(
-        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.FLOAT), MatchTerm(float = Some(3.14159))))
       )
     }
 
     "parse a coerced float value" in {
       TickleParser.buildMatchers( "?fieldname = float(3.14159)", params) must be(
-        Some(TermMatcher[Double](FieldIdentifier("fieldname", DataType.FLOAT), 3.14159))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.FLOAT), MatchTerm(float = Some(3.14159))))
       )
     }
 
     "parse a shorthand datetime value" in {
       val date = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC).toDate
       TickleParser.buildMatchers("?fieldname = 1994-11-05T08:15:30.0Z", params) must be(
-        Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), date))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), MatchTerm(datetime = Some(date))))
       )
     }
 
     "parse a coerced datetime value" in {
       val date = new DateTime(1994, 11, 5, 8, 15, 30, DateTimeZone.UTC).toDate
       TickleParser.buildMatchers("?fieldname = datetime(1994-11-05T08:15:30.0Z)", params) must be(
-        Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), date))
+        Some(TermMatcher(FieldIdentifier("fieldname", DataType.DATETIME), MatchTerm(datetime = Some(date))))
       )
     }
 
@@ -414,7 +414,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       val address = DNSAddress.getByAddress("127.0.0.1")
       val matchers = TickleParser.buildMatchers("?fieldname = @127.0.0.1", params)
       inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), MatchTerm(None, None, None, None, None, Some(bytes), None))) =>
           InetAddress.getByAddress(bytes) must be(address)
       }
     }
@@ -423,7 +423,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       val address = DNSAddress.getByAddress("127.0.0.1")
       val matchers = TickleParser.buildMatchers("?fieldname = address(127.0.0.1)", params)
       inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), MatchTerm(None, None, None, None, None, Some(bytes), None))) =>
           InetAddress.getByAddress(bytes) must be(address)
       }
     }
@@ -432,7 +432,7 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       val address = DNSAddress.getByAddress("::1")
       val matchers = TickleParser.buildMatchers("?fieldname = @::1", params)
       inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), MatchTerm(None, None, None, None, None, Some(bytes), None))) =>
           InetAddress.getByAddress(bytes) must be(address)
       }
     }
@@ -441,27 +441,27 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       val address = DNSAddress.getByAddress("::1")
       val matchers = TickleParser.buildMatchers("?fieldname = address(::1)", params)
       inside(matchers) {
-        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), bytes: Array[Byte])) =>
+        case Some(TermMatcher(FieldIdentifier("fieldname", DataType.ADDRESS), MatchTerm(None, None, None, None, None, Some(bytes), None))) =>
           InetAddress.getByAddress(bytes) must be(address)
       }
     }
 
     "parse a shorthand hostname value" in {
       TickleParser.buildMatchers("?fieldname = @www.google.com", params) must be(
-        Some(AndMatcher(Set(
-          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "www").asInstanceOf[Matchers],
-          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "google").asInstanceOf[Matchers],
-          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "com").asInstanceOf[Matchers]
+        Some(PhraseMatcher(Seq(
+          TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("com"))).asInstanceOf[Matchers],
+          TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("google"))).asInstanceOf[Matchers],
+          TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("www"))).asInstanceOf[Matchers]
         )))
       )
     }
 
     "parse a coerced hostname value" in {
       TickleParser.buildMatchers("?fieldname = hostname(www.google.com)", params) must be(
-        Some(AndMatcher(Set(
-          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "www").asInstanceOf[Matchers],
-          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "google").asInstanceOf[Matchers],
-          TermMatcher[String](FieldIdentifier("fieldname", DataType.HOSTNAME), "com").asInstanceOf[Matchers]
+        Some(PhraseMatcher(Seq(
+          TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("com"))).asInstanceOf[Matchers],
+          TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("google"))).asInstanceOf[Matchers],
+          TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("www"))).asInstanceOf[Matchers]
         )))
       )
     }
