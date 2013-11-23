@@ -87,9 +87,10 @@ case object SDIdentifier {
   val META = SDIdentifier("meta", None)
   val SCHEMA = SDIdentifier("schema", Some("42785"))
   val VALUES = SDIdentifier("values", Some("42785"))
+  val SOURCE = SDIdentifier("source", Some("42785"))
 }
 
-case class SDElement(id: SDIdentifier, params: Map[String,String])
+case class SDElement(id: SDIdentifier, params: Map[String,Seq[String]])
 
 case object SDElement {
   val PARAM_TZ_KNOWN = "tzKnown"
@@ -125,7 +126,7 @@ case class SyslogMessage(
       sb.append(" msgId=%s".format(v))
     for (element <- elements.values) {
       sb.append(" [%s".format(element.id))
-      for ((name,value) <- element.params)
+      for ((name,values) <- element.params; value <- values)
         sb.append(" %s='%s'".format(name, value))
       sb.append("]")
     }

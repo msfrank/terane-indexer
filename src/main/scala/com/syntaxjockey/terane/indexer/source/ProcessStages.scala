@@ -308,14 +308,15 @@ class ProcessFrames extends SymmetricPipelineStage[SyslogContext, SyslogProcessi
         }
         SDIdentifier(name, enterpriseId)
       }
-      val params = scala.collection.mutable.HashMap[String,String]()
+      val params = scala.collection.mutable.HashMap[String,Seq[String]]()
       while (iterator.hasNext && (iterator.getByte match {
         case ' ' => true
         case ']' => false
         case _ => throw new IllegalArgumentException("failed to parse SD-ELEMENT")
       })) {
-        val param = processParam(iterator)
-        params += param
+        val (paramName,paramValue) = processParam(iterator)
+        val values: Seq[String] = params.getOrElse(paramName, Seq.empty)
+        params.put(paramName, values :+ paramValue)
       }
       (id, SDElement(id, params.toMap))
     }
@@ -411,13 +412,15 @@ class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcess
       // if there is a schema SDElement, then add fields to ctx
       message.elements.get(SDIdentifier.SCHEMA) match {
         case Some(SDElement(_, params)) =>
-          val schema: Map[String,FieldIdentifier] = params.map { case (ident, fieldspec) =>
-            FieldIdentifier.fromSpec(fieldspec) match {
-              case Success(fieldId) =>
-                ident -> fieldId
-              case Failure(ex) =>
-                throw ex
-            }
+          val schema: Map[String,FieldIdentifier] = params.map {
+            case (ident, Seq(fieldspec)) =>
+              FieldIdentifier.fromSpec(fieldspec) match {
+                case Success(fieldId) =>
+                  ident -> fieldId
+                case Failure(ex) =>
+                  throw ex
+              }
+            case _ => throw new Exception("schema contains multiple values with the same ident")
           }.toMap
           // FIXME: what do we do if ident has already been used?
           ctx.schema = ctx.schema ++ schema
@@ -428,13 +431,15 @@ class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcess
       // if there is a values SDElement, then add fields to event
       val values: Seq[KeyValue] = message.elements.get(SDIdentifier.VALUES) match {
         case Some(SDElement(_, params)) =>
-          params.flatMap { case (ident, value) =>
-            ctx.schema.get(ident) match {
-              case Some(fieldId: FieldIdentifier) =>
-                Some(processField(fieldId, value))
-              case None =>
-                None
-            }
+          params.flatMap {
+            case (ident, Seq(value)) =>
+              ctx.schema.get(ident) match {
+                case Some(fieldId: FieldIdentifier) =>
+                  Some(processField(fieldId, value))
+                case None =>
+                  None
+              }
+            case _ => throw new Exception("element contains multiple values with the same ident")
           }.toSeq
         case None =>
           Seq.empty

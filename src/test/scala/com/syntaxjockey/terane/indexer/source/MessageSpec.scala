@@ -162,7 +162,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
           val id = SDIdentifier("id", None)
           message.elements must contain key id
           val element = message.elements(id)
-          element.params must be === Map("foo" -> "bar")
+          element.params must be === Map("foo" -> Seq("bar"))
           message.message must be === Some("Hello, world!")
       }
     }
@@ -174,7 +174,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
           val id = SDIdentifier("id", None)
           message.elements must contain key id
           val element = message.elements(id)
-          element.params must be === Map("foo" -> "bar")
+          element.params must be === Map("foo" -> Seq("bar"))
           message.message must be === None
       }
     }
@@ -208,7 +208,7 @@ class MessageSpec extends TestCluster("MessageSpec") with WordSpec with MustMatc
           val id = SDIdentifier("id", None)
           message.elements must contain key id
           val element = message.elements(id)
-          element.params must be === Map("foo" -> "] \" \\ ")
+          element.params must be === Map("foo" -> Seq("] \" \\ "))
       }
     }
   }
