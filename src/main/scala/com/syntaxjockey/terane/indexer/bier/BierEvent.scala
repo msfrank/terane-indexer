@@ -24,19 +24,19 @@ import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 
-class BierEvent(val id: UUID, val values: Map[FieldIdentifier,EventValue]) {
+class BierEvent(val id: UUID, val values: Map[FieldIdentifier,EventValue], val tags: Set[String]) {
   import BierEvent._
 
   def +(kv: KeyValue): BierEvent = {
-    new BierEvent(id, values + kv)
+    new BierEvent(id, values + kv, tags)
   }
 
   def ++(xs: Traversable[KeyValue]): BierEvent = {
-    new BierEvent(id, values ++ xs)
+    new BierEvent(id, values ++ xs, tags)
   }
 
   def -(key: FieldIdentifier): BierEvent = {
-    new BierEvent(id, values - key)
+    new BierEvent(id, values - key, tags)
   }
 
   override def toString: String = {
@@ -58,6 +58,9 @@ class BierEvent(val id: UUID, val values: Map[FieldIdentifier,EventValue]) {
       if (v.hostname.isDefined)
         sb.append(" %s:hostname=%s".format(k, v.hostname.get.underlying))
     }
+    if (!tags.isEmpty) {
+      sb.append(" tags: %s".format(tags.mkString(",")))
+    }
     sb.mkString
   }
 }
@@ -65,11 +68,11 @@ class BierEvent(val id: UUID, val values: Map[FieldIdentifier,EventValue]) {
 object BierEvent {
   import scala.language.implicitConversions
 
-  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,EventValue] = Map.empty): BierEvent = {
+  def apply(uuid: Option[UUID] = None, values: Map[FieldIdentifier,EventValue] = Map.empty, tags: Set[String] = Set.empty): BierEvent = {
     if (uuid.isDefined)
-      new BierEvent(uuid.get, values)
+      new BierEvent(uuid.get, values, tags)
     else
-      new BierEvent(TimeUUIDUtils.getUniqueTimeUUIDinMicros, values)
+      new BierEvent(TimeUUIDUtils.getUniqueTimeUUIDinMicros, values, tags)
   }
 
   type KeyValue = (FieldIdentifier,EventValue)

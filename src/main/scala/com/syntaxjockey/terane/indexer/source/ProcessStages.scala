@@ -39,6 +39,7 @@ import com.syntaxjockey.terane.indexer.bier.datatypes._
 class SyslogContext(logging: LoggingAdapter, context: ActorContext, val maxMessageSize: Option[Long] = None) extends PipelineContext with WithinActorContext {
   var leftover = ByteString.empty
   var schema = Map.empty[String,FieldIdentifier]
+  var tags = Set.empty[String]
   def getLogger = logging
   def getContext = context
 }
@@ -392,22 +393,12 @@ class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcess
 
     def processMessage(message: SyslogMessage): SyslogEvent = {
 
-      // add standard RFC5424 fields to event
-      val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
-      var event = BierEvent(Some(id)) ++ Seq(
-        "origin" -> Hostname(new Name(message.origin)),
-        "timestamp" -> Datetime(message.timestamp),
-        "facility" -> Literal(message.priority.facilityString),
-        "severity" -> Literal(message.priority.severityString)
-      )
-      if (message.appName.isDefined)
-        event = event + ("appname" -> Literal(message.appName.get))
-      if (message.procId.isDefined)
-        event = event + ("procid" -> Literal(message.procId.get))
-      if (message.msgId.isDefined)
-        event = event + ("msgid" -> Literal(message.msgId.get))
-      if (message.message.isDefined)
-        event = event + ("message" -> Text(message.message.get))
+      // if there is a source SDElement, then add tags to event
+      message.elements.get(SDIdentifier.SOURCE) match {
+        case Some(SDElement(_, params)) =>
+          ctx.tags = params.getOrElse("tag", Seq.empty).toSet
+        case None =>  // do nothing
+      }
 
       // if there is a schema SDElement, then add fields to ctx
       message.elements.get(SDIdentifier.SCHEMA) match {
@@ -427,6 +418,23 @@ class ProcessMessage extends SymmetricPipelineStage[SyslogContext, SyslogProcess
           ctx.getLogger.debug("updated schema for this connection: {}", ctx.schema)
         case None =>  // do nothing
       }
+
+      // add standard RFC5424 fields to event
+      val id = TimeUUIDUtils.getUniqueTimeUUIDinMicros
+      var event = BierEvent(Some(id), tags = ctx.tags) ++ Seq(
+        "origin" -> Hostname(new Name(message.origin)),
+        "timestamp" -> Datetime(message.timestamp),
+        "facility" -> Literal(message.priority.facilityString),
+        "severity" -> Literal(message.priority.severityString)
+      )
+      if (message.appName.isDefined)
+        event = event + ("appname" -> Literal(message.appName.get))
+      if (message.procId.isDefined)
+        event = event + ("procid" -> Literal(message.procId.get))
+      if (message.msgId.isDefined)
+        event = event + ("msgid" -> Literal(message.msgId.get))
+      if (message.message.isDefined)
+        event = event + ("message" -> Text(message.message.get))
 
       // if there is a values SDElement, then add fields to event
       val values: Seq[KeyValue] = message.elements.get(SDIdentifier.VALUES) match {
