@@ -116,6 +116,27 @@ trait TickleParser extends JavaTokenParsers {
       }
   }
 
+  val valueOrRangeFunction: Parser[Any] = _log(regex("""\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r) ~ regex("""\(([^\p{Cntrl}\\]|\\\)])*\)""".r))("function") ^^ {
+    case functionName ~ wrappedFunctionArgs =>
+      val functionArgs = wrappedFunctionArgs.tail.init
+      try {
+        TickleFunctions.parseTargetFunction(functionName, functionArgs) match {
+          case value: TargetValue => value
+          case range: TargetRange => range
+          case _ => failure("don't know how to parse value function %s(%s)".format(functionName, functionArgs))
+        }
+      } catch {
+        case ex: Throwable =>
+          failure("failed to evaluate value function %s(%s): %s".format(functionName, functionArgs, ex.getMessage))
+      }
+  }
+
+  val valueFunction: Parser[Any] = valueOrRangeFunction ^^ {
+    case value: TargetValue => value
+    case range: TargetRange => failure("expected a value, encountered a range")
+    case unknown => failure("encountered unknown element %s".format(unknown))
+  }
+
   /*
    * <TargetValue>   ::= <CoercedValue> | <RawValue>
    * <RawValue>      ::= <RawText> | <RawLiteral> | <RawInteger> | <RawFloat> | <RawDatetime> | <RawHostname>
@@ -141,22 +162,28 @@ trait TickleParser extends JavaTokenParsers {
    * <FunctionArg>        ::= <TargetValue>
    */
 
-  /* subject is a java token starting with a ':' */
+  /* subject is a java token starting with a '?' */
   val subject: Parser[String] = _log(regex("""\?\p{javaJavaIdentifierStart}\p{javaJavaIdentifierPart}*""".r))("subject") ^^ { _.tail }
 
   /* bare target is just a value without field name or type */
-  val bareTarget: Parser[Expression] = _log(targetValue)("bareTarget") ^^ { case target => Expression(None, PredicateEquals(target)) }
+  val bareTarget: Parser[Expression] = _log(targetValue | valueOrRangeFunction)("bareTarget") ^^ {
+    case value: TargetValue => Expression(None, PredicateEquals(value))
+    case range: TargetRange => Expression(None, PredicateEqualsRange(range))
+  }
 
   /* a range with a start and an end */
-  val closedRange: Parser[TargetRange] = _log(regex("[\\[{]".r) ~ targetValue ~ literal("TO") ~ targetValue ~ regex("[}\\]]".r))("targetRange") ^^ {
-    case openBrace ~ valueStart ~ "TO" ~ valueEnd ~ closeBrace if valueStart.dataType == valueEnd.dataType =>
+  val closedRange: Parser[Any] = _log(regex("[\\[{]".r) ~ (targetValue | valueFunction) ~ literal("TO") ~ (targetValue | valueFunction) ~ regex("[}\\]]".r))("targetRange") ^^ {
+    case openBrace ~ (valueStart: TargetValue) ~ "TO" ~ (valueEnd: TargetValue) ~ closeBrace if valueStart.dataType == valueEnd.dataType =>
       val startExcl = if (openBrace == "{")  true else false
       val endExcl = if (closeBrace == "}")  true else false
       TargetRange(Some(valueStart), Some(valueEnd), valueStart.dataType, startExcl, endExcl)
+    case openBrace ~ (valueStart: TargetValue) ~ "TO" ~ (valueEnd: TargetValue) ~ closeBrace =>
+      failure("data type is inconsistent over closed range: start was %s, end was %s".format(valueStart.dataType.toString, valueEnd.dataType.toString))
+    case unknown => failure("failed to parse closed range %s".format(unknown))
   }
 
   /* a range with either a start or an end, but not both */
-  val openRange: Parser[TargetRange] = _log(regex("[\\[{]".r) ~ (literal("TO") ~ targetValue | targetValue ~ literal("TO")) ~ regex("[}\\]]".r))("targetRange") ^^ {
+  val openRange: Parser[Any] = _log(regex("[\\[{]".r) ~ (literal("TO") ~ targetValue | targetValue ~ literal("TO")) ~ regex("[}\\]]".r))("targetRange") ^^ {
     case openBrace ~ ((valueStart: TargetValue) ~ "TO") ~ closeBrace =>
       val startExcl = if (openBrace == "{")  true else false
       val endExcl = if (closeBrace == "}")  true else false
@@ -167,34 +194,33 @@ trait TickleParser extends JavaTokenParsers {
       TargetRange(None, Some(valueEnd), valueEnd.dataType, startExcl, endExcl)
   }
 
-  val targetRange: Parser[TargetRange] = closedRange | openRange
+  val targetRange: Parser[TargetRange] = (closedRange | openRange) ^^ {
+    case range: TargetRange => range
+  }
 
   /* target expression has a field name, operator, and value */
-  def equals: Parser[Expression] = _log(subject ~ literal("=") ~ (targetRange | targetValue))("equals") ^^ {
+  def equals: Parser[Expression] = _log(subject ~ literal("=") ~ (valueOrRangeFunction | targetRange | targetValue))("equals") ^^ {
     case name ~ "=" ~ (value: TargetRange) => Expression(Some(name), PredicateEqualsRange(value))
     case name ~ "=" ~ (value: TargetValue) => Expression(Some(name), PredicateEquals(value))
   }
-  def notEquals: Parser[Expression] = _log(subject ~ literal("!=") ~ (targetRange | targetValue))("notEquals") ^^ {
+  def notEquals: Parser[Expression] = _log(subject ~ literal("!=") ~ (valueOrRangeFunction | targetRange | targetValue))("notEquals") ^^ {
     case name ~ "!=" ~ (value: TargetRange) => Expression(Some(name), PredicateNotEqualsRange(value))
     case name ~ "!=" ~ (value: TargetValue) => Expression(Some(name), PredicateNotEquals(value))
   }
-  def greaterThan: Parser[Expression] = _log(subject ~ literal(">") ~ targetValue)("greaterThan") ^^ {
-    case name ~ ">" ~ value => Expression(Some(name), PredicateGreaterThan(value))
+  def greaterThan: Parser[Expression] = _log(subject ~ literal(">") ~ (targetValue | valueFunction))("greaterThan") ^^ {
+    case name ~ ">" ~ (value: TargetValue) => Expression(Some(name), PredicateGreaterThan(value))
   }
-  def lessThan: Parser[Expression] = _log(subject ~ literal("<") ~ targetValue)("lessThan") ^^ {
-    case name ~ "<" ~ value => Expression(Some(name), PredicateLessThan(value))
+  def lessThan: Parser[Expression] = _log(subject ~ literal("<") ~ (targetValue | valueFunction))("lessThan") ^^ {
+    case name ~ "<" ~ (value: TargetValue) => Expression(Some(name), PredicateLessThan(value))
   }
-  def greaterThanEquals: Parser[Expression] = _log(subject ~ literal(">=") ~ targetValue)("greaterThanEquals") ^^ {
-    case name ~ ">=" ~ value => Expression(Some(name), PredicateGreaterThanEqualTo(value))
+  def greaterThanEquals: Parser[Expression] = _log(subject ~ literal(">=") ~ (targetValue | valueFunction))("greaterThanEquals") ^^ {
+    case name ~ ">=" ~ (value: TargetValue) => Expression(Some(name), PredicateGreaterThanEqualTo(value))
   }
-  def lessThanEquals: Parser[Expression] = _log(subject ~ literal("<=") ~ targetValue)("lessThanEquals") ^^ {
-    case name ~ "<=" ~ value => Expression(Some(name), PredicateLessThanEqualTo(value))
-  }
-  def function: Parser[Expression] = _log(subject ~ literal("->") ~ ident ~ literal("(") ~ rep(targetValue) ~ literal(")"))("function") ^^ {
-    case name ~ "->" ~ functionName ~ "(" ~ functionArgs ~ ")" => Expression(Some(name), PredicateFunction(functionName, functionArgs))
+  def lessThanEquals: Parser[Expression] = _log(subject ~ literal("<=") ~ (targetValue | valueFunction))("lessThanEquals") ^^ {
+    case name ~ "<=" ~ (value: TargetValue) => Expression(Some(name), PredicateLessThanEqualTo(value))
   }
 
-  def targetExpression: Parser[Expression] = equals | notEquals | greaterThanEquals | lessThanEquals | greaterThan | lessThan | function
+  def targetExpression: Parser[Expression] = equals | notEquals | greaterThanEquals | lessThanEquals | greaterThan | lessThan
 
   /* either qualified or bare subject expression */
   val expression: Parser[ExpressionOrGroup] = _log(targetExpression | bareTarget)("expression") ^^ (Left(_))
@@ -328,7 +354,7 @@ object TickleParser extends TickleParser {
             Some(AddressField.parseExpression(factory, expression, params))
         }
       case predicate: PredicateFunction =>
-        TickleFunctions.parsePredicateFunction(factory, expression.subject.get, predicate.name, predicate.args, params)
+        Some(TickleFunctions.parsePredicateFunction(factory, expression.subject.get, predicate.name, predicate.args, params))
       case unknown =>
         throw new Exception("unknown predicate type " + unknown.toString)
     }
@@ -461,7 +487,9 @@ object TickleParser extends TickleParser {
 
   case class Expression(subject: Option[String], predicate: Predicate)
 
-  sealed abstract class TargetValue(val raw: String, val dataType: DataType.DataType)
+  sealed trait Target
+
+  sealed abstract class TargetValue(val raw: String, val dataType: DataType.DataType) extends Target
   case class TargetText(text: String) extends TargetValue(text, DataType.TEXT)
   case class TargetLiteral(literal: String) extends TargetValue(literal, DataType.LITERAL)
   case class TargetInteger(integer: String) extends TargetValue(integer, DataType.INTEGER)
@@ -470,7 +498,7 @@ object TickleParser extends TickleParser {
   case class TargetAddress(address: String) extends TargetValue(address, DataType.ADDRESS)
   case class TargetHostname(hostname: String) extends TargetValue(hostname, DataType.HOSTNAME)
 
-  case class TargetRange(start: Option[TargetValue], end: Option[TargetValue], dataType: DataType.DataType, startExcl: Boolean, endExcl: Boolean)
+  case class TargetRange(start: Option[TargetValue], end: Option[TargetValue], dataType: DataType.DataType, startExcl: Boolean, endExcl: Boolean) extends Target
 
   sealed abstract class Predicate
   case class PredicateFunction(name: String, args: Seq[TargetValue]) extends Predicate

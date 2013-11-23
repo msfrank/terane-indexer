@@ -332,7 +332,7 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
           ident -> EventValue(hostname = Some(Hostname(Name.fromString(column.getStringValue))))
       }
     }.toMap
-    new BierEvent(id, values)
+    new BierEvent(id, values, Set.empty)
   }
 }
 

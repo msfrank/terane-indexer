@@ -315,15 +315,6 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
       )
     }
 
-    "parse a function expression with no function arguments" in {
-      val query = TickleParser.parseQueryString("?fieldname -> function()")
-      logger.debug(TickleParser.prettyPrint(query))
-      query must be(
-        Query(
-          Left(Expression(Some("fieldname"), PredicateFunction("function", Seq.empty)))
-        )
-      )
-    }
   }
 
   "TickleParser.buildMatchers()" must {
@@ -464,10 +455,6 @@ class TickleParserSpec extends TestCluster("TickleParserSpec") with WordSpec wit
           TermMatcher(FieldIdentifier("fieldname", DataType.HOSTNAME), MatchTerm(hostname = Some("www"))).asInstanceOf[Matchers]
         )))
       )
-    }
-
-    "parse the cidr function" in {
-       TickleParser.buildMatchers("""?fieldname -> cidr("192.168.0/24")""", params) must be(None)
     }
   }
 }

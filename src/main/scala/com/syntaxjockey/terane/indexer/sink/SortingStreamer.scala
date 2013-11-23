@@ -343,6 +343,6 @@ class EventSerializer(lookup: Map[FieldIdentifier,Int]) extends Serializer[BierE
       }
       keyvalues = keyvalues + keyvalue
     }
-    new BierEvent(id, keyvalues)
+    new BierEvent(id, keyvalues, Set.empty)
   }
 }
