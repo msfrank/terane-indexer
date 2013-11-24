@@ -100,6 +100,9 @@ class EventRouter extends Actor with ActorLogging with Instrumented {
     case describeStore: DescribeStore =>
       storeManager forward describeStore
 
+    /* find a store */
+    case findStore: FindStore =>
+      storeManager forward findStore
   }
 }
 

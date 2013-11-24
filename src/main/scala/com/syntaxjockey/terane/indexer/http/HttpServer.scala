@@ -193,16 +193,28 @@ trait ApiService extends HttpService {
   val storesRoutes = {
     path("1" / "stores") {
       pathEndOrSingleSlash {
-        get {
-          complete {
-            eventRouter.ask(EnumerateStores).map {
-              case enumeratedStores: EnumeratedStores =>
-                enumeratedStores
-              case failure: ApiFailure =>
-                throw new ApiException(failure)
-            }.mapTo[EnumeratedStores]
-          }
-        } ~
+        get { parameters("name" ?) {
+          case Some(name) =>
+            hostName { hostname => complete {
+              eventRouter.ask(FindStore(name)).map {
+                case storeStatistics: StoreStatistics =>
+                  HttpResponse(StatusCodes.SeeOther,
+                    JsonBody(storeStatistics.toJson),
+                    List(Location("http://%s:%d/1/stores/%s".format(hostname, settings.port, storeStatistics.id))))
+                case failure: ApiFailure =>
+                  throw new ApiException(failure)
+              }.mapTo[HttpResponse]
+            }}
+          case _ =>
+            complete {
+              eventRouter.ask(EnumerateStores).map {
+                case enumeratedStores: EnumeratedStores =>
+                  enumeratedStores
+                case failure: ApiFailure =>
+                  throw new ApiException(failure)
+              }.mapTo[EnumeratedStores]
+            }
+        }} ~
         post {
           hostName { hostname =>
             entity(as[CreateStore]) { case createStore: CreateStore =>

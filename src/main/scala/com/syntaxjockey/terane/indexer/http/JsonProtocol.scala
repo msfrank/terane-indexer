@@ -147,20 +147,23 @@ object JsonProtocol extends DefaultJsonProtocol {
     }
   }
 
+  /* convert QueryStatistics class */
+  implicit val QueryStatisticsFormat = jsonFormat6(QueryStatistics.apply)
+
   /* convert CreateQuery class */
   implicit val CreateQueryFormat = jsonFormat6(CreateQuery.apply)
 
   /* convert CreatedQuery class */
   implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
 
-  /* convert QueryStatistics class */
-  implicit val QueryStatisticsFormat = jsonFormat6(QueryStatistics.apply)
-
   /* convert GetEvents class */
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
 
   /* convert Store class */
   implicit val StoreFormat = jsonFormat3(Store.apply)
+
+  /* convert StoreStatistics class */
+  implicit val StoreStatisticsFormat = jsonFormat3(StoreStatistics.apply)
 
   /* convert EnumeratedStores class */
   implicit val EnumeratedStoresFormat = jsonFormat1(EnumeratedStores.apply)
@@ -173,9 +176,6 @@ object JsonProtocol extends DefaultJsonProtocol {
 
   /* convert CreateStore class */
   implicit val DescribeStoreFormat = jsonFormat1(DescribeStore.apply)
-
-  /* convert StoreStatistics class */
-  implicit val StoreStatisticsFormat = jsonFormat3(StoreStatistics.apply)
 
 }
 

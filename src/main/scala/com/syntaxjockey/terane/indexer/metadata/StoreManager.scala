@@ -119,9 +119,21 @@ class StoreManager extends Actor with ActorLogging {
           sender ! ResourceNotFound
       }
 
-    /* return a list of all stores */
+    /* describe the store with the specified name, if it exists */
+    case FindStore(name) =>
+      stores.storesByName.get(name) match {
+        case Some(store) =>
+          sender ! StoreStatistics(store.id, store.name, store.created)
+        case None =>
+          sender ! ResourceNotFound
+      }
+
+    /* describe all stores */
     case EnumerateStores =>
-      sender ! EnumeratedStores(stores.storesById.keys.toSeq)
+      val stats = stores.storesById.values.map {store =>
+        StoreStatistics(store.id, store.name, store.created)
+      }.toSeq
+      sender ! EnumeratedStores(stats)
 
     /* operation failed */
     case failure @ StoreModificationFailed(cause: Throwable, op: StoreModification) =>
@@ -258,7 +270,8 @@ object StoreManager {
   case class StoreModificationFailed(cause: Throwable, op: StoreModification) extends StoreModificationResult
 
   case object EnumerateStores
-  case class EnumeratedStores(stores: Seq[String])
+  case class EnumeratedStores(stores: Seq[StoreStatistics])
+  case class FindStore(name: String)
   case class DescribeStore(id: String)
   case class StoreStatistics(id: String, name: String, created: DateTime)
 
