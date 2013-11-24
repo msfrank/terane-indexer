@@ -31,9 +31,9 @@ import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.metadata.Store
-import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra, Serializers}
+import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
-import com.syntaxjockey.terane.indexer.http.RetryLater
+import com.syntaxjockey.terane.indexer.RetryLater
 import com.syntaxjockey.terane.indexer.Instrumented
 
 /**

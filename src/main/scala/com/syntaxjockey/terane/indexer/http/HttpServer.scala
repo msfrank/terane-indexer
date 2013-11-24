@@ -24,8 +24,7 @@ import akka.actor.{Props, ActorRef, Actor, ActorLogging}
 import akka.pattern.ask
 import akka.util.Timeout
 import akka.event.LoggingAdapter
-import com.typesafe.config.Config
-import spray.routing.{ExceptionHandler, HttpService}
+import spray.routing.{PathMatcher, ExceptionHandler, HttpService}
 import spray.can.Http
 import spray.http._
 import spray.http.HttpHeaders.Location
@@ -34,20 +33,29 @@ import akka.util.Timeout._
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.sink.Query._
+import com.syntaxjockey.terane.indexer.metadata.StoreManager._
+import com.syntaxjockey.terane.indexer.sink.CassandraSink._
+import com.syntaxjockey.terane.indexer._
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.StoreStatistics
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.DescribeStore
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.CreateStore
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.CreatedStore
 import com.syntaxjockey.terane.indexer.sink.Query.EventSet
+import spray.http.HttpResponse
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.DeleteStore
 import com.syntaxjockey.terane.indexer.sink.Query.QueryStatistics
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreatedQuery
-import com.syntaxjockey.terane.indexer.IndexerConfig
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
 
 /**
- *
+ * HttpServer is responsible for listening on the HTTP port, accepting connections,
+ * and handing them over to the ApiService for processing.
  */
-class HttpServer(settings: HttpSettings, val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
+class HttpServer(val settings: HttpSettings, val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
 
   val timeout: Timeout = settings.requestTimeout
 
@@ -69,11 +77,16 @@ object HttpServer {
   def props(settings: HttpSettings, eventRouter: ActorRef) = Props(classOf[HttpServer], settings, eventRouter)
 }
 
+/**
+ * ApiService contains the REST API logic.
+ */
 trait ApiService extends HttpService {
   import scala.language.postfixOps
   import JsonProtocol._
   import spray.httpx.SprayJsonSupport._
   import spray.json._
+
+  val settings: HttpSettings
 
   implicit def log: LoggingAdapter
   implicit def eventRouter: ActorRef
@@ -82,42 +95,55 @@ trait ApiService extends HttpService {
 
   def throwableToJson(t: Throwable): JsValue = JsObject(Map("description" -> JsString(t.getMessage)))
 
+  /**
+   * catch thrown exceptions and convert them to HTTP responses.  we bake in support
+   * for catching APIFailure objects wrapped in an APIException, otherwise any other
+   * Throwable results in a generic 500 Internal Server Error.
+   */
   implicit def exceptionHandler(implicit log: LoggingContext) = ExceptionHandler {
     case ex: ApiException => ctx =>
-      log.error(ex, "caught exception in spray routing")
+      log.error(ex, "caught API exception in spray routing: %s".format(ex.getMessage))
       ex.failure match {
         case failure: RetryLater =>
-          ctx.complete(HttpResponse(StatusCodes.Accepted, JsonBody(throwableToJson(ex))))
+          ctx.complete(HttpResponse(StatusCodes.ServiceUnavailable, JsonBody(throwableToJson(ex))))
         case failure: BadRequest =>
           ctx.complete(HttpResponse(StatusCodes.BadRequest, JsonBody(throwableToJson(ex))))
+        case failure: ResourceNotFound =>
+          ctx.complete(HttpResponse(StatusCodes.NotFound, JsonBody(throwableToJson(ex))))
         case _ =>
           ctx.complete(HttpResponse(StatusCodes.InternalServerError, JsonBody(throwableToJson(ex))))
       }
     case ex: Throwable => ctx =>
-      log.error(ex, "caught exception in spray routing")
+      log.error(ex, "caught exception in spray routing: %s".format(ex.getMessage))
       ctx.complete(HttpResponse(StatusCodes.InternalServerError, JsonBody(throwableToJson(new Exception("internal server error")))))
   }
 
-  val routes = {
+  /**
+   * Spray routes for manipulating queries (create, describe, get events, delete)
+   */
+  val queriesRoutes = {
     path("1" / "queries") {
       post {
-        entity(as[CreateQuery]) { case createQuery: CreateQuery =>
-          complete {
-            eventRouter.ask(createQuery).map {
-              case createdQuery: CreatedQuery =>
-                HttpResponse(StatusCodes.Created,
-                  JsonBody(createdQuery.toJson),
-                  List(Location("http://localhost:8080/1/queries/" + createdQuery.id)))
-              case failure: ApiFailure =>
-                log.info("error creating query")
-                throw new ApiException(failure)
-            }.mapTo[HttpResponse]
+        hostName { hostname =>
+          entity(as[CreateQuery]) { case createQuery: CreateQuery =>
+            complete {
+              log.debug("creating query")
+              eventRouter.ask(createQuery).map {
+                case createdQuery: CreatedQuery =>
+                  HttpResponse(StatusCodes.Created,
+                    JsonBody(createdQuery.toJson),
+                    List(Location("http://%s:%d/1/queries/%s".format(hostname, settings.port, createdQuery.id))))
+                case failure: ApiFailure =>
+                  log.info("error creating query")
+                  throw new ApiException(failure)
+              }.mapTo[HttpResponse]
+            }
           }
         }
       }
     } ~
     pathPrefix("1" / "queries" / JavaUUID) { case id: UUID =>
-      path("") {
+      pathEndOrSingleSlash {
         get {
           complete {
             actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).map {
@@ -139,32 +165,89 @@ trait ApiService extends HttpService {
         }
       } ~
       path("events") {
-        get {
-          parameter('offset.as[Int] ?) { offset =>
-          parameter('limit.as[Int] ?) { limit =>
-            val getEvents = GetEvents(offset, limit)
-            complete {
-              actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).map {
+        pathEndOrSingleSlash {
+          get {
+            parameter('offset.as[Int] ?) { offset =>
+            parameter('limit.as[Int] ?) { limit =>
+              val getEvents = GetEvents(offset, limit)
+              complete {
+                actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).map {
                   case eventSet: EventSet =>
                     eventSet
                   case failure: ApiFailure =>
                     throw new ApiException(failure)
                 }.mapTo[EventSet]
-            }
-          }}
+              }
+            }}
+          }
         }
       }
     }
   }
+
+  val storeId = PathMatcher("""[a-z0-9]{32}""".r)
+
+  /**
+   * Spray routes for manipulating stores (create, describe, delete)
+   */
+  val storesRoutes = {
+    path("1" / "stores") {
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            eventRouter.ask(EnumerateStores).map {
+              case enumeratedStores: EnumeratedStores =>
+                enumeratedStores
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[EnumeratedStores]
+          }
+        } ~
+        post {
+          hostName { hostname =>
+            entity(as[CreateStore]) { case createStore: CreateStore =>
+              complete {
+                eventRouter.ask(createStore).map {
+                  case CreatedStore(op, store) =>
+                    HttpResponse(StatusCodes.Created,
+                      JsonBody(store.toJson),
+                      List(Location("http://%s:%d/1/stores/%s".format(hostname, settings.port, store.id))))
+                  case failure: ApiFailure =>
+                    throw new ApiException(failure)
+                }.mapTo[HttpResponse]
+              }
+            }
+          }
+        }
+      }
+    } ~
+    pathPrefix("1" / "stores" / storeId) { case id: String =>
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            eventRouter.ask(DescribeStore(id)).map {
+              case storeStatistics: StoreStatistics =>
+                storeStatistics
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[StoreStatistics]
+          }
+        } ~
+        delete {
+          complete {
+            eventRouter.ask(DeleteStore(id)).map {
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+              case _ => StatusCodes.OK
+            }.mapTo[HttpResponse]
+          }
+        }
+      }
+    }
+  }
+
+  val version1 = queriesRoutes ~ storesRoutes
+
+  val routes =  version1
 }
-
-abstract class ApiFailure(val description: String)
-trait RetryLater
-trait BadRequest
-
-case object RetryLater extends ApiFailure("retry operation later") with RetryLater
-case object BadRequest extends ApiFailure("bad request") with BadRequest
-
-class ApiException(val failure: ApiFailure) extends Exception(failure.description)
-
 

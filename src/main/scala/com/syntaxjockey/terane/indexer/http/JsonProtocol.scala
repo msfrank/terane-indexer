@@ -33,6 +33,18 @@ import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
 import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, EventSet}
 import scala.util.parsing.json.JSONObject
+import com.syntaxjockey.terane.indexer.metadata.StoreManager._
+import com.syntaxjockey.terane.indexer.metadata.Store
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.StoreStatistics
+import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.DescribeStore
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.CreateStore
+import com.syntaxjockey.terane.indexer.metadata.Store
+import com.syntaxjockey.terane.indexer.sink.Query.EventSet
+import com.syntaxjockey.terane.indexer.metadata.StoreManager.DeleteStore
+import com.syntaxjockey.terane.indexer.sink.Query.QueryStatistics
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreatedQuery
 
 object JsonProtocol extends DefaultJsonProtocol {
 
@@ -146,6 +158,25 @@ object JsonProtocol extends DefaultJsonProtocol {
 
   /* convert GetEvents class */
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
+
+  /* convert Store class */
+  implicit val StoreFormat = jsonFormat3(Store.apply)
+
+  /* convert EnumeratedStores class */
+  implicit val EnumeratedStoresFormat = jsonFormat1(EnumeratedStores.apply)
+
+  /* convert CreateStore class */
+  implicit val CreateStoreFormat = jsonFormat1(CreateStore.apply)
+
+  /* convert DeleteStore class */
+  implicit val DeleteStoreFormat = jsonFormat1(DeleteStore.apply)
+
+  /* convert CreateStore class */
+  implicit val DescribeStoreFormat = jsonFormat1(DescribeStore.apply)
+
+  /* convert StoreStatistics class */
+  implicit val StoreStatisticsFormat = jsonFormat3(StoreStatistics.apply)
+
 }
 
 object JsonBody {

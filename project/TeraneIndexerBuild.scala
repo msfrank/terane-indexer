@@ -9,7 +9,7 @@ object TeraneIndexerBuild extends Build {
   val teraneVersion = "0.1"
 
   val akkaVersion = "2.2.3"
-  val sprayVersion = "1.2-RC3"
+  val sprayVersion = "1.2-RC4"
   val astyanaxVersion = "1.56.44"
   val curatorVersion = "1.3.3"
 

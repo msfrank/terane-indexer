@@ -40,11 +40,13 @@ class EventRouter extends Actor with ActorLogging with Instrumented {
   var storesByName = Map.empty[String,Store]
   val sinksByName = scala.collection.mutable.HashMap[String,ActorRef]()
 
-  /* make sure all specified sinks have been created */
-  IndexerConfig(context.system).settings.sinks.map { case (name: String, sinkSettings: SinkSettings) =>
-    sinkSettings match {
-      case cassandraSinkSettings: CassandraSinkSettings =>
-        storeManager ! CreateStore(name)
+  override def preStart() {
+    /* make sure all specified sinks have been created */
+    IndexerConfig(context.system).settings.sinks.map { case (name: String, sinkSettings: SinkSettings) =>
+      sinkSettings match {
+        case cassandraSinkSettings: CassandraSinkSettings =>
+          storeManager ! CreateStore(name)
+      }
     }
   }
 
@@ -81,6 +83,23 @@ class EventRouter extends Actor with ActorLogging with Instrumented {
         case None =>
           sender ! new Exception("no such store " + createQuery.store)
       }
+
+    /* create a new store, if it doesn't exist already */
+    case EnumerateStores =>
+      storeManager forward EnumerateStores
+
+    /* create a new store, if it doesn't exist already */
+    case createStore: CreateStore =>
+      storeManager forward createStore
+
+    /* delete a store, if it exists */
+    case deleteStore: DeleteStore =>
+      storeManager forward deleteStore
+
+    /* describe a store, if it exists */
+    case describeStore: DescribeStore =>
+      storeManager forward describeStore
+
   }
 }
 
@@ -90,3 +109,35 @@ object EventRouter {
 
   case class StoreEvent(store: String, event: BierEvent)
 }
+
+/**
+ * abstract base class for all API failures.
+ */
+abstract class ApiFailure(val description: String)
+
+/**
+ * trait and companion object for API failures which indicate the operation
+ * should be retried at a later time.
+ */
+trait RetryLater
+case object RetryLater extends ApiFailure("retry operation later") with RetryLater
+
+/**
+ * trait and companion object for API failures which indicate the operation
+ * parameters must be modified before being submitted again.
+ */
+trait BadRequest
+case object BadRequest extends ApiFailure("bad request") with BadRequest
+
+/**
+ * trait and companion object for API failures which indicate the resource
+ * was not found.
+ */
+trait ResourceNotFound
+case object ResourceNotFound extends ApiFailure("resource not found") with ResourceNotFound
+
+/**
+ * Exception which wraps an API failure.
+ */
+class ApiException(val failure: ApiFailure) extends Exception(failure.description)
+
