@@ -6,3 +6,4 @@ project/target
 target
 sorted-*
 nodeid
+src/sphinx/_build
