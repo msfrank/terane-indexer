@@ -19,14 +19,7 @@
 
 package com.syntaxjockey.terane.indexer
 
-import akka.actor.{AddressFromURIString, ActorRef, ActorSystem}
-import akka.cluster.Cluster
-import com.netflix.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
-import scala.collection.JavaConversions._
-
-import com.syntaxjockey.terane.indexer.source._
-import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
-import com.syntaxjockey.terane.indexer.http.HttpServer
+import akka.actor.ActorSystem
 
 /**
  * Indexer application entry point
@@ -41,45 +34,11 @@ object IndexerApp extends App {
 
   val settings = IndexerConfig(system).settings
 
-  /* start the sinks */
-  val eventRouter = system.actorOf(EventRouter.props(), "event-router")
+  /* start the supervisor */
+  val supervisor = system.actorOf(ClusterSupervisor.props(), "cluster-supervisor")
 
-  /* start the sources */
-  val sources: Seq[ActorRef] = settings.sources.map { case (name: String, sourceSettings: SourceSettings) =>
-    sourceSettings match {
-      case syslogTcpSourceSettings: SyslogTcpSourceSettings =>
-        system.actorOf(SyslogTcpSource.props(syslogTcpSourceSettings, eventRouter), "source-" + name)
-      case syslogUdpSourceSettings: SyslogUdpSourceSettings =>
-        system.actorOf(SyslogUdpSource.props(syslogUdpSourceSettings, eventRouter), "source-" + name)
-    }
-  }.toSeq
-
-  /* start the HTTP service if configured */
-  val http = settings.http match {
-    case Some(httpSettings) =>
-      Some(system.actorOf(HttpServer.props(httpSettings, eventRouter), "http"))
-    case None =>
-      None
-  }
-
-  /* register as a cluster seed */
-  val selfAddress = Cluster(system).selfAddress
-  val serviceInstance = ServiceInstance.builder[Void]()
-      .name("node")
-      .id(settings.nodeId.toString)
-      .address(selfAddress.toString)
-      .build()
-  val serviceDiscovery = ServiceDiscoveryBuilder
-    .builder(classOf[Void])
-    .client(Zookeeper(system).client)
-    .basePath("/services")
-    .thisInstance(serviceInstance)
-    .build()
-  serviceDiscovery.start()
-
-  /* join with seed nodes */
-  val seeds = serviceDiscovery.queryForInstances("node").take(3).map(instance => AddressFromURIString(instance.getAddress))
-  seeds.foreach(seed => Cluster(system).join(seed))
-
-  // FIXME: add appropriate shutdown logic
+  /* shut down cleanly */
+  sys.addShutdownHook({
+    system.shutdown()
+  })
 }

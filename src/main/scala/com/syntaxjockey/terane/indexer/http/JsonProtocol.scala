@@ -30,11 +30,7 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CreatedQuery, CreateQuery}
-import com.syntaxjockey.terane.indexer.sink.Query.{GetEvents, QueryStatistics, EventSet}
-import scala.util.parsing.json.JSONObject
 import com.syntaxjockey.terane.indexer.metadata.StoreManager._
-import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.StoreStatistics
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
 import com.syntaxjockey.terane.indexer.metadata.StoreManager.DescribeStore

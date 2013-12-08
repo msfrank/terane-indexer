@@ -22,7 +22,7 @@ package com.syntaxjockey.terane.indexer.metadata
 import akka.actor.{ActorRef, Props, Actor, ActorLogging}
 import akka.pattern.pipe
 import akka.actor.Status.Failure
-import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
+import org.apache.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
 import org.joda.time.{DateTimeZone, DateTime}
 import scala.collection.JavaConversions._

@@ -36,7 +36,7 @@ import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
  * in the specified cassandra keyspace.  If the write fails, then the event is either
  * sent back upstream to be retried if possible, or is dropped.
  */
-class EventWriter(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef, statsManager: ActorRef) extends Actor with ActorLogging with CassandraRowOperations {
+class EventWriter(settings: CassandraSinkSettings, val keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef, statsManager: ActorRef) extends Actor with ActorLogging with CassandraRowOperations {
   import EventWriter._
   import CassandraSink._
   import FieldManager._
@@ -219,8 +219,8 @@ class EventWriter(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldM
 
 object EventWriter {
 
-  def props(store: Store, keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef, statsManager: ActorRef) = {
-    Props(classOf[EventWriter], store, keyspace, sinkBus, fieldManager, statsManager)
+  def props(settings: CassandraSinkSettings, keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef, statsManager: ActorRef) = {
+    Props(classOf[EventWriter], settings, keyspace, sinkBus, fieldManager, statsManager)
   }
 
   sealed trait Result

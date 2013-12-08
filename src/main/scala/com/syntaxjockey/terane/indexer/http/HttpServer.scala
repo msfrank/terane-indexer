@@ -55,7 +55,7 @@ import reflect.ClassTag
  * HttpServer is responsible for listening on the HTTP port, accepting connections,
  * and handing them over to the ApiService for processing.
  */
-class HttpServer(val settings: HttpSettings, val eventRouter: ActorRef) extends Actor with ApiService with ActorLogging {
+class HttpServer(val supervisor: ActorRef, val settings: HttpSettings) extends Actor with ApiService with ActorLogging {
 
   val timeout: Timeout = settings.requestTimeout
 
@@ -74,7 +74,7 @@ class HttpServer(val settings: HttpSettings, val eventRouter: ActorRef) extends 
 }
 
 object HttpServer {
-  def props(settings: HttpSettings, eventRouter: ActorRef) = Props(classOf[HttpServer], settings, eventRouter)
+  def props(supervisor: ActorRef, settings: HttpSettings) = Props(classOf[HttpServer], supervisor, settings)
 }
 
 /**
@@ -89,7 +89,7 @@ trait ApiService extends HttpService {
   val settings: HttpSettings
 
   implicit def log: LoggingAdapter
-  implicit def eventRouter: ActorRef
+  implicit def supervisor: ActorRef
   implicit def executionContext = actorRefFactory.dispatcher
   implicit val timeout: Timeout
 
@@ -128,7 +128,7 @@ trait ApiService extends HttpService {
           entity(as[CreateQuery]) { case createQuery: CreateQuery =>
             complete {
               log.debug("creating query")
-              eventRouter.ask(createQuery).map {
+              supervisor.ask(createQuery).map {
                 case createdQuery: CreatedQuery =>
                   HttpResponse(StatusCodes.Created,
                     JsonBody(createdQuery.toJson),
@@ -196,7 +196,7 @@ trait ApiService extends HttpService {
         get { parameters("name" ?) {
           case Some(name) =>
             hostName { hostname => complete {
-              eventRouter.ask(FindStore(name)).map {
+              supervisor.ask(FindStore(name)).map {
                 case storeStatistics: StoreStatistics =>
                   HttpResponse(StatusCodes.SeeOther,
                     JsonBody(storeStatistics.toJson),
@@ -207,7 +207,7 @@ trait ApiService extends HttpService {
             }}
           case _ =>
             complete {
-              eventRouter.ask(EnumerateStores).map {
+              supervisor.ask(EnumerateStores).map {
                 case enumeratedStores: EnumeratedStores =>
                   enumeratedStores
                 case failure: ApiFailure =>
@@ -219,7 +219,7 @@ trait ApiService extends HttpService {
           hostName { hostname =>
             entity(as[CreateStore]) { case createStore: CreateStore =>
               complete {
-                eventRouter.ask(createStore).map {
+                supervisor.ask(createStore).map {
                   case CreatedStore(op, store) =>
                     HttpResponse(StatusCodes.Created,
                       JsonBody(store.toJson),
@@ -237,7 +237,7 @@ trait ApiService extends HttpService {
       pathEndOrSingleSlash {
         get {
           complete {
-            eventRouter.ask(DescribeStore(id)).map {
+            supervisor.ask(DescribeStore(id)).map {
               case storeStatistics: StoreStatistics =>
                 storeStatistics
               case failure: ApiFailure =>
@@ -247,7 +247,7 @@ trait ApiService extends HttpService {
         } ~
         delete {
           complete {
-            eventRouter.ask(DeleteStore(id)).map {
+            supervisor.ask(DeleteStore(id)).map {
               case failure: ApiFailure =>
                 throw new ApiException(failure)
               case _ => StatusCodes.OK

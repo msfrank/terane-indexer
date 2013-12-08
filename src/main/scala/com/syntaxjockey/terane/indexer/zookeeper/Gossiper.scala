@@ -21,14 +21,14 @@ package com.syntaxjockey.terane.indexer.zookeeper
 
 import akka.actor._
 import akka.cluster.Cluster
-import com.netflix.curator.framework.CuratorFramework
-import com.netflix.curator.framework.state.ConnectionState
-import com.netflix.curator.x.discovery.{ServiceCache, ServiceInstance, ServiceDiscoveryBuilder}
-import com.netflix.curator.x.discovery.details.ServiceCacheListener
-import scala.concurrent.duration.{FiniteDuration, Duration}
+import org.apache.curator.framework.CuratorFramework
+import org.apache.curator.framework.state.ConnectionState
+import org.apache.curator.x.discovery.{ServiceCache, ServiceInstance, ServiceDiscoveryBuilder}
+import org.apache.curator.x.discovery.details.ServiceCacheListener
+import scala.concurrent.duration.FiniteDuration
 import scala.collection.JavaConversions._
-import java.util.UUID
 import scala.util.Random
+
 import com.syntaxjockey.terane.indexer.IndexerConfig
 
 /**

@@ -20,24 +20,20 @@
 package com.syntaxjockey.terane.indexer.zookeeper
 
 import akka.actor.{ActorRef, Actor, ActorLogging, Props}
-import com.netflix.curator.framework.CuratorFramework
-import com.netflix.curator.framework.state.{ConnectionStateListener, ConnectionState}
-import com.netflix.curator.framework.api.UnhandledErrorListener
+import org.apache.curator.framework.CuratorFramework
+import org.apache.curator.framework.state.{ConnectionStateListener, ConnectionState}
+import org.apache.curator.framework.api.UnhandledErrorListener
 
 class ZookeeperListener(manager: ActorRef) extends ConnectionStateListener with UnhandledErrorListener {
-  import ZookeeperManager._
-
   def stateChanged(client: CuratorFramework, newState: ConnectionState) {
     manager ! StateChanged(newState)
   }
-
   def unhandledError(message: String, reason: Throwable) {
     manager ! UnhandledError(message, reason)
   }
 }
 
 class ZookeeperManager(client: CuratorFramework) extends Actor with ActorLogging {
-  import ZookeeperManager._
 
   log.debug("started zookeeper manager")
 

@@ -36,7 +36,7 @@ class IndexerConfigExtension(system: ActorSystem) extends Extension {
     /* parse sinks settings */
     val sinkSettings: Map[String,SinkSettings] = if (config.hasPath("sinks")) {
       config.getConfig("sinks").root().map { case (name: String, configValue: ConfigValue) =>
-        name -> SinkSettings.parse(configValue.asInstanceOf[ConfigObject].toConfig)
+        name -> SinkSettings.parse(name, configValue.asInstanceOf[ConfigObject].toConfig)
       }.toMap
     } else Map.empty
 

@@ -20,8 +20,6 @@
 package com.syntaxjockey.terane.indexer.cassandra
 
 import com.netflix.astyanax.{Keyspace, Cluster}
-import com.netflix.astyanax.connectionpool.OperationResult
-import com.netflix.astyanax.ddl.SchemaChangeResult
 
 trait CassandraKeyspaceOperations {
 
@@ -41,7 +39,7 @@ trait CassandraKeyspaceOperations {
    * @param keyspaceName
    * @return
    */
-  def createKeyspace(keyspaceName: String): OperationResult[SchemaChangeResult] = {
+  def createKeyspace(keyspaceName: String): Keyspace = {
     val opts = new java.util.HashMap[String,String]()
     opts.put("replication_factor", "1")
     val ksDef = cluster.makeKeyspaceDefinition()
@@ -57,6 +55,7 @@ trait CassandraKeyspaceOperations {
       .setKeyValidationClass("UUIDType")
       .setComparatorType("UTF8Type"))
     cluster.addKeyspace(ksDef)
+    cluster.getKeyspace(keyspaceName)
   }
 
 }

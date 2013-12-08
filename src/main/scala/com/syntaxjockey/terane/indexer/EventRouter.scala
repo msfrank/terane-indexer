@@ -20,98 +20,61 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
-import com.typesafe.config.ConfigValueType
-import scala.Some
-import scala.collection.JavaConversions._
 
 import com.syntaxjockey.terane.indexer.bier.BierEvent
-import com.syntaxjockey.terane.indexer.metadata.{Store, StoreManager}
-import com.syntaxjockey.terane.indexer.sink.{CassandraSinkSettings, SinkSettings, CassandraSink}
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 
-class EventRouter extends Actor with ActorLogging with Instrumented {
-  import EventRouter._
-  import StoreManager._
+/**
+ * The EventRouter is a second-level actor (underneath ClusterSupervisor) which
+ * is responsible for receiving events and routing them to the appropriate sink(s).
+ * The routing policy is defined by a sequence of routes, which consist of one or
+ * more match statements.  Each event is always compared against every route.
+ */
+class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Instrumented {
 
-  val storeManager = context.actorOf(Props[StoreManager], "store-manager")
+  val settings = IndexerConfig(context.system).settings
 
   // state
-  var storesById = Map.empty[String,Store]
-  var storesByName = Map.empty[String,Store]
-  val sinksByName = scala.collection.mutable.HashMap[String,ActorRef]()
+  var sinkMap = SinkMap(Map.empty, Map.empty)
+
+  // subscribe to SinkMap changes
+  context.system.eventStream.subscribe(self, classOf[SinkMap])
 
   override def preStart() {
-    /* make sure all specified sinks have been created */
-    IndexerConfig(context.system).settings.sinks.map { case (name: String, sinkSettings: SinkSettings) =>
-      sinkSettings match {
-        case cassandraSinkSettings: CassandraSinkSettings =>
-          storeManager ! CreateStore(name)
-      }
-    }
+    /* create any locally-defined routes */
+
+    /* get the current sinks */
+    context.system.eventStream.publish(SinkBroadcastOperation(self, EnumerateSinks))
   }
 
   def receive = {
 
     /* a new store was created */
-    case StoreMap(_storesById, _storesByName) =>
-      // remove any dropped stores
-      storesById.values.filter(store => !_storesById.contains(store.id)).foreach { store =>
-        for (sink <- sinksByName.remove(store.name)) {
-          log.debug("terminating sink {} for store {}", sink.path.name, store.name)
-          sink ! PoisonPill
-        }
-      }
-      // add any created stores
-      _storesById.values.filter(store => !storesById.contains(store.id)).foreach { store =>
-        val sink = context.actorOf(CassandraSink.props(store), "sink-" + store.id)
-        sinksByName.put(store.name, sink)
-        log.debug("creating sink {} for store {}", sink.path.name, store.name)
-      }
-      storesById = _storesById
-      storesByName = _storesByName
+    case _sinkMap: SinkMap =>
+      sinkMap = _sinkMap
 
     /* store event in the appropriate sink */
-    case StoreEvent(store, event) =>
-      for (sink <- sinksByName.get(store))
-        sink ! event
-
-    /* create a new query */
-    case createQuery: CreateQuery =>
-      sinksByName.get(createQuery.store) match {
-        case Some(sink) =>
-          sink forward createQuery
-        case None =>
-          sender ! new Exception("no such store " + createQuery.store)
-      }
-
-    /* create a new store, if it doesn't exist already */
-    case EnumerateStores =>
-      storeManager forward EnumerateStores
-
-    /* create a new store, if it doesn't exist already */
-    case createStore: CreateStore =>
-      storeManager forward createStore
-
-    /* delete a store, if it exists */
-    case deleteStore: DeleteStore =>
-      storeManager forward deleteStore
-
-    /* describe a store, if it exists */
-    case describeStore: DescribeStore =>
-      storeManager forward describeStore
-
-    /* find a store */
-    case findStore: FindStore =>
-      storeManager forward findStore
+    case event: BierEvent =>
+      sinkMap.sinksById.values.foreach(sink => sink.actor ! event)
   }
 }
 
 object EventRouter {
 
-  def props() = Props[EventRouter]
+  def props(supervisor: ActorRef) = Props(classOf[EventRouter], supervisor)
 
   case class StoreEvent(store: String, event: BierEvent)
 }
+
+case class Route(id: String, name: String, target: Sink, matches: Seq[MatchStatement])
+
+sealed trait MatchStatement
+object MatchesAll extends MatchStatement {
+  def apply(event: BierEvent) = true
+}
+class MatchesTag(tag: String) {
+  def apply(event: BierEvent): Boolean = event.tags.contains(tag)
+}
+
 
 /**
  * abstract base class for all API failures.

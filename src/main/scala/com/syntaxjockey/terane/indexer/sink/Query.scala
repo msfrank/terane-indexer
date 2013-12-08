@@ -56,7 +56,7 @@ import java.util.concurrent.TimeUnit
  *  4) fulfill GetEvents requests from the ApiService.
  *  5) eventually delete the temp file.
  */
-class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
+class Query(id: UUID, createQuery: CreateQuery, settings: CassandraSinkSettings, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
   import scala.language.postfixOps
   import Query._
   import context.dispatcher
@@ -338,8 +338,8 @@ class Query(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace
 
 object Query {
 
-  def props(id: UUID, createQuery: CreateQuery, store: Store, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) = {
-    Props(classOf[Query], id, createQuery, store, keyspace, fields, stats)
+  def props(id: UUID, createQuery: CreateQuery, settings: CassandraSinkSettings, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) = {
+    Props(classOf[Query], id, createQuery, settings, keyspace, fields, stats)
   }
 
   /**

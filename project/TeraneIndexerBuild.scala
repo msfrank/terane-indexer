@@ -9,9 +9,9 @@ object TeraneIndexerBuild extends Build {
   val teraneVersion = "0.1"
 
   val akkaVersion = "2.2.3"
-  val sprayVersion = "1.2-RC4"
+  val sprayVersion = "1.2.0"
   val astyanaxVersion = "1.56.44"
-  val curatorVersion = "1.3.3"
+  val curatorVersion = "2.3.0"
 
   lazy val teraneIndexerBuild = Project(
     id = "terane-indexer",
@@ -35,8 +35,8 @@ object TeraneIndexerBuild extends Build {
         "com.netflix.astyanax" % "astyanax-core" % astyanaxVersion,
         "com.netflix.astyanax" % "astyanax-thrift" % astyanaxVersion,
         "com.netflix.astyanax" % "astyanax-cassandra" % astyanaxVersion,
-        "com.netflix.curator" % "curator-recipes" % curatorVersion,
-        "com.netflix.curator" % "curator-x-discovery" % curatorVersion,
+        "org.apache.curator" % "curator-recipes" % curatorVersion,
+        "org.apache.curator" % "curator-x-discovery" % curatorVersion,
         "io.spray" % "spray-can" % sprayVersion,
         "io.spray" % "spray-routing" % sprayVersion,
         "io.spray" %% "spray-json" % "1.2.5",

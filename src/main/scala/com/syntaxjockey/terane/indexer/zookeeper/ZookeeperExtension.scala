@@ -21,9 +21,8 @@ package com.syntaxjockey.terane.indexer.zookeeper
 
 import akka.actor._
 import org.slf4j.LoggerFactory
-import com.netflix.curator.retry.ExponentialBackoffRetry
-import com.netflix.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
-import scala.collection.JavaConversions._
+import org.apache.curator.retry.ExponentialBackoffRetry
+import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import java.nio.charset.Charset
 import com.syntaxjockey.terane.indexer.IndexerConfig
 

@@ -41,7 +41,7 @@ import scala.util.Random
  * StatsManager handles store, field and posting statistics, which are used for
  * (among other things) calculation of sub-query costs in the query planner.
  */
-class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef) extends Actor with ActorLogging {
+class StatsManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef) extends Actor with ActorLogging {
   import StatsManager._
   import FieldManager._
   import context.dispatcher
@@ -157,8 +157,8 @@ class StatsManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus, field
 
 object StatsManager {
 
-  def props(store: Store, keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef) = {
-    Props(classOf[StatsManager], store, keyspace, sinkBus, fieldManager)
+  def props(settings: CassandraSinkSettings, keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef) = {
+    Props(classOf[StatsManager], settings, keyspace, sinkBus, fieldManager)
   }
 
   /**

@@ -20,27 +20,28 @@
 package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor._
+import akka.pattern.pipe
 import akka.event.{SubchannelClassification, ActorEventBus}
 import akka.util.Subclassification
+import org.apache.curator.framework.CuratorFramework
+import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.{StringSerializer, SetSerializer, UUIDSerializer}
 import org.apache.cassandra.db.marshal.Int32Type
-import scala.concurrent.duration._
+import scala.concurrent.Future
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
-import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
-import com.syntaxjockey.terane.indexer.RetryLater
-import com.syntaxjockey.terane.indexer.Instrumented
+import com.syntaxjockey.terane.indexer.{SinkManager, UUIDLike, RetryLater, Instrumented}
+import com.syntaxjockey.terane.indexer.UUIDLike._
 
 /**
  * CassandraSink is the parent actor for all activity for a particular sink,
  * such as querying and writing events.
  */
-class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorLogging with CassandraKeyspaceOperations with Instrumented {
+class CassandraSink(id: UUID, settings: CassandraSinkSettings, zookeeper: CuratorFramework) extends Actor with FSM[State,Data] with ActorLogging with CassandraKeyspaceOperations with Instrumented {
   import CassandraSink._
   import FieldManager._
   import StatsManager._
@@ -56,13 +57,7 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   val eventBufferSize = metrics.counter("event-buffer-size")
   val queriesCreated = metrics.meter("queries-created", "queries")
 
-  // config
-  val config = context.system.settings.config.getConfig("terane.cassandra")
-  val flushInterval = Duration(config.getMilliseconds("flush-interval"), TimeUnit.MILLISECONDS)
-
-  // state
   val cluster = Cassandra(context.system).cluster
-  val keyspace = getKeyspace(store.id)
 
   val sinkBus = new SinkBus()
   sinkBus.subscribe(self, classOf[FieldNotification])
@@ -71,17 +66,32 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   var currentFields = FieldMap(Map.empty, Map.empty)
   var currentStats = StatsMap(Map.empty)
 
-  val fieldManager = context.actorOf(FieldManager.props(store, keyspace, sinkBus), "field-manager")
-  val statsManager = context.actorOf(StatsManager.props(store, keyspace, sinkBus, fieldManager), "stats-manager")
-  val writers = context.actorOf(EventWriter.props(store, keyspace, sinkBus, fieldManager, statsManager), "writer")
+  startWith(Unconnected, UnconnectedBuffer(Seq.empty))
 
-  startWith(Connected, EventBuffer(Seq.empty, None))
-  self ! FlushRetries
-
-  log.debug("started {}", self.path.name)
-
-  /* when unconnected we buffer events until reconnection occurs */
+  /* when unconnected we wait for command to create or get the keyspace */
   when(Unconnected) {
+    case Event(SinkManager.Open, UnconnectedBuffer(retries)) =>
+      Future(ConnectedToKeyspace(getKeyspace(UUIDLike(id)))).recover {case ex => SinkManager.Failure(ex)} pipeTo self
+      goto(Connecting) using ConnectingBuffer(retries, Some(sender))
+    case Event(SinkManager.Create, UnconnectedBuffer(retries)) =>
+      Future(ConnectedToKeyspace(createKeyspace(UUIDLike(id)))).recover {case ex => SinkManager.Failure(ex)} pipeTo self
+      goto(Connecting) using ConnectingBuffer(retries, Some(sender))
+  }
+
+  /* when connecting we buffer events until reconnection occurs */
+  when(Connecting) {
+
+    case Event(ConnectedToKeyspace(keyspace), ConnectingBuffer(retries, initiator)) =>
+      val fields = context.actorOf(FieldManager.props(settings, keyspace, sinkBus), "field-manager")
+      val stats = context.actorOf(StatsManager.props(settings, keyspace, sinkBus, fields), "stats-manager")
+      val writers = context.actorOf(EventWriter.props(settings, keyspace, sinkBus, fields, stats), "writer")
+      initiator.foreach(_ ! SinkManager.Done)
+      goto(Connected) using EventBuffer(keyspace, writers, fields, stats, retries, None)
+
+    /* getKeyspace or createKeyspace failed */
+    case Event(failure: SinkManager.Failure, ConnectingBuffer(retries, initiator)) =>
+      initiator.foreach(_ ! failure)
+      goto(Unconnected) using UnconnectedBuffer(retries)
 
     case Event(fieldsChanged: FieldMap, _) =>
       currentFields = fieldsChanged
@@ -109,10 +119,6 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
     case Event(FlushRetries, _) =>
       stay()
 
-    case Event(Connected, UnconnectedBuffer(retries)) =>
-      self ! FlushRetries
-      goto(Connected) using EventBuffer(retries, None)
-
     case Event(_: WroteEvent, _) =>
       eventsWritten.mark()
       stay()
@@ -132,12 +138,12 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
       currentStats = statsChanged
       stay()
 
-    case Event(event: BierEvent, EventBuffer(retries, scheduledFlush)) =>
+    case Event(event: BierEvent, eventBuffer: EventBuffer) =>
       eventsReceived.mark()
-      writers ! StoreEvent(event, 1)
+      eventBuffer.writers ! StoreEvent(event, 1)
       stay()
 
-    case Event(retry: RetryEvent, EventBuffer(retries, scheduledFlush)) =>
+    case Event(retry: RetryEvent, EventBuffer(keyspace, writers, fields, stats, retries, scheduledFlush)) =>
       retry.attempt match {
         case 1 => retriesOnce.mark()
         case 2 => retriesTwice.mark()
@@ -145,17 +151,17 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
         case n => pathologicalRetries.mark()
       }
       eventBufferSize.inc()
-      stay() using EventBuffer(retry +: retries, scheduledFlush)
+      stay() using EventBuffer(keyspace, writers, fields, stats, retry +: retries, scheduledFlush)
 
-    case Event(FlushRetries, EventBuffer(retries, _)) =>
+    case Event(FlushRetries, EventBuffer(keyspace, writers, fields, stats, retries, _)) =>
       retries.foreach(retry => writers ! StoreEvent(retry.event, retry.attempt))
-      val scheduledFlush = context.system.scheduler.scheduleOnce(flushInterval, self, FlushRetries)
+      val scheduledFlush = context.system.scheduler.scheduleOnce(settings.flushInterval, self, FlushRetries)
       eventBufferSize.dec(retries.length)
-      stay() using EventBuffer(Seq.empty, Some(scheduledFlush))
+      stay() using EventBuffer(keyspace, writers, fields, stats, Seq.empty, Some(scheduledFlush))
 
-    case Event(createQuery: CreateQuery, _) =>
+    case Event(createQuery: CreateQuery, eventBuffer: EventBuffer) =>
       val id = UUID.randomUUID()
-      context.system.actorOf(Query.props(id, createQuery, store, keyspace, currentFields, currentStats), "query-" + id.toString)
+      context.system.actorOf(Query.props(id, createQuery, settings, eventBuffer.keyspace, currentFields, currentStats), "query-" + id.toString)
       queriesCreated.mark()
       sender ! CreatedQuery(id)
       stay()
@@ -166,15 +172,17 @@ class CassandraSink(store: Store) extends Actor with FSM[State,Data] with ActorL
   }
 
   initialize()
+
 }
 
 object CassandraSink {
 
-  def props(store: Store) = Props(classOf[CassandraSink], store)
+  def props(id: UUID, settings: CassandraSinkSettings, zookeeper: CuratorFramework) = Props(classOf[CassandraSink], id, settings, zookeeper)
 
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
   val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
 
+  case class ConnectedToKeyspace(keyspace: Keyspace)
   case class StoreEvent(event: BierEvent, attempt: Int)
   case class RetryEvent(event: BierEvent, attempt: Int)
   case class WroteEvent(event: BierEvent)
@@ -185,11 +193,13 @@ object CassandraSink {
 
   sealed trait State
   case object Unconnected extends State
+  case object Connecting extends State
   case object Connected extends State
 
   sealed trait Data
-  case class EventBuffer(events: Seq[RetryEvent], scheduledFlush: Option[Cancellable]) extends Data
+  case class EventBuffer(keyspace: Keyspace, writers: ActorRef, fields: ActorRef, stats: ActorRef, events: Seq[RetryEvent], scheduledFlush: Option[Cancellable]) extends Data
   case class UnconnectedBuffer(events: Seq[RetryEvent]) extends Data
+  case class ConnectingBuffer(events: Seq[RetryEvent], initiator: Option[ActorRef]) extends Data
 }
 
 /**

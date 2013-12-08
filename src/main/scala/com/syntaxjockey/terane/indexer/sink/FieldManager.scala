@@ -26,7 +26,7 @@ import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.LongSerializer
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.ddl.SchemaChangeResult
-import com.netflix.curator.framework.recipes.locks.InterProcessReadWriteLock
+import org.apache.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
 import org.joda.time.{DateTimeZone, DateTime}
 import scala.concurrent.Future
@@ -51,7 +51,7 @@ import java.lang
  *          - "created" -> Long
  *
  */
-class FieldManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
+class FieldManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
   import FieldManager._
   import UUIDLike._
 
@@ -236,8 +236,8 @@ class FieldManager(store: Store, val keyspace: Keyspace, sinkBus: SinkBus) exten
 
 object FieldManager {
 
-  def props(store: Store, keyspace: Keyspace, sinkBus: SinkBus) = {
-    Props(classOf[FieldManager], store, keyspace, sinkBus)
+  def props(settings: CassandraSinkSettings, keyspace: Keyspace, sinkBus: SinkBus) = {
+    Props(classOf[FieldManager], settings, keyspace, sinkBus)
   }
 
   case object GetFields
