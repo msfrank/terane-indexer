@@ -1,3 +1,22 @@
+/**
+ * Copyright 2013 Michael Frank <msfrank@syntaxjockey.com>
+ *
+ * This file is part of Terane.
+ *
+ * Terane is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Terane is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Terane.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
@@ -20,7 +39,7 @@ import java.util.UUID
 /**
  * Top level supervisor actor.
  */
-class ClusterSupervisor extends Actor with ActorLogging with LoggingFSM[ClusterState,ClusterData] {
+class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,ClusterData] {
 
   val settings = IndexerConfig(context.system).settings
 
@@ -96,7 +115,7 @@ class ClusterSupervisor extends Actor with ActorLogging with LoggingFSM[ClusterS
       else
         goto(ClusterWorker) using ClusterUp(state)
     case Event(event: ClusterDomainEvent, _) =>
-      stay()  // ignore event
+      stay()  // ignore other cluster domain events
   }
 
   onTransition {
@@ -121,6 +140,8 @@ class ClusterSupervisor extends Actor with ActorLogging with LoggingFSM[ClusterS
     case Event(LeaderOperation(caller, op), _) =>
       self.tell(op, caller)
       stay()
+    case Event(event: ClusterDomainEvent, _) =>
+      stay()  // ignore other cluster domain events
   }
 
   onTransition {
@@ -142,8 +163,14 @@ class ClusterSupervisor extends Actor with ActorLogging with LoggingFSM[ClusterS
     case Event(op: SinkOperation with CanPerformAnywhere, _) =>
       sinks forward op
       stay()
+    case Event(op: LeaderOperation, ClusterUp(state)) =>
+      val selection = context.actorSelection(self.path.toStringWithAddress(state.leader.get))
+      selection ! op
+      stay()
     case Event(op: ClusterOperation, ClusterUp(state)) =>
       stay() replying NodeIsNotLeader(op, state.leader.get)
+    case Event(event: ClusterDomainEvent, _) =>
+      stay()  // ignore other cluster domain events
   }
 
   initialize()

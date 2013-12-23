@@ -42,13 +42,12 @@ class EventWriter(settings: CassandraSinkSettings, val keyspace: Keyspace, sinkB
   import FieldManager._
   import StatsManager._
 
+  // state
   var fieldsById: Map[FieldIdentifier,CassandraField] = Map.empty
-  sinkBus.subscribe(self, classOf[FieldNotification])
-  fieldManager ! GetFields
-
   var statsByCf: Map[String,Agent[FieldStatistics]] = Map.empty
+
+  sinkBus.subscribe(self, classOf[FieldNotification])
   sinkBus.subscribe(self, classOf[StatsNotification])
-  statsManager ! GetStats
 
   def receive = {
 

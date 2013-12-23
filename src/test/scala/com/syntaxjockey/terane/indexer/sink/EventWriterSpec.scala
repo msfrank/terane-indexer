@@ -55,9 +55,9 @@ class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with 
     val client = getCassandraClient
     val id = "test_" + new UUIDLike(UUID.randomUUID()).toString
     val keyspace = createKeyspace(client, id)
-    val store = Store(id, id, DateTime.now())
+    val settings = CassandraSinkSettings(id, 5.seconds)
     val writer = system.actorOf(Props(new Actor {
-      val child = context.actorOf(Props(new EventWriter(store, keyspace, new SinkBus(), testActor, testActor)), "writer_" + id)
+      val child = context.actorOf(EventWriter.props(settings, keyspace, new SinkBus(), testActor, testActor), "writer_" + id)
       def receive = {
         case x if this.sender == child => testActor forward x
         case x => child forward x

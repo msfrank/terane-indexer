@@ -36,29 +36,30 @@ import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 import com.syntaxjockey.terane.indexer.zookeeper.{Gossip, RequestGossip, Gossiper}
 import com.syntaxjockey.terane.indexer.cassandra.{Serializers, MetaKey}
 import scala.util.Random
+import org.apache.curator.framework.CuratorFramework
+import com.syntaxjockey.terane.indexer.IndexerConfig
 
 /**
  * StatsManager handles store, field and posting statistics, which are used for
  * (among other things) calculation of sub-query costs in the query planner.
  */
-class StatsManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef) extends Actor with ActorLogging {
+class StatsManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework, keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging {
   import StatsManager._
   import FieldManager._
   import context.dispatcher
 
   // config
-  val servicesPath = "/stores/" + store.name + "/services"
-  val nodeId = UUID.randomUUID()  // FIXME: get real node id
-  val gossiper = context.actorOf(Gossiper.props("stats", servicesPath, 60.seconds), "gossip")
+  val nodeId = IndexerConfig(context.system).settings.nodeId
   val ttl = 0
 
   // state
   var currentStats = StatsMap(Map.empty)
   var fieldsByCf: Map[String,CassandraField] = Map.empty
 
+  val gossiper = context.actorOf(Gossiper.props(zookeeper, "/stats", "stats", 60 seconds), "gossip")
+
   /* register to be notified of field changes */
   sinkBus.subscribe(self, classOf[FieldNotification])
-  fieldManager ! GetFields
 
   def receive = {
 
@@ -157,8 +158,8 @@ class StatsManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sink
 
 object StatsManager {
 
-  def props(settings: CassandraSinkSettings, keyspace: Keyspace, sinkBus: SinkBus, fieldManager: ActorRef) = {
-    Props(classOf[StatsManager], settings, keyspace, sinkBus, fieldManager)
+  def props(settings: CassandraSinkSettings, zookeeper: CuratorFramework, keyspace: Keyspace, sinkBus: SinkBus) = {
+    Props(classOf[StatsManager], settings, zookeeper, keyspace, sinkBus)
   }
 
   /**

@@ -21,53 +21,42 @@ package com.syntaxjockey.terane.indexer.sink
 
 import akka.actor.{Props, Actor, ActorLogging}
 import akka.pattern.pipe
-import akka.actor.Status.Failure
 import com.netflix.astyanax.model.ColumnFamily
-import com.netflix.astyanax.serializers.LongSerializer
+import com.netflix.astyanax.serializers.{StringSerializer, LongSerializer}
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.ddl.SchemaChangeResult
+import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.locks.InterProcessReadWriteLock
 import org.apache.zookeeper.data.Stat
 import org.joda.time.{DateTimeZone, DateTime}
 import scala.concurrent.Future
 import scala.collection.JavaConversions._
+import scala.util.Failure
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.cassandra._
 import com.syntaxjockey.terane.indexer.zookeeper._
-import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.UUIDLike
-import java.lang
 
 /**
- *
- *  + namespace: String
- *  + "stores"
- *    + store: String -> id: UUIDLike
- *      + "fields"
- *        + fieldTypeAndName: String -> id: UUIDLike
- *          - "created" -> Long
- *
+ * FieldManager is responsible for creating and deleting fields
  */
-class FieldManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
+class FieldManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
   import FieldManager._
   import UUIDLike._
 
   import context.dispatcher
 
-  val zk = Zookeeper(context.system).client
-
+  // config
   val shardingFactor = 3
+
+  // state
   var currentFields = FieldMap(Map.empty, Map.empty)
   var creatingFields: Set[FieldIdentifier] = Set.empty
   var changingFields: Set[FieldIdentifier] = Set.empty
   var removingFields: Set[FieldIdentifier] = Set.empty
-
-  getFields pipeTo self
-
-  log.debug("started {}", self.path.name)
 
   def receive = {
 
@@ -105,18 +94,18 @@ class FieldManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sink
    * @return
    */
   def getFields = Future[FieldMap] {
-    val basepath = "/stores/" + store.name + "/fields"
-    val znodes = zk.getChildren.forPath(basepath)
+    val basepath = "/fields"
+    val znodes = zookeeper.getChildren.forPath(basepath)
     log.debug("found {} fields in {}", znodes.length, basepath)
     znodes.foldLeft(FieldMap(Map.empty, Map.empty)) {
       (fieldsChanged, fieldNode) =>
       val FieldMap(fieldsByIdent, fieldsByCf) = fieldsChanged
       val fieldPath = basepath + "/" + fieldNode
-      val id = new String(zk.getData.forPath(fieldPath), Zookeeper.UTF_8_CHARSET)
+      val id = new String(zookeeper.getData.forPath(fieldPath), Zookeeper.UTF_8_CHARSET)
       val fieldNodeParts = fieldNode.split(":", 2)
       val fieldType = DataType.withName(fieldNodeParts(0))
       val fieldName = fieldNodeParts(1)
-      val createdString = new String(zk.getData.forPath(fieldPath + "/created"), Zookeeper.UTF_8_CHARSET)
+      val createdString = new String(zookeeper.getData.forPath(fieldPath + "/created"), Zookeeper.UTF_8_CHARSET)
       val created = new DateTime(createdString.toLong, DateTimeZone.UTC)
       val fieldId = FieldIdentifier(fieldName, fieldType)
       if (fieldsByIdent.contains(fieldId))
@@ -165,16 +154,16 @@ class FieldManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sink
    */
   def createField(op: CreateField) = Future[FieldModificationResult] {
     val fieldId = op.fieldId
-    val path = "/stores/" + store.name + "/fields/" + fieldId.fieldType.toString + ":" + fieldId.fieldName
+    val path = "/fields/" + fieldId.fieldType.toString + ":" + fieldId.fieldName
     val id: UUIDLike = UUID.randomUUID()
     val created = DateTime.now(DateTimeZone.UTC)
     /* lock field */
-    val lock = new InterProcessReadWriteLock(zk, "/lock" + path)
+    val lock = new InterProcessReadWriteLock(zookeeper, "/lock" + path)
     val writeLock = lock.writeLock()
     writeLock.acquire()
     try {
       /* check whether field already exists */
-      zk.checkExists().forPath(path) match {
+      zookeeper.checkExists().forPath(path) match {
         case stat: Stat =>
           // FIXME: return field if it already exists
           throw new Exception("field already exists")
@@ -212,13 +201,13 @@ class FieldManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sink
           }
           try {
             /* create the field in zookeeper */
-            zk.inTransaction()
+            zookeeper.inTransaction()
               .create().forPath(path, id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
               .and()
               .create().forPath(path + "/created", created.getMillis.toString.getBytes(Zookeeper.UTF_8_CHARSET))
               .and()
               .commit()
-            log.debug("created field {}:{} in store {}", fieldId.fieldName, fieldId.fieldType.toString, store.name)
+            log.debug("created field {}:{}", fieldId.fieldName, fieldId.fieldType.toString)
             result
           } finally {
             /* FIXME: delete the field in cassandra */
@@ -236,9 +225,11 @@ class FieldManager(settings: CassandraSinkSettings, val keyspace: Keyspace, sink
 
 object FieldManager {
 
-  def props(settings: CassandraSinkSettings, keyspace: Keyspace, sinkBus: SinkBus) = {
-    Props(classOf[FieldManager], settings, keyspace, sinkBus)
+  def props(settings: CassandraSinkSettings, zookeeper: CuratorFramework, keyspace: Keyspace, sinkBus: SinkBus) = {
+    Props(classOf[FieldManager], settings, zookeeper, keyspace, sinkBus)
   }
+
+  val CF_FIELDS = new ColumnFamily[String,MetaKey]("meta", StringSerializer.get(), Serializers.Meta)
 
   case object GetFields
 

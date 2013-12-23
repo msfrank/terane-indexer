@@ -82,9 +82,9 @@ class CassandraSink(id: UUID, settings: CassandraSinkSettings, zookeeper: Curato
   when(Connecting) {
 
     case Event(ConnectedToKeyspace(keyspace), ConnectingBuffer(retries, initiator)) =>
-      val fields = context.actorOf(FieldManager.props(settings, keyspace, sinkBus), "field-manager")
-      val stats = context.actorOf(StatsManager.props(settings, keyspace, sinkBus, fields), "stats-manager")
-      val writers = context.actorOf(EventWriter.props(settings, keyspace, sinkBus, fields, stats), "writer")
+      val fields = context.actorOf(FieldManager.props(settings, zookeeper, keyspace, sinkBus))
+      val stats = context.actorOf(StatsManager.props(settings, zookeeper, keyspace, sinkBus))
+      val writers = context.actorOf(EventWriter.props(settings, keyspace, sinkBus, fields, stats))
       initiator.foreach(_ ! SinkManager.Done)
       goto(Connected) using EventBuffer(keyspace, writers, fields, stats, retries, None)
 

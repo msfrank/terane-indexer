@@ -63,6 +63,10 @@ class MetaKey(@Component(ordinal = 0) var metaType: String, @Component(ordinal =
   def this() = this(Serializers.emptyString, Serializers.emptyUUID)
 }
 
+class FieldKey(@Component(ordinal = 0) var fieldType: Int, @Component(ordinal = 1) var fieldName: String, @Component(ordinal = 1) var nodeId: UUID) extends Key with Posting {
+  def this() = this(0, Serializers.emptyString, Serializers.emptyUUID)
+}
+
 object Serializers {
   val emptyString = ""
   val emptyUUID = new UUID(0, 0)
