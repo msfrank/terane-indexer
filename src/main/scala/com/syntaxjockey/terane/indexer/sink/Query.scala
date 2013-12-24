@@ -29,10 +29,10 @@ import org.xbill.DNS.Name
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-import scala.Some
 import scala.collection.JavaConversions._
-import java.util.{Date, UUID}
 import java.net.InetAddress
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers._
@@ -41,9 +41,7 @@ import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, No
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import com.syntaxjockey.terane.indexer.metadata.Store
-import java.util.concurrent.TimeUnit
+import com.syntaxjockey.terane.indexer.CreateQuery
 
 /**
  * The Query actor manages the lifecycle of an individual query.  Query processing

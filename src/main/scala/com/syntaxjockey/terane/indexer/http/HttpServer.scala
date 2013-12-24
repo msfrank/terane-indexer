@@ -29,24 +29,10 @@ import spray.can.Http
 import spray.http._
 import spray.http.HttpHeaders.Location
 import spray.util.LoggingContext
-import akka.util.Timeout._
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.sink.Query._
-import com.syntaxjockey.terane.indexer.metadata.StoreManager._
-import com.syntaxjockey.terane.indexer.sink.CassandraSink._
 import com.syntaxjockey.terane.indexer._
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.StoreStatistics
-import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.DescribeStore
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.CreateStore
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.CreatedStore
-import com.syntaxjockey.terane.indexer.sink.Query.EventSet
-import spray.http.HttpResponse
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.DeleteStore
-import com.syntaxjockey.terane.indexer.sink.Query.QueryStatistics
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreatedQuery
+import com.syntaxjockey.terane.indexer.sink.Query._
 
 // see http://stackoverflow.com/questions/15584328/scala-future-mapto-fails-to-compile-because-of-missing-classtag
 import reflect.ClassTag
@@ -185,45 +171,45 @@ trait ApiService extends HttpService {
     }
   }
 
-  val storeId = PathMatcher("""[a-z0-9]{32}""".r)
+  val sinkId = PathMatcher("""[a-z0-9]{32}""".r)
 
   /**
-   * Spray routes for manipulating stores (create, describe, delete)
+   * Spray routes for manipulating sinks (create, describe, delete)
    */
-  val storesRoutes = {
+  val sinksRoutes = {
     path("1" / "stores") {
       pathEndOrSingleSlash {
         get { parameters("name" ?) {
           case Some(name) =>
             hostName { hostname => complete {
-              supervisor.ask(FindStore(name)).map {
-                case storeStatistics: StoreStatistics =>
+              supervisor.ask(FindSink(name)).map {
+                case SinkRef(_, sink) =>
                   HttpResponse(StatusCodes.SeeOther,
-                    JsonBody(storeStatistics.toJson),
-                    List(Location("http://%s:%d/1/stores/%s".format(hostname, settings.port, storeStatistics.id))))
+                    JsonBody(sink.toJson),
+                    List(Location("http://%s:%d/1/sinks/%s".format(hostname, settings.port, sink.id))))
                 case failure: ApiFailure =>
                   throw new ApiException(failure)
               }.mapTo[HttpResponse]
             }}
           case _ =>
             complete {
-              supervisor.ask(EnumerateStores).map {
-                case enumeratedStores: EnumeratedStores =>
-                  enumeratedStores
+              supervisor.ask(EnumerateSinks).map {
+                case EnumeratedSinks(sinks) =>
+                  sinks.map(_.sink)
                 case failure: ApiFailure =>
                   throw new ApiException(failure)
-              }.mapTo[EnumeratedStores]
+              }.mapTo[Seq[Sink]]
             }
         }} ~
         post {
           hostName { hostname =>
-            entity(as[CreateStore]) { case createStore: CreateStore =>
+            entity(as[CreateSink]) { case createSink: CreateSink =>
               complete {
-                supervisor.ask(createStore).map {
-                  case CreatedStore(op, store) =>
+                supervisor.ask(createSink).map {
+                  case CreatedSink(op, SinkRef(_, sink)) =>
                     HttpResponse(StatusCodes.Created,
-                      JsonBody(store.toJson),
-                      List(Location("http://%s:%d/1/stores/%s".format(hostname, settings.port, store.id))))
+                      JsonBody(sink.toJson),
+                      List(Location("http://%s:%d/1/stores/%s".format(hostname, settings.port, sink.id))))
                   case failure: ApiFailure =>
                     throw new ApiException(failure)
                 }.mapTo[HttpResponse]
@@ -233,21 +219,21 @@ trait ApiService extends HttpService {
         }
       }
     } ~
-    pathPrefix("1" / "stores" / storeId) { case id: String =>
+    pathPrefix("1" / "sinks" / JavaUUID) { case id: UUID =>
       pathEndOrSingleSlash {
         get {
           complete {
-            supervisor.ask(DescribeStore(id)).map {
-              case storeStatistics: StoreStatistics =>
-                storeStatistics
+            supervisor.ask(DescribeSink(id)).map {
+              case SinkRef(_, sink) =>
+                sink
               case failure: ApiFailure =>
                 throw new ApiException(failure)
-            }.mapTo[StoreStatistics]
+            }.mapTo[Sink]
           }
         } ~
         delete {
           complete {
-            supervisor.ask(DeleteStore(id)).map {
+            supervisor.ask(DeleteSink(id)).map {
               case failure: ApiFailure =>
                 throw new ApiException(failure)
               case _ => StatusCodes.OK
@@ -258,7 +244,7 @@ trait ApiService extends HttpService {
     }
   }
 
-  val version1 = queriesRoutes ~ storesRoutes
+  val version1 = queriesRoutes ~ sinksRoutes
 
   val routes =  version1
 }

@@ -28,14 +28,13 @@ import java.io.{DataInput, DataOutput, File}
 import java.net.InetAddress
 import java.util.UUID
 
+import com.syntaxjockey.terane.indexer.CreateQuery
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue}
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.sink.SortingStreamer.{State, Data}
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
-import java.nio.file.Files
 
 class SortingStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fields: FieldMap) extends Streamer(created, fields) with LoggingFSM[State,Data] {
   import SortingStreamer._

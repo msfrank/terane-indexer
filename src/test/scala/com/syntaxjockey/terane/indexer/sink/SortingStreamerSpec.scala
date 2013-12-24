@@ -26,11 +26,11 @@ import org.joda.time.{DateTimeZone, DateTime}
 import scala.Some
 import java.util.UUID
 
+import com.syntaxjockey.terane.indexer.CreateQuery
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink.Query._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.TestCluster
 
 class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSpec with MustMatchers {

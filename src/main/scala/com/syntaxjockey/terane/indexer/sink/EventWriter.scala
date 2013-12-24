@@ -27,7 +27,6 @@ import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier._
-import com.syntaxjockey.terane.indexer.metadata.Store
 import com.syntaxjockey.terane.indexer.cassandra.CassandraRowOperations
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 

@@ -28,19 +28,9 @@ import java.nio.charset.Charset
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
-import com.syntaxjockey.terane.indexer.bier.BierEvent
-import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
-import com.syntaxjockey.terane.indexer.metadata.StoreManager._
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.StoreStatistics
-import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.DescribeStore
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.CreateStore
-import com.syntaxjockey.terane.indexer.metadata.Store
-import com.syntaxjockey.terane.indexer.sink.Query.EventSet
-import com.syntaxjockey.terane.indexer.metadata.StoreManager.DeleteStore
-import com.syntaxjockey.terane.indexer.sink.Query.QueryStatistics
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreatedQuery
+import com.syntaxjockey.terane.indexer._
+import com.syntaxjockey.terane.indexer.bier._
+import com.syntaxjockey.terane.indexer.sink.Query._
 
 object JsonProtocol extends DefaultJsonProtocol {
 
@@ -155,23 +145,17 @@ object JsonProtocol extends DefaultJsonProtocol {
   /* convert GetEvents class */
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
 
-  /* convert Store class */
-  implicit val StoreFormat = jsonFormat3(Store.apply)
+  /* convert Sink class */
+  implicit val SinkFormat = jsonFormat2(Sink.apply)
 
-  /* convert StoreStatistics class */
-  implicit val StoreStatisticsFormat = jsonFormat3(StoreStatistics.apply)
+  /* convert CreateSink class */
+  implicit val CreateSinkFormat = jsonFormat1(CreateSink.apply)
 
-  /* convert EnumeratedStores class */
-  implicit val EnumeratedStoresFormat = jsonFormat1(EnumeratedStores.apply)
+  /* convert DeleteSink class */
+  implicit val DeleteSinkFormat = jsonFormat1(DeleteSink.apply)
 
-  /* convert CreateStore class */
-  implicit val CreateStoreFormat = jsonFormat1(CreateStore.apply)
-
-  /* convert DeleteStore class */
-  implicit val DeleteStoreFormat = jsonFormat1(DeleteStore.apply)
-
-  /* convert CreateStore class */
-  implicit val DescribeStoreFormat = jsonFormat1(DescribeStore.apply)
+  /* convert DescribeSink class */
+  implicit val DescribeSinkFormat = jsonFormat1(DescribeSink.apply)
 
 }
 

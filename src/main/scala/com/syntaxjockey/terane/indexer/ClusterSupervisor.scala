@@ -20,26 +20,25 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
-import akka.cluster.{Member, Cluster}
+import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
 import org.apache.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.concurrent.Future
 import scala.collection.immutable.Seq
 import scala.collection.JavaConversions._
-
-import com.syntaxjockey.terane.indexer.ClusterSupervisor._
-import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
-import com.syntaxjockey.terane.indexer.http.HttpServer
-import com.syntaxjockey.terane.indexer.ClusterSupervisor.ClusterUp
-import scala.Some
-import akka.cluster.ClusterEvent.CurrentClusterState
-import com.syntaxjockey.terane.indexer.sink.SinkSettings
 import java.util.UUID
+
+import com.syntaxjockey.terane.indexer.ClusterSupervisor.{ClusterState,ClusterData}
+import com.syntaxjockey.terane.indexer.http.HttpServer
+import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.sink.SinkSettings
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 
 /**
  * Top level supervisor actor.
  */
 class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,ClusterData] {
+  import ClusterSupervisor._
 
   val settings = IndexerConfig(context.system).settings
 
@@ -218,3 +217,8 @@ case class DeleteSink(id: UUID) extends SinkCommand with MustPerformOnLeader
 case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
 case class FindSink(name: String) extends SinkQuery with CanPerformAnywhere
 case class DescribeSink(id: UUID) extends SinkQuery with CanPerformAnywhere
+
+/*
+ * Query operations
+ */
+case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean])

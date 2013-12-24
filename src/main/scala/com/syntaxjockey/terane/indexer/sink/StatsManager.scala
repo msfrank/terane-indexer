@@ -19,25 +19,24 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{Props, ActorRef, Actor, ActorLogging}
+import akka.actor.{Props, Actor, ActorLogging}
 import akka.agent.Agent
 import com.netflix.astyanax.Keyspace
 import com.netflix.astyanax.model.ColumnFamily
 import com.netflix.astyanax.serializers.StringSerializer
+import org.apache.curator.framework.CuratorFramework
 import com.twitter.algebird.{BF, HLL, CMS}
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
+import scala.util.Random
 import java.io.{ObjectInputStream, ByteArrayInputStream, ObjectOutputStream, ByteArrayOutputStream}
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import com.syntaxjockey.terane.indexer.metadata.Store
+import com.syntaxjockey.terane.indexer.IndexerConfig
 import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 import com.syntaxjockey.terane.indexer.zookeeper.{Gossip, RequestGossip, Gossiper}
 import com.syntaxjockey.terane.indexer.cassandra.{Serializers, MetaKey}
-import scala.util.Random
-import org.apache.curator.framework.CuratorFramework
-import com.syntaxjockey.terane.indexer.IndexerConfig
 
 /**
  * StatsManager handles store, field and posting statistics, which are used for

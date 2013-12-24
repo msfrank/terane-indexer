@@ -31,17 +31,18 @@ import org.apache.cassandra.db.marshal.Int32Type
 import scala.concurrent.Future
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.bier.{BierEvent, FieldIdentifier}
-import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.{State, Data}
-import com.syntaxjockey.terane.indexer.{SinkManager, UUIDLike, RetryLater, Instrumented}
+import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CassandraSinkState, CassandraSinkData}
+import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.UUIDLike._
+import com.syntaxjockey.terane.indexer.bier.BierEvent
+import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
 
 /**
  * CassandraSink is the parent actor for all activity for a particular sink,
  * such as querying and writing events.
  */
-class CassandraSink(id: UUID, settings: CassandraSinkSettings, zookeeper: CuratorFramework) extends Actor with FSM[State,Data] with ActorLogging with CassandraKeyspaceOperations with Instrumented {
+class CassandraSink(id: UUID, settings: CassandraSinkSettings, zookeeper: CuratorFramework) extends Actor
+with FSM[CassandraSinkState,CassandraSinkData] with ActorLogging with CassandraKeyspaceOperations with Instrumented {
   import CassandraSink._
   import FieldManager._
   import StatsManager._
@@ -188,18 +189,16 @@ object CassandraSink {
   case class WroteEvent(event: BierEvent)
   case class WriteFailed(event: BierEvent)
   case object FlushRetries
-  case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean])
-  case class CreatedQuery(id: UUID)
 
-  sealed trait State
-  case object Unconnected extends State
-  case object Connecting extends State
-  case object Connected extends State
+  sealed trait CassandraSinkState
+  case object Unconnected extends CassandraSinkState
+  case object Connecting extends CassandraSinkState
+  case object Connected extends CassandraSinkState
 
-  sealed trait Data
-  case class EventBuffer(keyspace: Keyspace, writers: ActorRef, fields: ActorRef, stats: ActorRef, events: Seq[RetryEvent], scheduledFlush: Option[Cancellable]) extends Data
-  case class UnconnectedBuffer(events: Seq[RetryEvent]) extends Data
-  case class ConnectingBuffer(events: Seq[RetryEvent], initiator: Option[ActorRef]) extends Data
+  sealed trait CassandraSinkData
+  case class EventBuffer(keyspace: Keyspace, writers: ActorRef, fields: ActorRef, stats: ActorRef, events: Seq[RetryEvent], scheduledFlush: Option[Cancellable]) extends CassandraSinkData
+  case class UnconnectedBuffer(events: Seq[RetryEvent]) extends CassandraSinkData
+  case class ConnectingBuffer(events: Seq[RetryEvent], initiator: Option[ActorRef]) extends CassandraSinkData
 }
 
 /**

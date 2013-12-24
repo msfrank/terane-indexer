@@ -23,25 +23,23 @@ import scala.language.postfixOps
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, WordSpec}
 import org.scalatest.matchers.MustMatchers
-import akka.testkit.TestKit
 import akka.actor.{ActorRef, Actor, Props}
+import akka.agent.Agent
 import com.netflix.astyanax.Keyspace
 import org.joda.time.DateTime
 import org.xbill.DNS.Name
 import scala.concurrent.duration._
-import java.net.InetAddress
 import java.util.UUID
+import java.net.InetAddress
 
 import com.syntaxjockey.terane.indexer.{RequiresTestCluster, UUIDLike, TestCluster}
 import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.bier.BierEvent._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
+import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{StoreEvent, WroteEvent}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.{GetFields, FieldMap}
 import com.syntaxjockey.terane.indexer.sink.StatsManager.{GetStats, StatsMap}
-import com.syntaxjockey.terane.indexer.metadata.Store
-import com.syntaxjockey.terane.indexer.bier.statistics.FieldStatistics
-import akka.agent.Agent
 
 class EventWriterSpec extends TestCluster("EventWriterSpec") with WordSpec with MustMatchers with BeforeAndAfter with BeforeAndAfterAll {
   import scala.concurrent.ExecutionContext.Implicits.global

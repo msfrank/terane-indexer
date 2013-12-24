@@ -26,12 +26,11 @@ import scala.collection.mutable
 import java.io.File
 import java.util.UUID
 
+import com.syntaxjockey.terane.indexer.CreateQuery
 import com.syntaxjockey.terane.indexer.bier.{FieldIdentifier, BierEvent}
 import com.syntaxjockey.terane.indexer.sink.DirectStreamer.{State, Data}
-import com.syntaxjockey.terane.indexer.sink.CassandraSink.CreateQuery
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.Query.GetEvents
-import java.nio.file.Files
 
 class DirectStreamer(id: UUID, createQuery: CreateQuery, created: DateTime, fields: FieldMap) extends Streamer(created, fields) with LoggingFSM[State,Data] {
   import DirectStreamer._

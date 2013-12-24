@@ -230,3 +230,5 @@ case class SinkBroadcastOperation(caller: ActorRef, op: SinkOperation)
 case class CreatedSink(op: CreateSink, result: SinkRef) extends SinkCommandResult
 case class DeletedSink(op: DeleteSink, result: SinkRef) extends SinkCommandResult
 case class EnumeratedSinks(sinks: Seq[SinkRef]) extends SinkQueryResult
+
+case class CreatedQuery(id: UUID)
