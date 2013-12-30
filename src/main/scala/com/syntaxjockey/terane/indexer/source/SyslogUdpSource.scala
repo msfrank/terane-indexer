@@ -19,19 +19,21 @@
 
 package com.syntaxjockey.terane.indexer.source
 
-import com.typesafe.config.Config
 import akka.io.{PipelinePorts, PipelineFactory, Udp, IO}
 import akka.io.Udp.{Bind, CommandFailed, Bound, Received}
-import akka.actor.{Props, ActorRef, Actor, ActorLogging}
-import java.net.InetSocketAddress
+import akka.actor._
+import org.apache.curator.framework.CuratorFramework
+import java.net.{URLEncoder, InetSocketAddress}
 
-import com.syntaxjockey.terane.indexer.{Instrumented, EventRouter}
+import com.syntaxjockey.terane.indexer.{Source, SourceRef, Instrumented, EventRouter}
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 
 /**
  * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
  * http://tools.ietf.org/html/rfc5424
  */
-class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) extends Actor with ActorLogging with Instrumented {
+class SyslogUdpSource(name: String, settings: SyslogUdpSourceSettings, zookeeper: CuratorFramework, eventRouter: ActorRef) extends Actor
+with ActorLogging with Instrumented {
   import EventRouter._
   import context.system
 
@@ -39,12 +41,15 @@ class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) 
   val messagesReceived = metrics.meter("messages-received", "messages")
   val messagesDropped = metrics.meter("messages-dropped", "messages")
 
+  // config
   val localAddr = new InetSocketAddress(settings.interface, settings.port)
-  log.debug("attempting to bind to {}", localAddr)
-  IO(Udp) ! Bind(self, localAddr)
-
   val stages = new ProcessMessage >> new ProcessFrames() >> new ProcessUdp()
   val PipelinePorts(cmd, evt, mgmt) = PipelineFactory.buildFunctionTriple(new SyslogContext(log, context), stages)
+
+  override def preStart() {
+    log.debug("attempting to bind to {}", localAddr)
+    IO(Udp) ! Bind(self, localAddr)
+  }
 
   def receive = {
     case Bound(_localAddr) =>
@@ -59,7 +64,7 @@ class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) 
         event match {
           case SyslogEvent(_event) =>
             log.debug("received {}", _event)
-            eventRouter ! StoreEvent(settings.useSink, _event)
+            eventRouter ! StoreEvent(name, _event)
             messagesReceived.mark()
           case failure: SyslogProcessingFailure =>
             messagesDropped.mark()
@@ -71,5 +76,25 @@ class SyslogUdpSource(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) 
 }
 
 object SyslogUdpSource {
-  def props(settings: SyslogUdpSourceSettings, eventRouter: ActorRef) = Props(classOf[SyslogUdpSource], settings, eventRouter)
+  import SyslogUdpSourceSettings.SyslogUdpSourceSettingsFormat
+
+  def props(name: String, zookeeper: CuratorFramework, eventRouter: ActorRef, settings: SyslogUdpSourceSettings) = {
+    Props(classOf[SyslogUdpSource], name, settings, zookeeper, eventRouter)
+  }
+
+  def create(zookeeper: CuratorFramework, name: String, settings: SyslogUdpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
+    val path = "/" + URLEncoder.encode(name, "UTF-8")
+    val bytes = SyslogUdpSourceSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
+    zookeeper.create().forPath(path, bytes)
+    val stat = zookeeper.checkExists().forPath(path)
+    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    SourceRef(actor, Source(stat, settings))
+  }
+
+  def open(zookeeper: CuratorFramework, name: String, settings: SyslogUdpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
+    val path = "/" + URLEncoder.encode(name, "UTF-8")
+    val stat = zookeeper.checkExists().forPath(path)
+    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    SourceRef(actor, Source(stat, settings))
+  }
 }

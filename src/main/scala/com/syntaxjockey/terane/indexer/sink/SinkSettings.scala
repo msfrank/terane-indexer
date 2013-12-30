@@ -25,9 +25,48 @@ import scala.concurrent.duration.FiniteDuration
 import java.util.concurrent.TimeUnit
 
 import com.syntaxjockey.terane.indexer.IndexerConfigException
+import com.syntaxjockey.terane.indexer.http.JsonProtocol._
 
-abstract class SinkSettings {
+trait SinkSettings {
   val name: String
+}
+
+object SinkSettings extends DefaultJsonProtocol {
+  import CassandraSinkSettings._
+
+  def parse(name: String, config: Config): SinkSettings = {
+    if (!config.hasPath("sinkType")) throw IndexerConfigException("missing required parameter 'sinkType'")
+    config.getString("sinkType") match {
+      case "cassandra" =>
+        CassandraSinkSettings.parse(name, config)
+      case unknown =>
+        throw IndexerConfigException("unknown sinkType '%s'".format(unknown))
+    }
+  }
+
+  implicit object SinkSettingsFormat extends RootJsonFormat[SinkSettings] {
+    def write(settings: SinkSettings) = settings match {
+      case settings: CassandraSinkSettings =>
+        JsObject("sinkType" -> JsString("cassandra"), "settings" -> CassandraSinkSettingsFormat.write(settings))
+      case unknown => throw new SerializationException("don't know how to serialize %s".format(unknown))
+    }
+    def read(value: JsValue) = value match {
+      case obj: JsObject =>
+        obj.fields.get("sinkType") match {
+          case Some(sinkType) =>
+            sinkType match {
+              case JsString("cassandra") =>
+                CassandraSinkSettingsFormat.read(obj.fields("settings"))
+              case unknown =>
+                throw new DeserializationException("unknown sinkType '%s'".format(unknown))
+            }
+          case None =>
+            throw new DeserializationException("SinkSettings is missing sinkType")
+        }
+
+      case _ => throw new DeserializationException("expected SinkSettings")
+    }
+  }
 }
 
 case class CassandraSinkSettings(name: String, flushInterval: FiniteDuration) extends SinkSettings
@@ -35,58 +74,12 @@ case class CassandraSinkSettings(name: String, flushInterval: FiniteDuration) ex
 object CassandraSinkSettings extends DefaultJsonProtocol {
 
   def parse(name: String, config: Config): CassandraSinkSettings = {
-    val flushInterval = if (config.hasPath("flush-interval"))
-      FiniteDuration(config.getMilliseconds("flush-interval"), TimeUnit.MILLISECONDS)
+    val flushInterval = if (config.hasPath("flushInterval"))
+      FiniteDuration(config.getMilliseconds("flushInterval"), TimeUnit.MILLISECONDS)
     else FiniteDuration(60, TimeUnit.SECONDS)
     new CassandraSinkSettings(name, flushInterval)
-  }
-
-  /* convert FiniteDuration class */
-  implicit object FiniteDurationFormat extends RootJsonFormat[FiniteDuration] {
-    def write(duration: FiniteDuration) = JsNumber(duration.toMillis)
-    def read(value: JsValue) = value match {
-      case JsNumber(duration) => FiniteDuration(duration.toLong, TimeUnit.MILLISECONDS)
-      case _ => throw new DeserializationException("expected FiniteDuration")
-    }
   }
 
   implicit val CassandraSinkSettingsFormat = jsonFormat2(CassandraSinkSettings.apply)
 }
 
-object SinkSettings extends DefaultJsonProtocol {
-  import CassandraSinkSettings._
-
-  def parse(name: String, config: Config): SinkSettings = {
-    if (!config.hasPath("sink-type")) throw IndexerConfigException("missing required parameter 'sink-type'")
-    config.getString("sink-type") match {
-      case "cassandra" =>
-        CassandraSinkSettings.parse(name, config)
-      case unknown =>
-        throw IndexerConfigException("unknown sink-type '%s'".format(unknown))
-    }
-  }
-
-  implicit object SinkSettingsFormat extends RootJsonFormat[SinkSettings] {
-    def write(settings: SinkSettings) = settings match {
-      case cassandraSinkSettings: CassandraSinkSettings =>
-        cassandraSinkSettings.toJson
-      case unknown => throw new SerializationException("don't know how to serialize %s".format(unknown))
-    }
-    def read(value: JsValue) = value match {
-      case obj: JsObject =>
-        obj.fields.get("sink-type") match {
-          case Some(sinkType) =>
-            sinkType match {
-              case JsString("cassandra") =>
-                CassandraSinkSettingsFormat.read(value)
-              case unknown =>
-                throw new DeserializationException("unknown sink-type '%s'".format(unknown))
-            }
-          case None =>
-            throw new DeserializationException("SinkSettings is missing sink-type")
-        }
-
-      case _ => throw new DeserializationException("expected SinkSettings")
-    }
-  }
-}

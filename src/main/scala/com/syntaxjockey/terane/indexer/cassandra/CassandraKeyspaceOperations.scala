@@ -27,17 +27,11 @@ trait CassandraKeyspaceOperations {
 
   /**
    * get the Keyspace with the specified name.
-   *
-   * @param keyspaceName
-   * @return
    */
   def getKeyspace(keyspaceName: String): Keyspace = cluster.getKeyspace(keyspaceName)
 
   /**
    * create a Keyspace with the specified name.
-   *
-   * @param keyspaceName
-   * @return
    */
   def createKeyspace(keyspaceName: String): Keyspace = {
     val opts = new java.util.HashMap[String,String]()
@@ -58,4 +52,16 @@ trait CassandraKeyspaceOperations {
     cluster.getKeyspace(keyspaceName)
   }
 
+  /**
+   * Return true if the keyspace exists, otherwise false.
+   */
+  def keyspaceExists(keyspaceName: String): Boolean = {
+    try {
+      val ksDef = cluster.describeKeyspace(keyspaceName)
+      true
+    } catch {
+      case ex: Throwable =>
+      false
+    }
+  }
 }

@@ -1,74 +1,124 @@
+/**
+ * Copyright 2013 Michael Frank <msfrank@syntaxjockey.com>
+ *
+ * This file is part of Terane.
+ *
+ * Terane is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Terane is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Terane.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package com.syntaxjockey.terane.indexer
 
-import akka.actor.{Props, Actor, ActorLogging, ActorRef}
-import org.joda.time.DateTime
+import akka.actor._
+import akka.util.Timeout
+import spray.json.JsonParser
+import scala.collection.JavaConversions._
+import scala.concurrent.duration._
 import java.util.UUID
+import java.net.URLDecoder
 
+import com.syntaxjockey.terane.indexer.SourceManager.{SourceManagerData, SourceManagerState}
 import com.syntaxjockey.terane.indexer.source._
+import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
+import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZNode}
 
 /**
  * The SourceManager is a second-level actor (underneath ClusterSupervisor) which
  * is responsible for accepting events into the cluster and passing them to the EventRouter
  * for classification.
  */
-class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor with ActorLogging {
+class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor with ActorLogging with FSM[SourceManagerState,SourceManagerData] {
+  import SourceManager._
 
+  // config
   val settings = IndexerConfig(context.system).settings
+  val zookeeper = Zookeeper(context.system).client
+  implicit val timeout = Timeout(10 seconds)
 
-  var sourceMap = SourceMap(Map.empty, Map.empty)
+  // state
+  var sources: Map[String,SourceRef] = Map.empty
 
   context.system.eventStream.subscribe(self, classOf[SourceBroadcastOperation])
 
+  startWith(Ready, WaitingForOperation)
+
   override def preStart() {
-    /* start any locally-defined sources */
-    val sourcesById: Map[UUID,Source] = settings.sources.map { case (name: String, sourceSettings: SourceSettings) =>
-      val id = UUID.nameUUIDFromBytes("source:%s:%s".format(settings.nodeId, name).getBytes)
-      val actor = sourceSettings match {
-        case syslogTcpSourceSettings: SyslogTcpSourceSettings =>
-          context.actorOf(SyslogTcpSource.props(syslogTcpSourceSettings, eventRouter), "source-" + name)
-        case syslogUdpSourceSettings: SyslogUdpSourceSettings =>
-          context.actorOf(SyslogUdpSource.props(syslogUdpSourceSettings, eventRouter), "source-" + name)
-      }
-      val source = Source(actor, id, name, sourceSettings, true)
-      log.debug("started local source %s (%s): %s", name, id, sourceSettings)
-      source.id -> source
-    }.toMap
-    sourceMap = SourceMap(sourcesById, sourcesById.values.map(s => s.name -> s).toMap)
+    /* ensure that /sources znode exists */
+    if (zookeeper.checkExists().forPath("/sources") == null)
+      zookeeper.create().forPath("/sources")
   }
 
-  def receive = {
+  when(Ready) {
+    /* load sinks from zookeeper synchronously */
+    case Event(NodeBecomesLeader, _) =>
+      sources = zookeeper.getChildren.forPath("/sources").map { child =>
+        val path = "/sources/" + child
+        val name = URLDecoder.decode(child, "UTF-8")
+        val bytes = new String(zookeeper.getData.forPath(path), Zookeeper.UTF_8_CHARSET)
+        val sourceSettings = SourceSettingsFormat.read(JsonParser(bytes))
+        val sourceref = sourceSettings match {
+          case settings: SyslogUdpSourceSettings =>
+            SyslogUdpSource.open(zookeeper.usingNamespace(path), name, settings, eventRouter)
+          case settings: SyslogTcpSourceSettings =>
+            SyslogTcpSource.open(zookeeper.usingNamespace(path), name, settings, eventRouter)
+        }
+        log.debug("initialized source %s", name)
+        name -> sourceref
+      }.toMap
+      goto(ClusterLeader)
 
-    /* forward the operation to self on behalf of caller */
-    case SourceBroadcastOperation(caller, op) =>
-      self.tell(op, caller)
+    /* wait for the leader to give us the list of sinks */
+    case Event(NodeBecomesWorker, _) =>
+      goto(ClusterWorker)
+
   }
+
+  when(ClusterLeader) {
+    case Event(_, _) =>
+      stay()
+  }
+
+  when(ClusterWorker) {
+    case Event(_, _) =>
+      stay()
+  }
+
+  initialize()
 }
 
 object SourceManager {
   def props(supervisor: ActorRef, eventRouter: ActorRef) = Props(classOf[SourceManager], supervisor, eventRouter)
+
+  sealed trait SourceManagerState
+  case object Ready extends SourceManagerState
+  case object ClusterLeader extends SourceManagerState
+  case object ClusterWorker extends SourceManagerState
+
+  sealed trait SourceManagerData
+  case object WaitingForOperation extends SourceManagerData
+  case class PendingOperations(current: (SourceOperation,ActorRef), queue: Vector[(SourceOperation,ActorRef)]) extends SourceManagerData
 }
 
-case class Source(actor: ActorRef, id: UUID, name: String, settings: SourceSettings, isLocal: Boolean)
-case class SourceMap(sourcesById: Map[UUID,Source], sourcesByName: Map[String,Source])
+case class Source(znode: ZNode, settings: SourceSettings)
+case class SourceRef(actor: ActorRef, source: Source)
+case class SourceMap(sources: Map[String,SourceRef])
 
-sealed trait SourceOperation
 sealed trait SourceOperationResult
-case class SourceBroadcastOperation(caller: ActorRef, op: SourceOperation)
-sealed trait SourceCommand extends SourceOperation
 sealed trait SourceCommandResult extends SourceOperationResult
-sealed trait SourceQuery extends SourceOperation
 sealed trait SourceQueryResult extends SourceOperationResult
-
-case class CreateSource(name: String) extends SourceCommand
-case class CreatedStore(op: CreateSource, result: Source) extends SourceCommandResult
-
-case class DeleteSource(id: String) extends SourceCommand
-case class DeletedSource(op: DeleteSource, result: Source) extends SourceCommandResult
-
 case class SourceOperationFailed(cause: Throwable, op: SourceOperation) extends SourceOperationResult
+case class SourceBroadcastOperation(caller: ActorRef, op: SourceOperation)
 
-case object EnumerateSources extends SourceQuery
-case class EnumeratedSources(stores: Seq[SourceStatistics]) extends SourceQueryResult
-case class FindSource(name: String) extends SourceQuery
-case class DescribeSource(id: String) extends SourceQuery
-case class SourceStatistics(id: String, name: String, created: DateTime) extends SourceQueryResult
+case class CreatedSource(op: CreateSource, result: SourceRef) extends SourceCommandResult
+case class DeletedSource(op: DeleteSource) extends SourceCommandResult
+case class EnumeratedSources(stores: Seq[SourceRef]) extends SourceQueryResult

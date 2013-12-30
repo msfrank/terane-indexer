@@ -43,7 +43,7 @@ import com.syntaxjockey.terane.indexer.UUIDLike
 /**
  * FieldManager is responsible for creating and deleting fields
  */
-class FieldManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
+class FieldManager(settings: CassandraSinkSettings, zookeeperPath: String, val keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging with CassandraCFOperations {
   import FieldManager._
   import UUIDLike._
 
@@ -51,6 +51,7 @@ class FieldManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework,
 
   // config
   val shardingFactor = 3
+  val zookeeper = Zookeeper(context.system).client
 
   // state
   var currentFields = FieldMap(Map.empty, Map.empty)
@@ -94,7 +95,7 @@ class FieldManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework,
    * @return
    */
   def getFields = Future[FieldMap] {
-    val basepath = "/fields"
+    val basepath = zookeeperPath + "/fields"
     val znodes = zookeeper.getChildren.forPath(basepath)
     log.debug("found {} fields in {}", znodes.length, basepath)
     znodes.foldLeft(FieldMap(Map.empty, Map.empty)) {
@@ -154,7 +155,7 @@ class FieldManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework,
    */
   def createField(op: CreateField) = Future[FieldModificationResult] {
     val fieldId = op.fieldId
-    val path = "/fields/" + fieldId.fieldType.toString + ":" + fieldId.fieldName
+    val path = zookeeperPath + "/fields/" + fieldId.fieldType.toString + ":" + fieldId.fieldName
     val id: UUIDLike = UUID.randomUUID()
     val created = DateTime.now(DateTimeZone.UTC)
     /* lock field */
@@ -225,8 +226,8 @@ class FieldManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework,
 
 object FieldManager {
 
-  def props(settings: CassandraSinkSettings, zookeeper: CuratorFramework, keyspace: Keyspace, sinkBus: SinkBus) = {
-    Props(classOf[FieldManager], settings, zookeeper, keyspace, sinkBus)
+  def props(settings: CassandraSinkSettings, zookeeperPath: String, keyspace: Keyspace, sinkBus: SinkBus) = {
+    Props(classOf[FieldManager], settings, zookeeperPath, keyspace, sinkBus)
   }
 
   val CF_FIELDS = new ColumnFamily[String,MetaKey]("meta", StringSerializer.get(), Serializers.Meta)

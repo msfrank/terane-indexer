@@ -22,7 +22,7 @@ package com.syntaxjockey.terane.indexer.http
 import spray.http.{ContentTypes, HttpEntity}
 import spray.json._
 import org.joda.time.DateTime
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{FiniteDuration, Duration}
 import java.util.concurrent.TimeUnit
 import java.nio.charset.Charset
 import java.util.UUID
@@ -31,6 +31,7 @@ import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.sink.Query._
+import com.syntaxjockey.terane.indexer.zookeeper.ZNode
 
 object JsonProtocol extends DefaultJsonProtocol {
 
@@ -58,6 +59,15 @@ object JsonProtocol extends DefaultJsonProtocol {
     def read(value: JsValue) = value match {
       case JsNumber(duration) => Duration(duration.toLong, TimeUnit.MILLISECONDS)
       case _ => throw new DeserializationException("expected Duration")
+    }
+  }
+
+  /* convert FiniteDuration class */
+  implicit object FiniteDurationFormat extends RootJsonFormat[FiniteDuration] {
+    def write(duration: FiniteDuration) = JsNumber(duration.toMillis)
+    def read(value: JsValue) = value match {
+      case JsNumber(duration) => FiniteDuration(duration.toLong, TimeUnit.MILLISECONDS)
+      case _ => throw new DeserializationException("expected FiniteDuration")
     }
   }
 
@@ -133,6 +143,9 @@ object JsonProtocol extends DefaultJsonProtocol {
     }
   }
 
+  /* convert ZNode class */
+  implicit val ZNodeFormat = jsonFormat11(ZNode.apply)
+
   /* convert QueryStatistics class */
   implicit val QueryStatisticsFormat = jsonFormat6(QueryStatistics.apply)
 
@@ -146,10 +159,10 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
 
   /* convert Sink class */
-  implicit val SinkFormat = jsonFormat2(Sink.apply)
+  implicit val SinkFormat = jsonFormat3(Sink.apply)
 
   /* convert CreateSink class */
-  implicit val CreateSinkFormat = jsonFormat1(CreateSink.apply)
+  implicit val CreateSinkFormat = jsonFormat2(CreateSink.apply)
 
   /* convert DeleteSink class */
   implicit val DeleteSinkFormat = jsonFormat1(DeleteSink.apply)

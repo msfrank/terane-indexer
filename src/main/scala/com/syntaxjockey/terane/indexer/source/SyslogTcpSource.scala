@@ -4,17 +4,17 @@ import akka.actor._
 import akka.io._
 import akka.io.TcpPipelineHandler.Init
 import akka.event.LoggingAdapter
-import com.typesafe.config.Config
+import org.apache.curator.framework.CuratorFramework
 import scala.concurrent.duration._
-import java.util.concurrent.TimeUnit
-import java.net.InetSocketAddress
-import javax.net.ssl.SSLContext
+import java.net.{URLEncoder, InetSocketAddress}
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import java.security.KeyStore
 import java.io.FileInputStream
 
 import com.syntaxjockey.terane.indexer.source.SyslogPipelineHandler.SyslogInit
 import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
+import com.syntaxjockey.terane.indexer.{Instrumented, Source, SourceRef}
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 
 /**
  * Actor implementing the syslog protocol over TCP in accordance with RFC6587:
@@ -23,16 +23,20 @@ import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
  * if "enable-tls" is true, then the actor implements TLS for transport security
  * in accordance with RFC5425: http://tools.ietf.org/html/rfc5425
  */
-class SyslogTcpSource(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) extends Actor with ActorLogging {
+class SyslogTcpSource(name: String, settings: SyslogTcpSourceSettings, zookeeper: CuratorFramework, eventRouter: ActorRef) extends Actor
+with ActorLogging with Instrumented {
   import akka.io.Tcp._
   import akka.io.{TcpReadWriteAdapter, BackpressureBuffer}
   import context.system
 
-  // state
-  var connections: Set[ActorRef] = Set.empty
+  // metrics
+  val messagesReceived = metrics.meter("messages-received", "messages")
+  val messagesDropped = metrics.meter("messages-dropped", "messages")
 
-  // if tls is enabled, then create an SSLContext
+  // config
+  val localAddr = new InetSocketAddress(settings.interface, settings.port)
   val sslContext: Option[SSLContext] = settings.tlsSettings match {
+    // if tls is enabled, then create an SSLContext
     case Some(tlsSettings) =>
       val keystore = KeyStore.getInstance("JKS")
       keystore.load(new FileInputStream(tlsSettings.tlsKeystore), tlsSettings.tlsKeystorePassword.toCharArray)
@@ -50,10 +54,13 @@ class SyslogTcpSource(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) 
       None
   }
 
-  // start the bind process
-  val localAddr = new InetSocketAddress(settings.interface, settings.port)
-  log.debug("attempting to bind to {}", localAddr)
-  akka.io.IO(Tcp) ! Bind(self, localAddr)
+  // state
+  var connections: Set[ActorRef] = Set.empty
+
+  override def preStart() {
+    log.debug("attempting to bind to {}", localAddr)
+    akka.io.IO(Tcp) ! Bind(self, localAddr)
+  }
 
   def receive = {
 
@@ -96,7 +103,7 @@ class SyslogTcpSource(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) 
                 new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
           }
           val init = SyslogPipelineHandler.init(log, stages, settings.maxMessageSize)
-          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, settings.useSink, settings.idleTimeout))
+          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, name, settings.idleTimeout))
           val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler))
           connection ! Tcp.Register(pipeline)   // FIXME: enable keepOpenOnPeerClosed?
           context.watch(handler)
@@ -111,7 +118,27 @@ class SyslogTcpSource(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) 
 }
 
 object SyslogTcpSource {
-  def props(settings: SyslogTcpSourceSettings, eventRouter: ActorRef) = Props(classOf[SyslogTcpSource], settings, eventRouter)
+  import SyslogTcpSourceSettings.SyslogTcpSourceSettingsFormat
+
+  def props(name: String, zookeeper: CuratorFramework, eventRouter: ActorRef, settings: SyslogTcpSourceSettings) = {
+    Props(classOf[SyslogTcpSource], name, settings, zookeeper, eventRouter)
+  }
+
+  def create(zookeeper: CuratorFramework, name: String, settings: SyslogTcpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
+    val path = "/" + URLEncoder.encode(name, "UTF-8")
+    val bytes = SyslogTcpSourceSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
+    zookeeper.create().forPath(path, bytes)
+    val stat = zookeeper.checkExists().forPath(path)
+    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    SourceRef(actor, Source(stat, settings))
+  }
+
+  def open(zookeeper: CuratorFramework, name: String, settings: SyslogTcpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
+    val path = "/" + URLEncoder.encode(name, "UTF-8")
+    val stat = zookeeper.checkExists().forPath(path)
+    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    SourceRef(actor, Source(stat, settings))
+  }
 }
 
 /**

@@ -30,18 +30,21 @@ import com.netflix.astyanax.serializers.{StringSerializer, SetSerializer, UUIDSe
 import org.apache.cassandra.db.marshal.Int32Type
 import scala.concurrent.Future
 import java.util.UUID
+import java.net.URLEncoder
 
 import com.syntaxjockey.terane.indexer.sink.CassandraSink.{CassandraSinkState, CassandraSinkData}
 import com.syntaxjockey.terane.indexer._
-import com.syntaxjockey.terane.indexer.UUIDLike._
 import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.cassandra.{CassandraKeyspaceOperations, Cassandra}
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import com.syntaxjockey.terane.indexer.zookeeper.ZNode._
+import com.syntaxjockey.terane.indexer.sink.SinkSettings.SinkSettingsFormat
 
 /**
  * CassandraSink is the parent actor for all activity for a particular sink,
  * such as querying and writing events.
  */
-class CassandraSink(id: UUID, settings: CassandraSinkSettings, zookeeper: CuratorFramework) extends Actor
+class CassandraSink(id: UUID, settings: CassandraSinkSettings, zookeeperPath: String) extends Actor
 with FSM[CassandraSinkState,CassandraSinkData] with ActorLogging with CassandraKeyspaceOperations with Instrumented {
   import CassandraSink._
   import FieldManager._
@@ -58,41 +61,48 @@ with FSM[CassandraSinkState,CassandraSinkData] with ActorLogging with CassandraK
   val eventBufferSize = metrics.counter("event-buffer-size")
   val queriesCreated = metrics.meter("queries-created", "queries")
 
+  // config
+  val keyspaceName = UUIDLike(id).toString
   val cluster = Cassandra(context.system).cluster
-
   val sinkBus = new SinkBus()
-  sinkBus.subscribe(self, classOf[FieldNotification])
-  sinkBus.subscribe(self, classOf[StatsNotification])
 
+  // state
   var currentFields = FieldMap(Map.empty, Map.empty)
   var currentStats = StatsMap(Map.empty)
 
-  startWith(Unconnected, UnconnectedBuffer(Seq.empty))
+  sinkBus.subscribe(self, classOf[FieldNotification])
+  sinkBus.subscribe(self, classOf[StatsNotification])
 
-  /* when unconnected we wait for command to create or get the keyspace */
-  when(Unconnected) {
-    case Event(SinkManager.Open, UnconnectedBuffer(retries)) =>
-      Future(ConnectedToKeyspace(getKeyspace(UUIDLike(id)))).recover {case ex => SinkManager.Failure(ex)} pipeTo self
-      goto(Connecting) using ConnectingBuffer(retries, Some(sender))
-    case Event(SinkManager.Create, UnconnectedBuffer(retries)) =>
-      Future(ConnectedToKeyspace(createKeyspace(UUIDLike(id)))).recover {case ex => SinkManager.Failure(ex)} pipeTo self
-      goto(Connecting) using ConnectingBuffer(retries, Some(sender))
+  startWith(Connecting, UnconnectedBuffer(Seq.empty))
+
+  override def preStart() {
+    // create or get the keyspace
+    Future {
+      if (!keyspaceExists(keyspaceName)) {
+        log.debug("creating keyspace {}", keyspaceName)
+        ConnectedToKeyspace(createKeyspace(keyspaceName))
+      } else
+        ConnectedToKeyspace(getKeyspace(keyspaceName))
+    }.recover {
+      case ex => FailedToConnect(ex)
+    } pipeTo self
   }
 
   /* when connecting we buffer events until reconnection occurs */
   when(Connecting) {
 
-    case Event(ConnectedToKeyspace(keyspace), ConnectingBuffer(retries, initiator)) =>
-      val fields = context.actorOf(FieldManager.props(settings, zookeeper, keyspace, sinkBus))
-      val stats = context.actorOf(StatsManager.props(settings, zookeeper, keyspace, sinkBus))
+    /* connected to keyspace */
+    case Event(ConnectedToKeyspace(keyspace), UnconnectedBuffer(retries)) =>
+      log.debug("connected to keyspace {}", keyspaceName)
+      val fields = context.actorOf(FieldManager.props(settings, zookeeperPath, keyspace, sinkBus))
+      val stats = context.actorOf(StatsManager.props(settings, zookeeperPath, keyspace, sinkBus))
       val writers = context.actorOf(EventWriter.props(settings, keyspace, sinkBus, fields, stats))
-      initiator.foreach(_ ! SinkManager.Done)
       goto(Connected) using EventBuffer(keyspace, writers, fields, stats, retries, None)
 
-    /* getKeyspace or createKeyspace failed */
-    case Event(failure: SinkManager.Failure, ConnectingBuffer(retries, initiator)) =>
-      initiator.foreach(_ ! failure)
-      goto(Unconnected) using UnconnectedBuffer(retries)
+    /* failed to connect to keyspace */
+    case Event(FailedToConnect(ex), UnconnectedBuffer(retries)) =>
+      log.debug("failed to connect to keyspace {}", keyspaceName)
+      stay()
 
     case Event(fieldsChanged: FieldMap, _) =>
       currentFields = fieldsChanged
@@ -106,23 +116,6 @@ with FSM[CassandraSinkState,CassandraSinkData] with ActorLogging with CassandraK
       eventsReceived.mark()
       eventBufferSize.inc()
       stay() using UnconnectedBuffer(RetryEvent(event, 1) +: retries)
-
-    case Event(retry: RetryEvent, UnconnectedBuffer(retries)) =>
-      retry.attempt match {
-        case 1 => retriesOnce.mark()
-        case 2 => retriesTwice.mark()
-        case 3 => retriesThrice.mark()
-        case n => pathologicalRetries.mark()
-      }
-      eventBufferSize.inc()
-      stay() using UnconnectedBuffer(retry +: retries)
-
-    case Event(FlushRetries, _) =>
-      stay()
-
-    case Event(_: WroteEvent, _) =>
-      eventsWritten.mark()
-      stay()
 
     case Event(_: CreateQuery, _) =>
       stay() replying RetryLater
@@ -178,12 +171,37 @@ with FSM[CassandraSinkState,CassandraSinkData] with ActorLogging with CassandraK
 
 object CassandraSink {
 
-  def props(id: UUID, settings: CassandraSinkSettings, zookeeper: CuratorFramework) = Props(classOf[CassandraSink], id, settings, zookeeper)
+  def props(id: UUID, settings: CassandraSinkSettings, zookeeperPath: String) = {
+    Props(classOf[CassandraSink], id, settings, zookeeperPath)
+  }
+
+  def create(zookeeper: CuratorFramework, name: String, settings: CassandraSinkSettings)(implicit factory: ActorRefFactory): SinkRef = {
+    val path = "/sinks/" + URLEncoder.encode(name, "UTF-8")
+    val bytes = SinkSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
+    val id = UUID.randomUUID()
+    zookeeper.inTransaction()
+      .create().forPath(path, bytes)
+      .and()
+      .create().forPath(path + "/id", id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
+      .and().commit()
+    val stat = zookeeper.checkExists().forPath(path)
+    val actor = factory.actorOf(CassandraSink.props(id, settings, path))
+    SinkRef(actor, Sink(id, stat, settings))
+  }
+
+  def open(zookeeper: CuratorFramework, name: String, settings: CassandraSinkSettings)(implicit factory: ActorRefFactory): SinkRef = {
+    val path = "/sinks/" + URLEncoder.encode(name, "UTF-8")
+    val id = UUID.fromString(new String(zookeeper.getData.forPath(path + "/id"), Zookeeper.UTF_8_CHARSET))
+    val stat = zookeeper.checkExists().forPath(path)
+    val actor = factory.actorOf(CassandraSink.props(id, settings, path))
+    SinkRef(actor, Sink(id, stat, settings))
+  }
 
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())
   val SER_POSITIONS = new SetSerializer[java.lang.Integer](Int32Type.instance)
 
   case class ConnectedToKeyspace(keyspace: Keyspace)
+  case class FailedToConnect(cause: Throwable) extends Exception("failed to connect", cause)
   case class StoreEvent(event: BierEvent, attempt: Int)
   case class RetryEvent(event: BierEvent, attempt: Int)
   case class WroteEvent(event: BierEvent)

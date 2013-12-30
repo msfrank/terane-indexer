@@ -20,18 +20,18 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
-import akka.pattern.ask
 import akka.pattern.pipe
 import akka.util.Timeout
 import spray.json._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
 import java.util.UUID
+import java.net.URLDecoder
 
 import com.syntaxjockey.terane.indexer.SinkManager.{SinkManagerState,SinkManagerData}
 import com.syntaxjockey.terane.indexer.sink.{CassandraSink, CassandraSinkSettings, SinkSettings}
-import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import com.syntaxjockey.terane.indexer.zookeeper.{ZNode, Zookeeper}
 import com.syntaxjockey.terane.indexer.sink.SinkSettings.SinkSettingsFormat
 
 /**
@@ -41,14 +41,13 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
   import SinkManager._
   import context.dispatcher
 
+  // config
   val settings = IndexerConfig(context.system).settings
   val zookeeper = Zookeeper(context.system).client
-
   implicit val timeout = Timeout(10 seconds)
 
   // state
-  var sinks = SinkMap(Map.empty, Map.empty)
-  var pending: Map[SinkOperation,ActorRef] = Map.empty
+  var sinks: Map[String,SinkRef] = Map.empty
 
   context.system.eventStream.subscribe(self, classOf[SinkBroadcastOperation])
 
@@ -58,112 +57,81 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
       zookeeper.create().forPath("/sinks")
   }
 
-  startWith(Ready, WaitingForData)
+  startWith(Ready, WaitingForOperation)
 
   when(Ready) {
 
     /* load sinks from zookeeper synchronously */
     case Event(NodeBecomesLeader, _) =>
-      val sinksById: Map[UUID,SinkRef] = zookeeper.getChildren.forPath("/sinks").map { child =>
+      sinks = zookeeper.getChildren.forPath("/sinks").map { child =>
         val path = "/sinks/" + child
-        val id = UUID.fromString(child)
-        val value = JsonParser(new String(zookeeper.getData.forPath(path), Zookeeper.UTF_8_CHARSET))
-        val sinkSettings = SinkSettingsFormat.read(value)
-        val actor = sinkSettings match {
-          case cassandraSinkSettings: CassandraSinkSettings =>
-            context.actorOf(CassandraSink.props(id, cassandraSinkSettings, zookeeper.usingNamespace(path)))
+        val name = URLDecoder.decode(child, "UTF-8")
+        val bytes = new String(zookeeper.getData.forPath(path), Zookeeper.UTF_8_CHARSET)
+        val sinkSettings = SinkSettingsFormat.read(JsonParser(bytes))
+        val sinkref = sinkSettings match {
+          case settings: CassandraSinkSettings =>
+            CassandraSink.open(zookeeper, name, settings)
         }
-        // blocking on a future is ugly, but seems like the most straightforward way in this case
-        Await.result(actor ? SinkManager.Create, 10 seconds) match {
-          case SinkManager.Done =>  // do nothing
-          case SinkManager.Failure(ex) => throw ex
-        }
-        log.debug("initialized sink %s: %s", id, sinkSettings)
-        id -> SinkRef(actor, Sink(id, sinkSettings))
+        log.debug("initialized sink %s", name)
+        name -> sinkref
       }.toMap
-      sinks = SinkMap(sinksById, sinksById.values.map(ref => ref.sink.settings.name -> ref).toMap)
       goto(ClusterLeader)
 
-    /* ask the leader for the list of sinks */
+    /* wait for the leader to give us the list of sinks */
     case Event(NodeBecomesWorker, _) =>
-      supervisor ? LeaderOperation(self, EnumerateSinks) pipeTo self
-      stay()
-
-    case Event(EnumeratedSinks(sinkrefs), _) =>
-      val sinksById = sinkrefs.map { sinkref =>
-        val path = "/sinks/" + sinkref.sink.id.toString
-        val sink = sinkref.sink
-        val actor = sink.settings match {
-          case cassandraSinkSettings: CassandraSinkSettings =>
-            context.actorOf(CassandraSink.props(sink.id, cassandraSinkSettings, zookeeper.usingNamespace(path)))
-        }
-        // blocking on a future is ugly, but seems like the most straightforward way in this case
-        Await.result(actor ? SinkManager.Open, 10 seconds) match {
-          case SinkManager.Done =>  // do nothing
-          case SinkManager.Failure(ex) => throw ex
-        }
-        log.debug("initialized sink %s: %s", sink.id, sink.settings)
-        sink.id -> SinkRef(actor, sink)
-      }.toMap
-      val sinksByName = sinksById.values.map(ref => ref.sink.settings.name -> ref).toMap
-      sinks = SinkMap(sinksById, sinksByName)
       goto(ClusterWorker)
+
+  }
+
+  def executeOperation(op: SinkOperation): Future[SinkOperationResult] = {
+    op match {
+      case createOp: CreateSink =>
+        createSink(createOp)
+      case deleteOp: DeleteSink =>
+        deleteSink(deleteOp)
+      case unknown =>
+        Future.successful(SinkOperationFailed(new Exception("failed to execute %s".format(op)), op))
+    }
   }
 
   when(ClusterLeader) {
 
-    /* create a new sink, if it doesn't exist already */
-    case Event(op: CreateSink, _) =>
-      val id = UUID.randomUUID()
-      if (pending.contains(op)) {
-        sender ! SinkOperationFailed(new Exception("%s is already in progress".format(op)), op)
-      } else if (sinks.sinksByName.contains(op.settings.name)) {
-        sender ! SinkOperationFailed(new Exception("sink %s already exists".format(op.settings.name)), op)
-      } else {
-        pending = pending + (op -> sender)
-        createSink(op, id) pipeTo self
+    /* if no operations are pending then execute, otherwise queue */
+    case Event(op: SinkOperation, maybePending) =>
+      val pendingOperations = maybePending match {
+        case PendingOperations(current, queue) =>
+          PendingOperations(current, queue :+ op -> sender)
+        case WaitingForOperation =>
+          executeOperation(op) pipeTo self
+          PendingOperations(op -> sender, Vector.empty)
       }
-      stay()
+      stay() using pendingOperations
 
     /* sink has been created successfully */
-    case Event(result @ CreatedSink(createSink, sinkref), _) =>
-      pending.get(createSink) match {
-        case Some(caller) =>
-          caller ! result
-          pending = pending - createSink
-        case None =>  // FIXME: do we do anything here?
+    case Event(result @ CreatedSink(createOp, sinkref), PendingOperations((op, caller), queue)) =>
+      caller ! result
+      sinks = sinks + (createOp.name -> sinkref)
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
       }
-      val sink = sinkref.sink
-      val SinkMap(sinksById, sinksByName) = sinks
-      sinks = SinkMap(sinksById + (sink.id -> sinkref), sinksByName + (sink.settings.name -> sinkref))
-      stay()
-
-    /* delete a sink, if it exists */
-    case Event(deleteSink: DeleteSink, _) =>
-      stay() replying SinkOperationFailed(new NotImplementedError("DeleteSink not implemented"), deleteSink)
-
-    /* describe a sink, if it exists */
-    case Event(describeSink: DescribeSink, _) =>
-      stay() replying SinkOperationFailed(new NotImplementedError("DescribeSink not implemented"), describeSink)
-
-    /* describe a sink if it exists */
-    case Event(findSink: FindSink, _) =>
-      stay() replying SinkOperationFailed(new NotImplementedError("FindSink not implemented"), findSink)
-
-    /* list all known sinks */
-    case Event(EnumerateSinks, _) =>
-      stay() replying EnumeratedSinks(sinks.sinksById.values.toSeq)
+      stay() using pendingOperations
 
     /* an asynchronous operation failed */
-    case Event(failure @ SinkOperationFailed(cause, op), _) =>
-      log.error("operation {} failed: {}", op, cause.getMessage)
-      pending.get(op) match {
-        case Some(caller) =>
-          caller ! failure
-          pending = pending - op
-        case None =>  // FIXME: do we do anything here?
+    case Event(failure @ SinkOperationFailed(cause, failedOp), PendingOperations((op, caller), queue)) =>
+      log.error("operation {} failed: {}", failedOp, cause.getMessage)
+      caller ! failure
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
       }
-      stay()
+      stay() using pendingOperations
 
     /* forward the operation to self on behalf of caller */
     case Event(SinkBroadcastOperation(caller, op), _) =>
@@ -171,42 +139,53 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
       stay()
   }
 
+  when(ClusterWorker) {
+
+    case Event(SinkMap(_sinks), _) =>
+      val sinksAdded = _sinks.filter { case (name,_) => !sinks.contains(name) }
+        .map { case (name,ref) => name -> ref.sink }
+      val sinksUpdated = _sinks.filter { case (name,ref) => sinks.contains(name) && ref.sink.znode.mzxid > sinks(name).sink.znode.mzxid }
+        .map { case (name,ref) => name -> ref.sink }
+      val sinksRemoved = sinks.filter { case (name,_) => !_sinks.contains(name) }
+      goto(ClusterWorker)
+  }
+
   /**
    *
    */
-  def createSink(op: CreateSink, id: UUID): Future[SinkOperationResult] = Future {
-    val path = "/sinks/" + id.toString
-    // FIXME: lock znode
-    val actor = op.settings match {
-      case cassandraSinkSettings: CassandraSinkSettings =>
-        zookeeper.create().forPath(path, op.settings.toJson.prettyPrint.getBytes)
-        context.actorOf(CassandraSink.props(id, cassandraSinkSettings, zookeeper.usingNamespace(path)))
+  def createSink(op: CreateSink): Future[SinkOperationResult] = {
+    if (sinks.contains(op.settings.name))
+      Future.successful(SinkOperationFailed(new Exception("sink %s already exists".format(op.settings.name)), op))
+    else {
+      Future {
+        val sinkref = op.settings match {
+          case settings: CassandraSinkSettings =>
+            CassandraSink.create(zookeeper, op.name, settings)
+        }
+        log.debug("created sink %s: %s", op.settings.name, op.settings)
+        CreatedSink(op, sinkref)
+      }.recover {
+        case ex: Throwable =>
+          SinkOperationFailed(ex, op)
+      }
     }
-    val sink = Sink(id, op.settings)
-    val sinkref = SinkRef(actor, sink)
-    // blocking on a future is ugly, but seems like the most straightforward way in this case
-    Await.result(actor ? SinkManager.Create, 10 seconds) match {
-      case SinkManager.Done =>  // do nothing
-      case SinkManager.Failure(ex) => throw ex
-    }
-    log.debug("created sink %s (%s): %s", op.settings.name, id, op.settings)
-    CreatedSink(op, sinkref)
-  }.recover {
-    // FIXME: perform cleanup if any part of creation fails
-    case ex: Throwable =>
-      SinkOperationFailed(ex, op)
   }
 
+  /**
+   *
+   */
+  def deleteSink(op: DeleteSink): Future[SinkOperationResult] = {
+    if (!sinks.contains(op.name))
+      Future.successful(SinkOperationFailed(new Exception("sink %s does not exist".format(op.name)), op))
+    else {
+      Future.successful(DeletedSink(op))
+    }
+  }
 }
 
 object SinkManager {
 
   def props(supervisor: ActorRef) = Props(classOf[SinkManager], supervisor)
-
-  case object Open
-  case object Create
-  case object Done
-  case class Failure(ex: Throwable)
 
   sealed trait SinkManagerState
   case object Ready extends SinkManagerState
@@ -214,12 +193,13 @@ object SinkManager {
   case object ClusterWorker extends SinkManagerState
 
   sealed trait SinkManagerData
-  case object WaitingForData extends SinkManagerData
+  case object WaitingForOperation extends SinkManagerData
+  case class PendingOperations(current: (SinkOperation,ActorRef), queue: Vector[(SinkOperation,ActorRef)]) extends SinkManagerData
 }
 
-case class Sink(id: UUID, settings: SinkSettings)
+case class Sink(id: UUID, znode: ZNode, settings: SinkSettings)
 case class SinkRef(actor: ActorRef, sink: Sink)
-case class SinkMap(sinksById: Map[UUID,SinkRef], sinksByName: Map[String,SinkRef])
+case class SinkMap(sinks: Map[String,SinkRef])
 
 sealed trait SinkOperationResult
 sealed trait SinkCommandResult extends SinkOperationResult
@@ -228,7 +208,7 @@ case class SinkOperationFailed(cause: Throwable, op: SinkOperation) extends Sink
 case class SinkBroadcastOperation(caller: ActorRef, op: SinkOperation)
 
 case class CreatedSink(op: CreateSink, result: SinkRef) extends SinkCommandResult
-case class DeletedSink(op: DeleteSink, result: SinkRef) extends SinkCommandResult
+case class DeletedSink(op: DeleteSink) extends SinkCommandResult
 case class EnumeratedSinks(sinks: Seq[SinkRef]) extends SinkQueryResult
 
 case class CreatedQuery(id: UUID)

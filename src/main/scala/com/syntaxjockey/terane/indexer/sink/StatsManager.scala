@@ -42,7 +42,7 @@ import com.syntaxjockey.terane.indexer.cassandra.{Serializers, MetaKey}
  * StatsManager handles store, field and posting statistics, which are used for
  * (among other things) calculation of sub-query costs in the query planner.
  */
-class StatsManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework, keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging {
+class StatsManager(settings: CassandraSinkSettings, zookeeperPath: String, keyspace: Keyspace, sinkBus: SinkBus) extends Actor with ActorLogging {
   import StatsManager._
   import FieldManager._
   import context.dispatcher
@@ -55,7 +55,7 @@ class StatsManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework,
   var currentStats = StatsMap(Map.empty)
   var fieldsByCf: Map[String,CassandraField] = Map.empty
 
-  val gossiper = context.actorOf(Gossiper.props(zookeeper, "/stats", "stats", 60 seconds), "gossip")
+  val gossiper = context.actorOf(Gossiper.props(zookeeperPath + "/stats", "stats", 60 seconds), "gossip")
 
   /* register to be notified of field changes */
   sinkBus.subscribe(self, classOf[FieldNotification])
@@ -157,8 +157,8 @@ class StatsManager(settings: CassandraSinkSettings, zookeeper: CuratorFramework,
 
 object StatsManager {
 
-  def props(settings: CassandraSinkSettings, zookeeper: CuratorFramework, keyspace: Keyspace, sinkBus: SinkBus) = {
-    Props(classOf[StatsManager], settings, zookeeper, keyspace, sinkBus)
+  def props(settings: CassandraSinkSettings, zookeeperPath: String, keyspace: Keyspace, sinkBus: SinkBus) = {
+    Props(classOf[StatsManager], settings, zookeeperPath, keyspace, sinkBus)
   }
 
   /**

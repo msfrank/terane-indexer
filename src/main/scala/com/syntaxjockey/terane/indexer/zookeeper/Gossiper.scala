@@ -37,9 +37,11 @@ import com.syntaxjockey.terane.indexer.IndexerConfig
  * Gossiper periodically sends a RequestGossip message to its parent, and expects a Gossip
  * message back containing the current state of the node.
  */
-class Gossiper(zookeeper: CuratorFramework, servicesPath: String, gossipType: String, interval: FiniteDuration) extends Actor with ActorLogging {
+class Gossiper(zookeeperPath: String, gossipType: String, interval: FiniteDuration) extends Actor with ActorLogging {
   import Gossiper._
   import context.dispatcher
+
+  val zookeeper = Zookeeper(context.system).client
 
   /* describe ourselves */
   val selfAddress = Cluster(context.system).selfAddress
@@ -53,7 +55,7 @@ class Gossiper(zookeeper: CuratorFramework, servicesPath: String, gossipType: St
   val serviceDiscovery = ServiceDiscoveryBuilder
     .builder(classOf[Void])
     .client(zookeeper)
-    .basePath(servicesPath)
+    .basePath(zookeeperPath)
     .thisInstance(serviceInstance)
     .build()
   serviceDiscovery.start()
@@ -104,8 +106,8 @@ class Gossiper(zookeeper: CuratorFramework, servicesPath: String, gossipType: St
 }
 
 object Gossiper {
-  def props(zookeeper: CuratorFramework, servicesPath: String, gossipType: String, interval: FiniteDuration) = {
-    Props(classOf[Gossiper], zookeeper, servicesPath, gossipType, interval)
+  def props(zookeeperPath: String, gossipType: String, interval: FiniteDuration) = {
+    Props(classOf[Gossiper], zookeeperPath, gossipType, interval)
   }
 
   case class GossipPayload(gossip: Serializable)

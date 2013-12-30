@@ -34,7 +34,7 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
   val settings = IndexerConfig(context.system).settings
 
   // state
-  var sinkMap = SinkMap(Map.empty, Map.empty)
+  var sinkMap = SinkMap(Map.empty)
 
   // subscribe to SinkMap changes
   context.system.eventStream.subscribe(self, classOf[SinkMap])
@@ -48,13 +48,13 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
 
   def receive = {
 
-    /* a new store was created */
+    /* the map of sinks has changed */
     case _sinkMap: SinkMap =>
       sinkMap = _sinkMap
 
-    /* store event in the appropriate sink */
+    /* send event to the appropriate sink */
     case event: BierEvent =>
-      sinkMap.sinksById.values.foreach(sink => sink.actor ! event)
+      sinkMap.sinks.values.foreach(sink => sink.actor ! event)
   }
 }
 

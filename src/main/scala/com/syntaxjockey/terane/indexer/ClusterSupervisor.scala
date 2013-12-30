@@ -26,11 +26,11 @@ import org.apache.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.concurrent.Future
 import scala.collection.immutable.Seq
 import scala.collection.JavaConversions._
-import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.ClusterSupervisor.{ClusterState,ClusterData}
 import com.syntaxjockey.terane.indexer.http.HttpServer
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.source.SourceSettings
 import com.syntaxjockey.terane.indexer.sink.SinkSettings
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 
@@ -207,16 +207,26 @@ trait MustPerformOnLeader
 trait CanPerformAnywhere
 
 /*
+ * Source operations
+ */
+sealed trait SourceOperation
+sealed trait SourceCommand extends SourceOperation with ClusterCommand
+sealed trait SourceQuery extends SourceOperation with ClusterQuery
+case class CreateSource(name: String, settings: SourceSettings) extends SourceCommand with MustPerformOnLeader
+case class DeleteSource(name: String) extends SourceCommand with MustPerformOnLeader
+case class DescribeSource(name: String) extends SourceQuery with CanPerformAnywhere
+case object EnumerateSources extends SourceQuery with CanPerformAnywhere
+
+/*
  * Sink operations
  */
 sealed trait SinkOperation
-sealed trait SinkCommand extends ClusterCommand with SinkOperation
-sealed trait SinkQuery extends ClusterQuery with SinkOperation
-case class CreateSink(settings: SinkSettings) extends SinkCommand with MustPerformOnLeader
-case class DeleteSink(id: UUID) extends SinkCommand with MustPerformOnLeader
+sealed trait SinkCommand extends SinkOperation with ClusterCommand
+sealed trait SinkQuery extends SinkOperation with ClusterQuery
+case class CreateSink(name: String, settings: SinkSettings) extends SinkCommand with MustPerformOnLeader
+case class DeleteSink(name: String) extends SinkCommand with MustPerformOnLeader
+case class DescribeSink(name: String) extends SinkQuery with CanPerformAnywhere
 case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
-case class FindSink(name: String) extends SinkQuery with CanPerformAnywhere
-case class DescribeSink(id: UUID) extends SinkQuery with CanPerformAnywhere
 
 /*
  * Query operations
