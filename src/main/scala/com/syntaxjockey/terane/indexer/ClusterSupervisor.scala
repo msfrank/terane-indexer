@@ -133,6 +133,9 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
       goto(ClusterWorker)
     case Event(state: CurrentClusterState, _) =>
       stay() using ClusterUp(state)
+    case Event(op: QueryOperation, _) =>
+      sinks forward op
+      stay()
     case Event(op: SourceOperation, _) =>
       sources forward op
       stay()
@@ -234,4 +237,10 @@ case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
 /*
  * Query operations
  */
-case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean])
+sealed trait QueryOperation
+sealed trait QueryCommand extends QueryOperation with ClusterCommand
+sealed trait QueryQuery extends QueryOperation with ClusterQuery
+case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean]) extends QueryCommand with CanPerformAnywhere
+case object DeleteQuery extends QueryCommand with CanPerformAnywhere
+case object DescribeQuery extends QueryQuery with CanPerformAnywhere
+case class GetEvents(offset: Option[Int] = None, limit: Option[Int] = None) extends QueryCommand with CanPerformAnywhere

@@ -19,19 +19,18 @@
 
 package com.syntaxjockey.terane.indexer.sink
 
-import akka.actor.{ActorRef, Actor, Props}
+import akka.actor.ActorRef
 import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 import org.joda.time.{DateTimeZone, DateTime}
 import scala.Some
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.CreateQuery
+import com.syntaxjockey.terane.indexer.{ChildForwarder, CreateQuery, GetEvents, TestCluster}
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink.Query._
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
-import com.syntaxjockey.terane.indexer.TestCluster
 
 class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSpec with MustMatchers {
 
@@ -60,13 +59,7 @@ class SortingStreamerSpec extends TestCluster("SortingStreamerSpec") with WordSp
     def createSortingStreamer(createQuery: CreateQuery): ActorRef = {
       val id = UUID.randomUUID()
       val created = DateTime.now(DateTimeZone.UTC)
-      system.actorOf(Props(new Actor {
-        val child = context.actorOf(Props(new SortingStreamer(id, createQuery, created, fields)))
-        def receive = {
-          case x if this.sender == child => testActor forward x
-          case x => child forward x
-        }
-      }))
+      system.actorOf(ChildForwarder.props(SortingStreamer.props(id, createQuery, created, fields), testActor))
     }
 
     "return events sorted by text field" in {

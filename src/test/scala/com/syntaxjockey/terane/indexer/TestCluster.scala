@@ -20,7 +20,7 @@
 package com.syntaxjockey.terane.indexer
 
 import org.scalatest.{Suite, BeforeAndAfterAll, Tag}
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, Props, Actor, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.Config
 import com.netflix.astyanax.model.ColumnFamily
@@ -134,3 +134,15 @@ object TestCluster {
 }
 
 object RequiresTestCluster extends Tag("Requires TestCluster")
+
+class ChildForwarder(childProps: Props, target: ActorRef) extends Actor {
+  val child = context.actorOf(childProps)
+  def receive = {
+    case x if sender == child => target forward x
+    case x => child forward x
+  }
+}
+
+object ChildForwarder {
+  def props(childProps: Props, target: ActorRef) = Props(classOf[ChildForwarder], childProps, target)
+}

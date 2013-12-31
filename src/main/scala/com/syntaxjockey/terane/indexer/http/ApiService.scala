@@ -32,7 +32,7 @@ import spray.util.LoggingContext
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer._
-import com.syntaxjockey.terane.indexer.sink.Query._
+import com.syntaxjockey.terane.indexer.sink._
 
 /**
  * ApiService contains the REST API logic.

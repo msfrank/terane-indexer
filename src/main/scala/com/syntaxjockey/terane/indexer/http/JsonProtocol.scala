@@ -30,7 +30,7 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.bier._
-import com.syntaxjockey.terane.indexer.sink.Query._
+import com.syntaxjockey.terane.indexer.sink._
 import com.syntaxjockey.terane.indexer.zookeeper.ZNode
 
 object JsonProtocol extends DefaultJsonProtocol {

@@ -41,7 +41,7 @@ import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, No
 import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
-import com.syntaxjockey.terane.indexer.CreateQuery
+import com.syntaxjockey.terane.indexer.{CreateQuery,DeleteQuery,DescribeQuery,GetEvents}
 
 /**
  * The Query actor manages the lifecycle of an individual query.  Query processing
@@ -406,14 +406,9 @@ object Query {
   }
 
   /* query case classes */
-  case class GetEvents(offset: Option[Int] = None, limit: Option[Int] = None)
   case object NextEvent
   case object SendEvents
-  case object DescribeQuery
-  case object DeleteQuery
   case object CancelQuery
-  case class EventSet(fields: Map[String, FieldIdentifier], events: List[BierEvent], stats: QueryStatistics, finished: Boolean)
-  case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int, runtime: Duration)
   case object NoMoreEvents
   case object FinishedReading
 
@@ -427,3 +422,7 @@ object Query {
   case class ReadingResults(matchers: Matchers, numRead: Int) extends Data
   case class FinishedQuery(finished: DateTime, numRead: Int) extends Data
 }
+
+case class EventSet(fields: Map[String, FieldIdentifier], events: List[BierEvent], stats: QueryStatistics, finished: Boolean)
+
+case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int, runtime: Duration)
