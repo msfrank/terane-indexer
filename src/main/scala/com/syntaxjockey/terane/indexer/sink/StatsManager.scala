@@ -77,7 +77,7 @@ class StatsManager(settings: CassandraSinkSettings, zookeeperPath: String, keysp
         val (fieldId: String, agent: Agent[FieldStatistics]) = statsSeq(Random.nextInt(statsSeq.length))
         log.debug("picked field {} to gossip", fieldId)
         sender ! Gossip(StatGossip(fieldId, agent.get()))
-      } else log.debug("ignoring gossip request, no stats to share")
+      }
 
 
     /* merge peer gossip with */

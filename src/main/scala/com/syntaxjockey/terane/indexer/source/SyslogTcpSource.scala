@@ -15,6 +15,7 @@ import com.syntaxjockey.terane.indexer.source.SyslogPipelineHandler.SyslogInit
 import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
 import com.syntaxjockey.terane.indexer.{Instrumented, Source, SourceRef}
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
 
 /**
  * Actor implementing the syslog protocol over TCP in accordance with RFC6587:
@@ -23,7 +24,7 @@ import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
  * if "enable-tls" is true, then the actor implements TLS for transport security
  * in accordance with RFC5425: http://tools.ietf.org/html/rfc5425
  */
-class SyslogTcpSource(name: String, settings: SyslogTcpSourceSettings, zookeeper: CuratorFramework, eventRouter: ActorRef) extends Actor
+class SyslogTcpSource(name: String, settings: SyslogTcpSourceSettings, zookeeperPath: String, eventRouter: ActorRef) extends Actor
 with ActorLogging with Instrumented {
   import akka.io.Tcp._
   import akka.io.{TcpReadWriteAdapter, BackpressureBuffer}
@@ -118,25 +119,24 @@ with ActorLogging with Instrumented {
 }
 
 object SyslogTcpSource {
-  import SyslogTcpSourceSettings.SyslogTcpSourceSettingsFormat
 
-  def props(name: String, zookeeper: CuratorFramework, eventRouter: ActorRef, settings: SyslogTcpSourceSettings) = {
-    Props(classOf[SyslogTcpSource], name, settings, zookeeper, eventRouter)
+  def props(name: String, settings: SyslogTcpSourceSettings, zookeeperPath: String, eventRouter: ActorRef) = {
+    Props(classOf[SyslogTcpSource], name, settings, zookeeperPath, eventRouter)
   }
 
   def create(zookeeper: CuratorFramework, name: String, settings: SyslogTcpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
-    val path = "/" + URLEncoder.encode(name, "UTF-8")
-    val bytes = SyslogTcpSourceSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
+    val path = "/sources/" + URLEncoder.encode(name, "UTF-8")
+    val bytes = SourceSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
     zookeeper.create().forPath(path, bytes)
     val stat = zookeeper.checkExists().forPath(path)
-    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    val actor = factory.actorOf(props(name, settings, path, eventRouter))
     SourceRef(actor, Source(stat, settings))
   }
 
   def open(zookeeper: CuratorFramework, name: String, settings: SyslogTcpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
-    val path = "/" + URLEncoder.encode(name, "UTF-8")
+    val path = "/sources/" + URLEncoder.encode(name, "UTF-8")
     val stat = zookeeper.checkExists().forPath(path)
-    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    val actor = factory.actorOf(props(name, settings, path, eventRouter))
     SourceRef(actor, Source(stat, settings))
   }
 }

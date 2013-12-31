@@ -133,6 +133,9 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
       goto(ClusterWorker)
     case Event(state: CurrentClusterState, _) =>
       stay() using ClusterUp(state)
+    case Event(op: SourceOperation, _) =>
+      sources forward op
+      stay()
     case Event(op: SinkOperation, _) =>
       sinks forward op
       stay()

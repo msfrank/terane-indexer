@@ -27,12 +27,13 @@ import java.net.{URLEncoder, InetSocketAddress}
 
 import com.syntaxjockey.terane.indexer.{Source, SourceRef, Instrumented, EventRouter}
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
 
 /**
  * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
  * http://tools.ietf.org/html/rfc5424
  */
-class SyslogUdpSource(name: String, settings: SyslogUdpSourceSettings, zookeeper: CuratorFramework, eventRouter: ActorRef) extends Actor
+class SyslogUdpSource(name: String, settings: SyslogUdpSourceSettings, zookeeperPath: String, eventRouter: ActorRef) extends Actor
 with ActorLogging with Instrumented {
   import EventRouter._
   import context.system
@@ -76,25 +77,24 @@ with ActorLogging with Instrumented {
 }
 
 object SyslogUdpSource {
-  import SyslogUdpSourceSettings.SyslogUdpSourceSettingsFormat
 
-  def props(name: String, zookeeper: CuratorFramework, eventRouter: ActorRef, settings: SyslogUdpSourceSettings) = {
-    Props(classOf[SyslogUdpSource], name, settings, zookeeper, eventRouter)
+  def props(name: String, settings: SyslogUdpSourceSettings, zookeeperPath: String, eventRouter: ActorRef) = {
+    Props(classOf[SyslogUdpSource], name, settings, zookeeperPath, eventRouter)
   }
 
   def create(zookeeper: CuratorFramework, name: String, settings: SyslogUdpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
-    val path = "/" + URLEncoder.encode(name, "UTF-8")
-    val bytes = SyslogUdpSourceSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
+    val path = "/sources/" + URLEncoder.encode(name, "UTF-8")
+    val bytes = SourceSettingsFormat.write(settings).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
     zookeeper.create().forPath(path, bytes)
     val stat = zookeeper.checkExists().forPath(path)
-    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    val actor = factory.actorOf(props(name, settings, path, eventRouter))
     SourceRef(actor, Source(stat, settings))
   }
 
   def open(zookeeper: CuratorFramework, name: String, settings: SyslogUdpSourceSettings, eventRouter: ActorRef)(implicit factory: ActorRefFactory): SourceRef = {
-    val path = "/" + URLEncoder.encode(name, "UTF-8")
+    val path = "/sources/" + URLEncoder.encode(name, "UTF-8")
     val stat = zookeeper.checkExists().forPath(path)
-    val actor = factory.actorOf(props(name, zookeeper.usingNamespace(path), eventRouter, settings))
+    val actor = factory.actorOf(props(name, settings, path, eventRouter))
     SourceRef(actor, Source(stat, settings))
   }
 }

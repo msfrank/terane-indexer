@@ -117,11 +117,70 @@ trait ApiService extends HttpService {
       }
   }
 
-  val sinkId = Segment
+  /**
+   * Spray routes for manipulating sinks (create, describe, delete)
+   */
+  val sourceId = Segment
+  val sourcesRoutes = {
+    path("1" / "sources") {
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            supervisor.ask(EnumerateSources).map {
+              case EnumeratedSources(sources) =>
+                sources.map(_.source)
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[Seq[Source]]
+          }
+        } ~
+        post {
+          hostName { hostname =>
+            entity(as[CreateSource]) { case createSource: CreateSource =>
+              complete {
+                supervisor.ask(createSource).map {
+                  case CreatedSource(op, SourceRef(_, source)) =>
+                    HttpResponse(StatusCodes.Created,
+                      JsonBody(source.toJson),
+                      List(Location("http://%s:%d/1/sources/%s".format(hostname, settings.port, source.settings.name))))
+                  case failure: ApiFailure =>
+                    throw new ApiException(failure)
+                }.mapTo[HttpResponse]
+              }
+            }
+          }
+        }
+      }
+    } ~
+    pathPrefix("1" / "sources" / sourceId) { case id: String =>
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            supervisor.ask(DescribeSource(id)).map {
+              case SourceRef(_, source) =>
+                source
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[Source]
+          }
+        } ~
+        delete {
+          complete {
+            supervisor.ask(DeleteSource(id)).map {
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+              case _ => StatusCodes.OK
+            }.mapTo[HttpResponse]
+          }
+        }
+      }
+    }
+  }
 
   /**
    * Spray routes for manipulating sinks (create, describe, delete)
    */
+  val sinkId = Segment
   val sinksRoutes = {
     path("1" / "sinks") {
       pathEndOrSingleSlash {
@@ -143,7 +202,7 @@ trait ApiService extends HttpService {
                   case CreatedSink(op, SinkRef(_, sink)) =>
                     HttpResponse(StatusCodes.Created,
                       JsonBody(sink.toJson),
-                      List(Location("http://%s:%d/1/sinks/%s".format(hostname, settings.port, sink.id))))
+                      List(Location("http://%s:%d/1/sinks/%s".format(hostname, settings.port, sink.settings.name))))
                   case failure: ApiFailure =>
                     throw new ApiException(failure)
                 }.mapTo[HttpResponse]
@@ -178,7 +237,7 @@ trait ApiService extends HttpService {
     }
   }
 
-  val version1 = queriesRoutes ~ sinksRoutes
+  val version1 = queriesRoutes ~ sourcesRoutes ~ sinksRoutes
 
   val routes =  version1
 

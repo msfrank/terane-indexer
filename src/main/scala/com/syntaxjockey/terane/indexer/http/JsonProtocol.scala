@@ -158,6 +158,18 @@ object JsonProtocol extends DefaultJsonProtocol {
   /* convert GetEvents class */
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)
 
+  /* convert Source class */
+  implicit val SourceFormat = jsonFormat2(Source.apply)
+
+  /* convert CreateSource class */
+  implicit val CreateSourceFormat = jsonFormat2(CreateSource.apply)
+
+  /* convert DeleteSource class */
+  implicit val DeleteSourceFormat = jsonFormat1(DeleteSource.apply)
+
+  /* convert DescribeSource class */
+  implicit val DescribeSourceFormat = jsonFormat1(DescribeSource.apply)
+
   /* convert Sink class */
   implicit val SinkFormat = jsonFormat3(Sink.apply)
 

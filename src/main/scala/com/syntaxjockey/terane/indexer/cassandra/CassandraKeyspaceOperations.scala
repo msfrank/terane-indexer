@@ -46,8 +46,8 @@ trait CassandraKeyspaceOperations {
         .setComparatorType("UTF8Type"))
       .addColumnFamily(cluster.makeColumnFamilyDefinition()
         .setName("meta")
-        .setKeyValidationClass("UUIDType")
-        .setComparatorType("UTF8Type"))
+        .setKeyValidationClass("UTF8Type")
+        .setComparatorType("CompositeType(UTF8Type,UUIDType)"))
     cluster.addKeyspace(ksDef)
     cluster.getKeyspace(keyspaceName)
   }
@@ -56,12 +56,6 @@ trait CassandraKeyspaceOperations {
    * Return true if the keyspace exists, otherwise false.
    */
   def keyspaceExists(keyspaceName: String): Boolean = {
-    try {
-      val ksDef = cluster.describeKeyspace(keyspaceName)
-      true
-    } catch {
-      case ex: Throwable =>
-      false
-    }
+      if (cluster.describeKeyspace(keyspaceName) == null) false else true
   }
 }

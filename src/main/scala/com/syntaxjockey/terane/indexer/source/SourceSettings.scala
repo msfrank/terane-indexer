@@ -36,43 +36,43 @@ object SourceSettings {
   import SyslogTcpSourceSettings.SyslogTcpSourceSettingsFormat
 
   def parse(config: Config): SourceSettings = {
-    if (!config.hasPath("source-type")) throw IndexerConfigException("missing required parameter 'source-type'")
-    config.getString("source-type") match {
+    if (!config.hasPath("sourceType")) throw IndexerConfigException("missing required parameter 'sourceType'")
+    config.getString("sourceType") match {
       case "syslog-udp" =>
         SyslogUdpSourceSettings.parse(config)
       case "syslog-tcp" =>
         SyslogTcpSourceSettings.parse(config)
       case unknown =>
-        throw IndexerConfigException("unknown source-type '%s'".format(unknown))
+        throw IndexerConfigException("unknown sourceType '%s'".format(unknown))
     }
   }
 
   implicit object SourceSettingsFormat extends JsonFormat[SourceSettings] {
     def write(settings: SourceSettings) = settings match {
       case settings: SyslogUdpSourceSettings =>
-        SyslogUdpSourceSettingsFormat.write(settings)
+        JsObject("sourceType" -> JsString("syslog-udp"), "settings" -> SyslogUdpSourceSettingsFormat.write(settings))
       case settings: SyslogTcpSourceSettings =>
-        SyslogTcpSourceSettingsFormat.write(settings)
+        JsObject("sourceType" -> JsString("syslog-tcp"), "settings" -> SyslogTcpSourceSettingsFormat.write(settings))
       case unknown => throw new SerializationException("don't know how to serialize %s".format(unknown))
     }
 
     def read(value: JsValue) = value match {
       case obj: JsObject =>
-        obj.fields.get("source-type") match {
+        obj.fields.get("sourceType") match {
           case Some(sinkType) =>
             sinkType match {
               case JsString("syslog-udp") =>
-                SyslogUdpSourceSettingsFormat.read(value)
+                SyslogUdpSourceSettingsFormat.read(obj.fields("settings"))
               case JsString("syslog-tcp") =>
-                SyslogTcpSourceSettingsFormat.read(value)
+                SyslogTcpSourceSettingsFormat.read(obj.fields("settings"))
               case unknown =>
-                throw new DeserializationException("unknown sink-type '%s'".format(unknown))
+                throw new DeserializationException("unknown sourceType '%s'".format(unknown))
             }
           case None =>
-            throw new DeserializationException("SinkSettings is missing sink-type")
+            throw new DeserializationException("SourceSettings is missing sourceType")
         }
 
-      case _ => throw new DeserializationException("expected SinkSettings")
+      case _ => throw new DeserializationException("expected SourceSettings")
     }
   }
 }

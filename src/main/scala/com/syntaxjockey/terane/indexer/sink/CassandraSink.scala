@@ -182,6 +182,8 @@ object CassandraSink {
     zookeeper.inTransaction()
       .create().forPath(path, bytes)
       .and()
+      .create().forPath(path + "/fields", bytes)
+      .and()
       .create().forPath(path + "/id", id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
       .and().commit()
     val stat = zookeeper.checkExists().forPath(path)

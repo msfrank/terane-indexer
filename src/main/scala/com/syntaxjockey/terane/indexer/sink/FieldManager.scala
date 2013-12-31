@@ -91,8 +91,6 @@ class FieldManager(settings: CassandraSinkSettings, zookeeperPath: String, val k
 
   /**
    * Asynchronously retrieve the list of fields.
-   *
-   * @return
    */
   def getFields = Future[FieldMap] {
     val basepath = zookeeperPath + "/fields"
@@ -149,9 +147,6 @@ class FieldManager(settings: CassandraSinkSettings, zookeeperPath: String, val k
 
   /**
    * Asynchronously create a new field.
-   *
-   * @param fieldId
-   * @return
    */
   def createField(op: CreateField) = Future[FieldModificationResult] {
     val fieldId = op.fieldId

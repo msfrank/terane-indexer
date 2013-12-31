@@ -20,11 +20,12 @@
 package com.syntaxjockey.terane.indexer
 
 import akka.actor._
+import akka.pattern.pipe
 import akka.util.Timeout
 import spray.json.JsonParser
 import scala.collection.JavaConversions._
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import java.util.UUID
 import java.net.URLDecoder
 
 import com.syntaxjockey.terane.indexer.SourceManager.{SourceManagerData, SourceManagerState}
@@ -39,6 +40,7 @@ import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZNode}
  */
 class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor with ActorLogging with FSM[SourceManagerState,SourceManagerData] {
   import SourceManager._
+  import context.dispatcher
 
   // config
   val settings = IndexerConfig(context.system).settings
@@ -68,9 +70,9 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
         val sourceSettings = SourceSettingsFormat.read(JsonParser(bytes))
         val sourceref = sourceSettings match {
           case settings: SyslogUdpSourceSettings =>
-            SyslogUdpSource.open(zookeeper.usingNamespace(path), name, settings, eventRouter)
+            SyslogUdpSource.open(zookeeper, name, settings, eventRouter)
           case settings: SyslogTcpSourceSettings =>
-            SyslogTcpSource.open(zookeeper.usingNamespace(path), name, settings, eventRouter)
+            SyslogTcpSource.open(zookeeper, name, settings, eventRouter)
         }
         log.debug("initialized source %s", name)
         name -> sourceref
@@ -83,8 +85,54 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
 
   }
 
+  onTransition {
+    case Ready -> ClusterLeader =>
+      context.system.eventStream.publish(SourceMap(sources))
+  }
+
   when(ClusterLeader) {
-    case Event(_, _) =>
+
+    /* if no operations are pending then execute, otherwise queue */
+    case Event(op: SourceOperation, maybePending) =>
+      val pendingOperations = maybePending match {
+        case PendingOperations(current, queue) =>
+          PendingOperations(current, queue :+ op -> sender)
+        case WaitingForOperation =>
+          executeOperation(op) pipeTo self
+          PendingOperations(op -> sender, Vector.empty)
+      }
+      stay() using pendingOperations
+
+    /* sink has been created successfully */
+    case Event(result @ CreatedSource(createOp, sourceref), PendingOperations((op, caller), queue)) =>
+      caller ! result
+      sources = sources + (createOp.name -> sourceref)
+      context.system.eventStream.publish(SourceMap(sources))
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
+      }
+      stay() using pendingOperations
+
+    /* an asynchronous operation failed */
+    case Event(failure @ SourceOperationFailed(cause, failedOp), PendingOperations((op, caller), queue)) =>
+      log.error("operation {} failed: {}", failedOp, cause.getMessage)
+      caller ! failure
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
+      }
+      stay() using pendingOperations
+
+    /* forward the operation to self on behalf of caller */
+    case Event(SourceBroadcastOperation(caller, op), _) =>
+      self.tell(op, caller)
       stay()
   }
 
@@ -94,6 +142,41 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
   }
 
   initialize()
+
+  /**
+   *
+   */
+  def executeOperation(op: SourceOperation): Future[SourceOperationResult] = {
+    op match {
+      case createOp: CreateSource =>
+        createSource(createOp)
+      case unknown =>
+        Future.successful(SourceOperationFailed(new Exception("failed to execute %s".format(op)), op))
+    }
+  }
+
+  /**
+   *
+   */
+  def createSource(op: CreateSource): Future[SourceOperationResult] = {
+    if (sources.contains(op.settings.name))
+      Future.successful(SourceOperationFailed(new Exception("source %s already exists".format(op.settings.name)), op))
+    else {
+      Future {
+        val sourceref = op.settings match {
+          case settings: SyslogUdpSourceSettings =>
+            SyslogUdpSource.create(zookeeper, op.name, settings, eventRouter)
+          case settings: SyslogTcpSourceSettings =>
+            SyslogTcpSource.create(zookeeper, op.name, settings, eventRouter)
+        }
+        log.debug("created source %s: %s", op.settings.name, op.settings)
+        CreatedSource(op, sourceref)
+      }.recover {
+        case ex: Throwable =>
+          SourceOperationFailed(ex, op)
+      }
+    }
+  }
 }
 
 object SourceManager {

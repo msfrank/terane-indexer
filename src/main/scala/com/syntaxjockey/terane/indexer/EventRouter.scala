@@ -22,6 +22,7 @@ package com.syntaxjockey.terane.indexer
 import akka.actor._
 
 import com.syntaxjockey.terane.indexer.bier.BierEvent
+import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
 
 /**
  * The EventRouter is a second-level actor (underneath ClusterSupervisor) which
@@ -53,7 +54,7 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
       sinkMap = _sinkMap
 
     /* send event to the appropriate sink */
-    case event: BierEvent =>
+    case StoreEvent(sourceName, event) =>
       sinkMap.sinks.values.foreach(sink => sink.actor ! event)
   }
 }
@@ -62,7 +63,7 @@ object EventRouter {
 
   def props(supervisor: ActorRef) = Props(classOf[EventRouter], supervisor)
 
-  case class StoreEvent(store: String, event: BierEvent)
+  case class StoreEvent(sourceName: String, event: BierEvent)
 }
 
 case class Route(id: String, name: String, target: Sink, matches: Seq[MatchStatement])

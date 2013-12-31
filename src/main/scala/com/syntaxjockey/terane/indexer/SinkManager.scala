@@ -83,15 +83,9 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
 
   }
 
-  def executeOperation(op: SinkOperation): Future[SinkOperationResult] = {
-    op match {
-      case createOp: CreateSink =>
-        createSink(createOp)
-      case deleteOp: DeleteSink =>
-        deleteSink(deleteOp)
-      case unknown =>
-        Future.successful(SinkOperationFailed(new Exception("failed to execute %s".format(op)), op))
-    }
+  onTransition {
+    case Ready -> ClusterLeader =>
+      context.system.eventStream.publish(SinkMap(sinks))
   }
 
   when(ClusterLeader) {
@@ -111,6 +105,7 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
     case Event(result @ CreatedSink(createOp, sinkref), PendingOperations((op, caller), queue)) =>
       caller ! result
       sinks = sinks + (createOp.name -> sinkref)
+      context.system.eventStream.publish(SinkMap(sinks))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>
           executeOperation(_op) pipeTo self
@@ -148,6 +143,22 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
         .map { case (name,ref) => name -> ref.sink }
       val sinksRemoved = sinks.filter { case (name,_) => !_sinks.contains(name) }
       goto(ClusterWorker)
+  }
+
+  initialize()
+
+  /**
+   *
+   */
+  def executeOperation(op: SinkOperation): Future[SinkOperationResult] = {
+    op match {
+      case createOp: CreateSink =>
+        createSink(createOp)
+      case deleteOp: DeleteSink =>
+        deleteSink(deleteOp)
+      case unknown =>
+        Future.successful(SinkOperationFailed(new Exception("failed to execute %s".format(op)), op))
+    }
   }
 
   /**
