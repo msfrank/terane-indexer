@@ -1,9 +1,11 @@
 #!/bin/bash
 
-set -x
+if [ "$1" == "-v" ]; then
+  set -x
+fi
 
 # chdir to ext/
-pushd "`dirname $0`/../"
+pushd "`dirname $0`/../" &>/dev/null
 
 # check whether zookeeper is already running
 RUNNING=0
@@ -19,7 +21,8 @@ fi
 
 # start zookeeper if it is not running
 if [ "$RUNNING" -eq 0 ]; then
-  pushd lib/zookeeper
+  pushd lib/zookeeper &>/dev/null
+  echo "starting zookeeper..."
   ./bin/zkServer.sh start-foreground 2>&1 1>/dev/null & 
   PID=$!
   sleep 5
@@ -29,11 +32,11 @@ if [ "$RUNNING" -eq 0 ]; then
     exit 1
   else
     echo $PID > ../../var/run/zookeeper.pid
-    echo "started zookeeper (pid $PID)"
+    echo "zookeeper is running (pid $PID)"
   fi
-  popd
+  popd &>/dev/null
 else
-  echo "zookeeper is already running (pid $PID)"
+  echo "zookeeper is running (pid $PID)"
 fi
 
 # check whether cassandra is already running
@@ -50,7 +53,8 @@ fi
 
 # start cassandra if it is not running
 if [ "$RUNNING" -eq 0 ]; then
-  pushd lib/cassandra
+  pushd lib/cassandra &>/dev/null
+  echo "starting cassandra..."
   ./bin/cassandra -f 2>&1 1>/dev/null &
   PID=$!
   sleep 5
@@ -60,11 +64,11 @@ if [ "$RUNNING" -eq 0 ]; then
     exit 1
   else
     echo $PID > ../../var/run/cassandra.pid
-    echo "started cassandra (pid $PID)"
+    echo "cassandra is running (pid $PID)"
   fi
-  popd
+  popd &>/dev/null
 else
-  echo "cassandra is already running (pid $PID)"
+  echo "cassandra is running (pid $PID)"
 fi
 
 exit 0

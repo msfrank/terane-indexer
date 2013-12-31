@@ -1,9 +1,11 @@
 #!/bin/bash
 
-set -x
+if [ "$1" == "-v" ]; then
+  set -x
+fi
 
 # chdir to ext/
-pushd "`dirname $0`/../"
+pushd "`dirname $0`/../" &>/dev/null
 
 # check whether zookeeper is already running
 RUNNING=0
@@ -18,6 +20,7 @@ fi
 
 # stop zookeeper if it is running
 if [ "$RUNNING" -eq 1 ]; then
+  echo "stopping zookeeper..."
   kill -TERM $PID &>/dev/null
   sleep 5
   kill -0 $PID &>/dev/null
@@ -28,6 +31,8 @@ if [ "$RUNNING" -eq 1 ]; then
     rm -f var/run/zookeeper.pid
     echo "stopped zookeeper (pid $PID)"
   fi
+else
+  echo "zookeeper is not running"
 fi
 
 # check whether cassandra is already running
@@ -43,6 +48,7 @@ fi
 
 # stop cassandra if it is running
 if [ "$RUNNING" -eq 1 ]; then
+  echo "stopping cassandra..."
   kill -TERM $PID &>/dev/null
   sleep 5
   kill -0 $PID &>/dev/null
@@ -53,6 +59,8 @@ if [ "$RUNNING" -eq 1 ]; then
     rm -f var/run/cassandra.pid
     echo "stopped cassandra (pid $PID)"
   fi
+else
+  echo "cassandra is not running"
 fi
 
 exit 0
