@@ -33,6 +33,7 @@ import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.source.SourceSettings
 import com.syntaxjockey.terane.indexer.sink.SinkSettings
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
+import java.util.UUID
 
 /**
  * Top level supervisor actor.
@@ -48,6 +49,7 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
   val routes = context.actorOf(EventRouter.props(self), "event-router")
   val sources = context.actorOf(SourceManager.props(self, routes), "source-manager")
   val sinks = context.actorOf(SinkManager.props(self), "sink-manager")
+  val queries = context.actorOf(SearchManager.props(self), "search-manager")
 
   /* start the HTTP service if configured */
   val http = settings.http match {
@@ -119,13 +121,9 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
 
   onTransition {
     case Ready -> ClusterLeader =>
-      routes ! NodeBecomesLeader
-      sources ! NodeBecomesLeader
-      sinks ! NodeBecomesLeader
+      context.system.eventStream.publish(NodeBecomesLeader)
     case Ready -> ClusterWorker =>
-      routes ! NodeBecomesWorker
-      sources ! NodeBecomesWorker
-      sinks ! NodeBecomesWorker
+      context.system.eventStream.publish(NodeBecomesWorker)
   }
 
   when(ClusterLeader) {
@@ -133,8 +131,8 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
       goto(ClusterWorker)
     case Event(state: CurrentClusterState, _) =>
       stay() using ClusterUp(state)
-    case Event(op: QueryOperation, _) =>
-      sinks forward op
+    case Event(op: SearchOperation, _) =>
+      queries forward op
       stay()
     case Event(op: SourceOperation, _) =>
       sources forward op
@@ -151,13 +149,9 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
 
   onTransition {
     case ClusterLeader -> ClusterWorker =>
-      routes ! NodeBecomesWorker
-      sources ! NodeBecomesWorker
-      sinks ! NodeBecomesWorker
+      context.system.eventStream.publish(NodeBecomesWorker)
     case ClusterWorker -> ClusterLeader =>
-      routes ! NodeBecomesLeader
-      sources ! NodeBecomesLeader
-      sinks ! NodeBecomesLeader
+      context.system.eventStream.publish(NodeBecomesLeader)
   }
 
   when(ClusterWorker) {
@@ -198,8 +192,10 @@ object ClusterSupervisor {
   case object ClusterReady
 }
 
-case object NodeBecomesLeader
-case object NodeBecomesWorker
+sealed trait SupervisorEvent
+case object NodeBecomesLeader extends SupervisorEvent
+case object NodeBecomesWorker extends SupervisorEvent
+
 case class NodeIsNotLeader(op: ClusterOperation, leader: Address)
 case class LeaderOperation(caller: ActorRef, op: ClusterOperation)
 
@@ -235,12 +231,13 @@ case class DescribeSink(name: String) extends SinkQuery with CanPerformAnywhere
 case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
 
 /*
- * Query operations
+ * Search operations
  */
-sealed trait QueryOperation
-sealed trait QueryCommand extends QueryOperation with ClusterCommand
-sealed trait QueryQuery extends QueryOperation with ClusterQuery
-case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean]) extends QueryCommand with CanPerformAnywhere
-case object DeleteQuery extends QueryCommand with CanPerformAnywhere
-case object DescribeQuery extends QueryQuery with CanPerformAnywhere
-case class GetEvents(offset: Option[Int] = None, limit: Option[Int] = None) extends QueryCommand with CanPerformAnywhere
+sealed trait SearchOperation
+sealed trait SearchCommand extends SearchOperation with ClusterCommand
+sealed trait SearchQuery extends SearchOperation with ClusterQuery
+case class CreateQuery(query: String, store: String, fields: Option[Set[String]], sortBy: Option[List[FieldIdentifier]], limit: Option[Int], reverse: Option[Boolean]) extends SearchCommand with CanPerformAnywhere
+case class DeleteQuery(id: UUID) extends SearchCommand with CanPerformAnywhere
+case class GetEvents(offset: Option[Int] = None, limit: Option[Int] = None) extends SearchQuery with CanPerformAnywhere
+case class DescribeQuery(id: UUID) extends SearchQuery with CanPerformAnywhere
+case object EnumerateQueries extends SearchQuery with CanPerformAnywhere

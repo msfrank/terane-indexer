@@ -50,7 +50,11 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
   // state
   var sources: Map[String,SourceRef] = Map.empty
 
+  // listen for any broadcast operations
   context.system.eventStream.subscribe(self, classOf[SourceBroadcastOperation])
+
+  // subscribe to leadership changes
+  context.system.eventStream.subscribe(self, classOf[SupervisorEvent])
 
   startWith(Ready, WaitingForOperation)
 

@@ -34,14 +34,14 @@ import java.net.InetAddress
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import com.syntaxjockey.terane.indexer.sink.Query.{QueryData, QueryState}
+import com.syntaxjockey.terane.indexer._
+import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.matchers._
-import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.bier.Matchers.{Posting => BierPosting, NoMoreMatches}
-import com.syntaxjockey.terane.indexer.sink.Query.{Data, State}
 import com.syntaxjockey.terane.indexer.sink.FieldManager.FieldMap
 import com.syntaxjockey.terane.indexer.sink.StatsManager.StatsMap
-import com.syntaxjockey.terane.indexer.{CreateQuery,DeleteQuery,DescribeQuery,GetEvents}
 
 /**
  * The Query actor manages the lifecycle of an individual query.  Query processing
@@ -54,7 +54,8 @@ import com.syntaxjockey.terane.indexer.{CreateQuery,DeleteQuery,DescribeQuery,Ge
  *  4) fulfill GetEvents requests from the ApiService.
  *  5) eventually delete the temp file.
  */
-class Query(id: UUID, createQuery: CreateQuery, settings: CassandraSinkSettings, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor with ActorLogging with LoggingFSM[State,Data] {
+class Query(id: UUID, createQuery: CreateQuery, settings: CassandraSinkSettings, keyspace: Keyspace, fields: FieldMap, stats: StatsMap) extends Actor
+with ActorLogging with LoggingFSM[QueryState,QueryData] with Instrumented {
   import scala.language.postfixOps
   import Query._
   import context.dispatcher
@@ -413,16 +414,12 @@ object Query {
   case object FinishedReading
 
   /* our FSM states */
-  sealed trait State
-  case object WaitingForMatcherEstimates extends State
-  case object ReadingResults extends State
-  case object FinishedQuery extends State
+  sealed trait QueryState
+  case object WaitingForMatcherEstimates extends QueryState
+  case object ReadingResults extends QueryState
+  case object FinishedQuery extends QueryState
 
-  sealed trait Data
-  case class ReadingResults(matchers: Matchers, numRead: Int) extends Data
-  case class FinishedQuery(finished: DateTime, numRead: Int) extends Data
+  sealed trait QueryData
+  case class ReadingResults(matchers: Matchers, numRead: Int) extends QueryData
+  case class FinishedQuery(finished: DateTime, numRead: Int) extends QueryData
 }
-
-case class EventSet(fields: Map[String, FieldIdentifier], events: List[BierEvent], stats: QueryStatistics, finished: Boolean)
-
-case class QueryStatistics(id: UUID, created: DateTime, state: String, numRead: Int, numSent: Int, runtime: Duration)

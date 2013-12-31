@@ -152,8 +152,8 @@ object JsonProtocol extends DefaultJsonProtocol {
   /* convert CreateQuery class */
   implicit val CreateQueryFormat = jsonFormat6(CreateQuery.apply)
 
-  /* convert CreatedQuery class */
-  implicit val CreatedQueryFormat = jsonFormat1(CreatedQuery.apply)
+  /* convert Search class */
+  implicit val SearchFormat = jsonFormat2(Search.apply)
 
   /* convert GetEvents class */
   implicit val GetEventsFormat = jsonFormat2(GetEvents.apply)

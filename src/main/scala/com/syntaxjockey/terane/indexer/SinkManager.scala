@@ -49,7 +49,11 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
   // state
   var sinks: Map[String,SinkRef] = Map.empty
 
+  // listen for any broadcast operations
   context.system.eventStream.subscribe(self, classOf[SinkBroadcastOperation])
+
+  // subscribe to leadership changes
+  context.system.eventStream.subscribe(self, classOf[SupervisorEvent])
 
   override def preStart() {
     /* ensure that /sinks znode exists */
@@ -221,5 +225,3 @@ case class SinkBroadcastOperation(caller: ActorRef, op: SinkOperation)
 case class CreatedSink(op: CreateSink, result: SinkRef) extends SinkCommandResult
 case class DeletedSink(op: DeleteSink) extends SinkCommandResult
 case class EnumeratedSinks(sinks: Seq[SinkRef]) extends SinkQueryResult
-
-case class CreatedQuery(id: UUID)

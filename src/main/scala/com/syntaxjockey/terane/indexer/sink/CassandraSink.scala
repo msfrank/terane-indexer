@@ -155,9 +155,9 @@ with FSM[CassandraSinkState,CassandraSinkData] with ActorLogging with CassandraK
 
     case Event(createQuery: CreateQuery, eventBuffer: EventBuffer) =>
       val id = UUID.randomUUID()
-      context.system.actorOf(Query.props(id, createQuery, settings, eventBuffer.keyspace, currentFields, currentStats), "query-" + id.toString)
+      val actor = context.system.actorOf(Query.props(id, createQuery, settings, eventBuffer.keyspace, currentFields, currentStats), "query-" + id.toString)
       queriesCreated.mark()
-      sender ! CreatedQuery(id)
+      sender ! CreatedQuery(createQuery, SearchRef(actor, Search(id, createQuery)))
       stay()
 
     case Event(_: WroteEvent, _) =>

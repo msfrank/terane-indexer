@@ -37,6 +37,9 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
   // state
   var sinkMap = SinkMap(Map.empty)
 
+  // subscribe to leadership changes
+  context.system.eventStream.subscribe(self, classOf[SupervisorEvent])
+
   // subscribe to SinkMap changes
   context.system.eventStream.subscribe(self, classOf[SinkMap])
 
@@ -48,6 +51,10 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
   }
 
   def receive = {
+
+    case NodeBecomesLeader =>
+
+    case NodeBecomesWorker =>
 
     /* the map of sinks has changed */
     case _sinkMap: SinkMap =>

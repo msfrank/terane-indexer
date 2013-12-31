@@ -28,7 +28,7 @@ import java.io.{DataInput, DataOutput, File}
 import java.net.InetAddress
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.{CreateQuery,DescribeQuery,GetEvents}
+import com.syntaxjockey.terane.indexer.{CreateQuery,DescribeQuery,GetEvents,QueryStatistics,EventSet}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue}
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier

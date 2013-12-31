@@ -26,7 +26,7 @@ import org.joda.time.{DateTimeZone, DateTime}
 import scala.Some
 import java.util.UUID
 
-import com.syntaxjockey.terane.indexer.{ChildForwarder, CreateQuery, GetEvents, TestCluster}
+import com.syntaxjockey.terane.indexer.{ChildForwarder, CreateQuery, GetEvents, EventSet, TestCluster}
 import com.syntaxjockey.terane.indexer.bier.{BierEvent, EventValue, FieldIdentifier}
 import com.syntaxjockey.terane.indexer.bier.datatypes._
 import com.syntaxjockey.terane.indexer.sink.Query._

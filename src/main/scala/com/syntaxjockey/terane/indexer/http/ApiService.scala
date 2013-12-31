@@ -32,7 +32,6 @@ import spray.util.LoggingContext
 import java.util.UUID
 
 import com.syntaxjockey.terane.indexer._
-import com.syntaxjockey.terane.indexer.sink._
 
 /**
  * ApiService contains the REST API logic.
@@ -61,10 +60,10 @@ trait ApiService extends HttpService {
             complete {
               log.debug("creating query")
               supervisor.ask(createQuery).map {
-                case createdQuery: CreatedQuery =>
+                case CreatedQuery(op, SearchRef(_, search)) =>
                   HttpResponse(StatusCodes.Created,
-                    JsonBody(createdQuery.toJson),
-                    List(Location("http://%s:%d/1/queries/%s".format(hostname, settings.port, createdQuery.id))))
+                    JsonBody(search.toJson),
+                    List(Location("http://%s:%d/1/queries/%s".format(hostname, settings.port, search.id))))
                 case failure: ApiFailure =>
                   log.info("error creating query")
                   throw new ApiException(failure)
