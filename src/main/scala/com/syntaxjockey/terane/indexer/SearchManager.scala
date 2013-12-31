@@ -32,7 +32,8 @@ import com.syntaxjockey.terane.indexer.bier.{FieldIdentifier, BierEvent}
 import akka.util.Timeout
 
 /**
- *
+ * SearchManager keeps track of queries, and acts as a proxy between the API and the
+ * sinks.
  */
 class SearchManager(supervisor: ActorRef) extends Actor with ActorLogging {
   import SearchManager._

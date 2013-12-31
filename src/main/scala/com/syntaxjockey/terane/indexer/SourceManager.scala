@@ -78,7 +78,7 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
           case settings: SyslogTcpSourceSettings =>
             SyslogTcpSource.open(zookeeper, name, settings, eventRouter)
         }
-        log.debug("initialized source %s", name)
+        log.debug("initialized source {}", name)
         name -> sourceref
       }.toMap
       goto(ClusterLeader)
@@ -173,7 +173,7 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
           case settings: SyslogTcpSourceSettings =>
             SyslogTcpSource.create(zookeeper, op.name, settings, eventRouter)
         }
-        log.debug("created source %s: %s", op.settings.name, op.settings)
+        log.debug("created source {}: {}", op.settings.name, op.settings)
         CreatedSource(op, sourceref)
       }.recover {
         case ex: Throwable =>

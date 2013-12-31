@@ -75,16 +75,18 @@ with ActorLogging with LoggingFSM[QueryState,QueryData] with Instrumented {
     case Some(matchers) =>
       buildTerms(matchers, keyspace, fields, stats) match {
         case Some(query) =>
-          log.debug("query => {}'", createQuery.query)
+          log.debug("query => '{}'", createQuery.query)
           log.debug("matchers =>\n{}", prettyPrint(query))
           startWith(ReadingResults, ReadingResults(query, 0))
           query.nextPosting pipeTo self
         case None =>
+          log.debug("matchers {} optimized out", matchers)
           streamer ! NoMoreEvents
           setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
           startWith(FinishedQuery, FinishedQuery(DateTime.now(DateTimeZone.UTC), 0))
       }
     case None =>
+      log.debug("query '{}' optimized out", createQuery.query)
       streamer ! NoMoreEvents
       setTimer("cancelling query", CancelQuery, reapingInterval, repeat = false)
       startWith(FinishedQuery, FinishedQuery(DateTime.now(DateTimeZone.UTC), 0))

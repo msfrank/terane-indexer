@@ -55,7 +55,7 @@ class StatsManager(settings: CassandraSinkSettings, zookeeperPath: String, keysp
   var currentStats = StatsMap(Map.empty)
   var fieldsByCf: Map[String,CassandraField] = Map.empty
 
-  val gossiper = context.actorOf(Gossiper.props(zookeeperPath + "/stats", "stats", 60 seconds), "gossip")
+  val gossiper = context.actorOf(Gossiper.props(zookeeperPath, "stats", 60 seconds), "gossip")
 
   /* register to be notified of field changes */
   sinkBus.subscribe(self, classOf[FieldNotification])

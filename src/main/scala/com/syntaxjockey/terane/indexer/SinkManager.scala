@@ -76,7 +76,7 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
           case settings: CassandraSinkSettings =>
             CassandraSink.open(zookeeper, name, settings)
         }
-        log.debug("initialized sink %s", name)
+        log.debug("initialized sink {}", name)
         name -> sinkref
       }.toMap
       goto(ClusterLeader)
@@ -177,7 +177,7 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
           case settings: CassandraSinkSettings =>
             CassandraSink.create(zookeeper, op.name, settings)
         }
-        log.debug("created sink %s: %s", op.settings.name, op.settings)
+        log.debug("created sink {}: {}", op.settings.name, op.settings)
         CreatedSink(op, sinkref)
       }.recover {
         case ex: Throwable =>

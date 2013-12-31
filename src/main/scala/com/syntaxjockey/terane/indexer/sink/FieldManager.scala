@@ -59,6 +59,10 @@ class FieldManager(settings: CassandraSinkSettings, zookeeperPath: String, val k
   var changingFields: Set[FieldIdentifier] = Set.empty
   var removingFields: Set[FieldIdentifier] = Set.empty
 
+  override def preStart() {
+    getFields pipeTo self
+  }
+
   def receive = {
 
     /* notify all subscribers that fields have changed */
@@ -153,68 +157,49 @@ class FieldManager(settings: CassandraSinkSettings, zookeeperPath: String, val k
     val path = zookeeperPath + "/fields/" + fieldId.fieldType.toString + ":" + fieldId.fieldName
     val id: UUIDLike = UUID.randomUUID()
     val created = DateTime.now(DateTimeZone.UTC)
-    /* lock field */
-    val lock = new InterProcessReadWriteLock(zookeeper, "/lock" + path)
-    val writeLock = lock.writeLock()
-    writeLock.acquire()
+    /* create the cassandra field column family */
+    val result = fieldId.fieldType match {
+      case DataType.TEXT =>
+        val fcf = createTextField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, text = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+      case DataType.LITERAL =>
+        val fcf = createLiteralField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, literal = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+      case DataType.INTEGER =>
+        val fcf = createIntegerField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, integer = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+      case DataType.FLOAT =>
+        val fcf = createFloatField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, float = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+      case DataType.DATETIME =>
+        val fcf = createDatetimeField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, datetime = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+      case DataType.ADDRESS =>
+        val fcf = createAddressField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, address = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+      case DataType.HOSTNAME =>
+        val fcf = createHostnameField(fieldId.fieldName, id, shardingFactor).get
+        val field = CassandraField(fieldId, created, hostname = Some(fcf))
+        CreatedField(fieldId, field, fcf)
+    }
     try {
-      /* check whether field already exists */
-      zookeeper.checkExists().forPath(path) match {
-        case stat: Stat =>
-          // FIXME: return field if it already exists
-          throw new Exception("field already exists")
-        case null =>
-          /* create the column family in cassandra */
-          val result = fieldId.fieldType match {
-            case DataType.TEXT =>
-              val fcf = createTextField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, text = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-            case DataType.LITERAL =>
-              val fcf = createLiteralField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, literal = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-            case DataType.INTEGER =>
-              val fcf = createIntegerField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, integer = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-            case DataType.FLOAT =>
-              val fcf = createFloatField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, float = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-            case DataType.DATETIME =>
-              val fcf = createDatetimeField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, datetime = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-            case DataType.ADDRESS =>
-              val fcf = createAddressField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, address = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-            case DataType.HOSTNAME =>
-              val fcf = createHostnameField(fieldId.fieldName, id, shardingFactor).get
-              val field = CassandraField(fieldId, created, hostname = Some(fcf))
-              CreatedField(fieldId, field, fcf)
-          }
-          try {
-            /* create the field in zookeeper */
-            zookeeper.inTransaction()
-              .create().forPath(path, id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
-              .and()
-              .create().forPath(path + "/created", created.getMillis.toString.getBytes(Zookeeper.UTF_8_CHARSET))
-              .and()
-              .commit()
-            log.debug("created field {}:{}", fieldId.fieldName, fieldId.fieldType.toString)
-            result
-          } finally {
-            /* FIXME: delete the field in cassandra */
-          }
-      }
+      /* create the field in zookeeper */
+      zookeeper.inTransaction()
+        .create().forPath(path, id.toString.getBytes(Zookeeper.UTF_8_CHARSET))
+        .and()
+        .create().forPath(path + "/created", created.getMillis.toString.getBytes(Zookeeper.UTF_8_CHARSET))
+        .and()
+        .commit()
+      log.debug("created field {}:{}", fieldId.fieldName, fieldId.fieldType.toString)
+      result
     } catch {
-      case ex: Throwable =>
-        ModificationFailed(ex, op)
-    } finally {
-      /* unlock field */
-      writeLock.release()
+      case ex: Throwable => ModificationFailed(ex, op)
     }
   }
 }
