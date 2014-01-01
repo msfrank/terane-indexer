@@ -220,23 +220,3 @@ object CassandraSink {
   case class UnconnectedBuffer(events: Seq[RetryEvent]) extends CassandraSinkData
   case class ConnectingBuffer(events: Seq[RetryEvent], initiator: Option[ActorRef]) extends CassandraSinkData
 }
-
-/**
- * SinkBus is an event stream which is private to each individual CassandraSink, and
- * is used for broadcast communication between sink components.
- */
-class SinkBus extends ActorEventBus with SubchannelClassification {
-  type Event = SinkEvent
-  type Classifier = Class[_]
-
-  protected implicit val subclassification = new Subclassification[Class[_]] {
-    def isEqual(x: Class[_], y: Class[_]) = x == y
-    def isSubclass(x: Class[_], y: Class[_]) = y isAssignableFrom x
-  }
-
-  protected def classify(event: SinkEvent): Class[_] = event.getClass
-
-  protected def publish(event: SinkEvent, subscriber: ActorRef) { subscriber ! event }
-}
-
-trait SinkEvent
