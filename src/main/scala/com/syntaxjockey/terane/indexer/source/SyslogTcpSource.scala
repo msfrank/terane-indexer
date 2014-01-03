@@ -12,7 +12,7 @@ import java.security.KeyStore
 import java.io.FileInputStream
 
 import com.syntaxjockey.terane.indexer.source.SyslogPipelineHandler.SyslogInit
-import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
+import com.syntaxjockey.terane.indexer.StoreEvent
 import com.syntaxjockey.terane.indexer.{Instrumented, Source, SourceRef}
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat

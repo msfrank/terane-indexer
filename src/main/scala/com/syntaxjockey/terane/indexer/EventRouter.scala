@@ -22,7 +22,7 @@ package com.syntaxjockey.terane.indexer
 import akka.actor._
 
 import com.syntaxjockey.terane.indexer.bier.BierEvent
-import com.syntaxjockey.terane.indexer.EventRouter.StoreEvent
+import java.net.InetAddress
 
 /**
  * The EventRouter is a second-level actor (underneath ClusterSupervisor) which
@@ -35,26 +35,19 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
   val settings = IndexerConfig(context.system).settings
 
   // state
+  var sourceMap = SourceMap(Map.empty)
   var sinkMap = SinkMap(Map.empty)
+  var routes = Vector(Route("store-all", Vector(MatchesAll), StoreAllAction))
 
-  // subscribe to leadership changes
-  context.system.eventStream.subscribe(self, classOf[SupervisorEvent])
-
-  // subscribe to SinkMap changes
+  // subscribe to SourceMap and SinkMap changes
+  context.system.eventStream.subscribe(self, classOf[SourceMap])
   context.system.eventStream.subscribe(self, classOf[SinkMap])
-
-  override def preStart() {
-    /* create any locally-defined routes */
-
-    /* get the current sinks */
-    context.system.eventStream.publish(SinkBroadcastOperation(self, EnumerateSinks))
-  }
 
   def receive = {
 
-    case NodeBecomesLeader =>
-
-    case NodeBecomesWorker =>
+    /* the map of sources has changed */
+    case _sourceMap: SourceMap =>
+      sourceMap = _sourceMap
 
     /* the map of sinks has changed */
     case _sinkMap: SinkMap =>
@@ -62,27 +55,78 @@ class EventRouter(supervisor: ActorRef) extends Actor with ActorLogging with Ins
 
     /* send event to the appropriate sink */
     case StoreEvent(sourceName, event) =>
-      sinkMap.sinks.values.foreach(sink => sink.actor ! event)
+      routes.foreach(_.process(sourceMap.sources(sourceName), event, sinkMap))
   }
 }
 
 object EventRouter {
-
   def props(supervisor: ActorRef) = Props(classOf[EventRouter], supervisor)
-
-  case class StoreEvent(sourceName: String, event: BierEvent)
 }
 
-case class Route(id: String, name: String, target: Sink, matches: Seq[MatchStatement])
+case class StoreEvent(sourceName: String, event: BierEvent)
 
-sealed trait MatchStatement
+case class NetworkEvent(source: InetAddress, sourcePort: Int, dest: InetAddress, destPort: Int, event: BierEvent)
+
+/**
+ *
+ */
+case class Route(name: String, matches: Vector[MatchStatement], action: MatchAction) {
+  def process(source: SourceRef, event: BierEvent, sinks: SinkMap) {
+    matches.map { matchStatement =>
+      matchStatement.evaluate(event, sinks) match {
+        case Some(statementMatches) =>
+          if (statementMatches)
+            action.execute(event, sinks)
+          return
+        case None => // do nothing
+      }
+    }
+  }
+}
+
+/* */
+sealed trait MatchStatement {
+  def evaluate(event: BierEvent, sinks: SinkMap): Option[Boolean]
+}
+
 object MatchesAll extends MatchStatement {
-  def apply(event: BierEvent) = true
-}
-class MatchesTag(tag: String) {
-  def apply(event: BierEvent): Boolean = event.tags.contains(tag)
+  def evaluate(event: BierEvent, sinks: SinkMap) = Some(true)
 }
 
+object MatchesNone extends MatchStatement {
+  def evaluate(event: BierEvent, sinks: SinkMap) = Some(false)
+}
+
+class MatchesTag(tag: String) extends MatchStatement {
+  def evaluate(event: BierEvent, sinks: SinkMap) = if (event.tags.contains(tag)) Some(true) else None
+}
+
+/* */
+sealed trait MatchAction {
+  def execute(event: BierEvent, sinks: SinkMap): Unit
+}
+
+case class StoreAction(targets: Vector[String]) extends MatchAction {
+  def execute(event: BierEvent, sinks: SinkMap) {
+    targets.foreach { target =>
+      sinks.sinks.get(target) match {
+        case Some(sink) =>
+          sink.actor ! event
+        case None =>  // do nothing
+      }
+    }
+  }
+}
+
+object StoreAllAction extends MatchAction {
+  def execute(event: BierEvent, sinks: SinkMap) {
+    sinks.sinks.values.foreach(_.actor ! event)
+  }
+}
+
+object DropAction extends MatchAction {
+  def execute(event: BierEvent, sinks: SinkMap) { /* do nothing */ }
+}
 
 /**
  * abstract base class for all API failures.

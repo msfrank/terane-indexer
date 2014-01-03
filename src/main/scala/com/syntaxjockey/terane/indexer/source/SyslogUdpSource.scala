@@ -25,9 +25,11 @@ import akka.actor._
 import org.apache.curator.framework.CuratorFramework
 import java.net.{URLEncoder, InetSocketAddress}
 
-import com.syntaxjockey.terane.indexer.{Source, SourceRef, Instrumented, EventRouter}
+import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
+import com.syntaxjockey.terane.indexer.SourceRef
+import com.syntaxjockey.terane.indexer.Source
 
 /**
  * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
@@ -35,7 +37,6 @@ import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsForma
  */
 class SyslogUdpSource(name: String, settings: SyslogUdpSourceSettings, zookeeperPath: String, eventRouter: ActorRef) extends Actor
 with ActorLogging with Instrumented {
-  import EventRouter._
   import context.system
 
   // metrics
