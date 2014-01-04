@@ -12,10 +12,10 @@ import java.security.KeyStore
 import java.io.FileInputStream
 
 import com.syntaxjockey.terane.indexer.source.SyslogPipelineHandler.SyslogInit
-import com.syntaxjockey.terane.indexer.StoreEvent
 import com.syntaxjockey.terane.indexer.{Instrumented, Source, SourceRef}
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
+import com.syntaxjockey.terane.indexer.route.NetworkEvent
 
 /**
  * Actor implementing the syslog protocol over TCP in accordance with RFC6587:
@@ -104,7 +104,7 @@ with ActorLogging with Instrumented {
                 new BackpressureBuffer(lowBytes = 100, highBytes = 1000, maxBytes = 1000000)
           }
           val init = SyslogPipelineHandler.init(log, stages, settings.maxMessageSize)
-          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, eventRouter, name, settings.idleTimeout))
+          val handler = context.actorOf(TcpConnectionHandler.props(init, connection, remote, local, name, eventRouter, settings.idleTimeout))
           val pipeline = context.actorOf(TcpPipelineHandler.props(init, connection, handler))
           connection ! Tcp.Register(pipeline)   // FIXME: enable keepOpenOnPeerClosed?
           context.watch(handler)
@@ -179,7 +179,7 @@ object SyslogPipelineHandler {
 /**
  * actor responsible for managing events from a single TCP connection.
  */
-class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) extends Actor with ActorLogging {
+class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, remote: InetSocketAddress, local: InetSocketAddress, name: String, eventRouter: ActorRef, idleTimeout: Option[FiniteDuration]) extends Actor with ActorLogging {
   import init._
   import Tcp.{ConnectionClosed, Abort, Close}
   import context.dispatcher
@@ -195,7 +195,7 @@ class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: 
     case Event(SyslogEvent(event)) =>
       log.debug("received {}", event)
       for (cancellable <- idleTimer) { cancellable.cancel() }
-      eventRouter ! StoreEvent(defaultSink, event)
+      eventRouter ! NetworkEvent(name, event, remote, local)
       idleTimer = idleTimeout match {
         case Some(timeout) =>
           Some(context.system.scheduler.scheduleOnce(timeout, connection, Close))
@@ -217,7 +217,7 @@ class TcpConnectionHandler(init: SyslogInit, connection: ActorRef, eventRouter: 
 }
 
 object TcpConnectionHandler {
-  def props(init: SyslogInit, connection: ActorRef, eventRouter: ActorRef, defaultSink: String, idleTimeout: Option[FiniteDuration]) = {
-    Props(classOf[TcpConnectionHandler], init, connection, eventRouter, defaultSink, idleTimeout)
+  def props(init: SyslogInit, connection: ActorRef, remote: InetSocketAddress, local: InetSocketAddress, source: String, eventRouter: ActorRef, idleTimeout: Option[FiniteDuration]) = {
+    Props(classOf[TcpConnectionHandler], init, connection, remote, local, source, eventRouter, idleTimeout)
   }
 }

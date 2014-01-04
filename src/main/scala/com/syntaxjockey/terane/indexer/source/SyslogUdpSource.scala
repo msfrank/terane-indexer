@@ -30,6 +30,7 @@ import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
 import com.syntaxjockey.terane.indexer.SourceRef
 import com.syntaxjockey.terane.indexer.Source
+import com.syntaxjockey.terane.indexer.route.NetworkEvent
 
 /**
  * Actor implementing the syslog protocol over UDP in accordance with RFC5424:
@@ -54,19 +55,19 @@ with ActorLogging with Instrumented {
   }
 
   def receive = {
-    case Bound(_localAddr) =>
-      log.debug("bound to {}", _localAddr)
+    case Bound(local) =>
+      log.debug("bound to {}", local)
     case CommandFailed(b: Bind) =>
       log.error("failed to bind to {}", b.localAddress)
     case CommandFailed(command) =>
       log.error("{} command failed", command)
-    case Received(data, remoteAddr) =>
+    case Received(data, remote) =>
       val (events,_) = evt(data)
       for (event <- events) {
         event match {
           case SyslogEvent(_event) =>
             log.debug("received {}", _event)
-            eventRouter ! StoreEvent(name, _event)
+            eventRouter ! NetworkEvent(name, _event, remote, localAddr)
             messagesReceived.mark()
           case failure: SyslogProcessingFailure =>
             messagesDropped.mark()

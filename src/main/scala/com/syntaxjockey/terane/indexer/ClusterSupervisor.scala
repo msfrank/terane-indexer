@@ -26,14 +26,16 @@ import org.apache.curator.x.discovery.{ServiceDiscoveryBuilder, ServiceInstance}
 import scala.concurrent.Future
 import scala.collection.immutable.Seq
 import scala.collection.JavaConversions._
+import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.ClusterSupervisor.{ClusterState,ClusterData}
-import com.syntaxjockey.terane.indexer.http.HttpServer
 import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
+import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.source.SourceSettings
 import com.syntaxjockey.terane.indexer.sink.SinkSettings
-import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
-import java.util.UUID
+import com.syntaxjockey.terane.indexer.route.{EventRouter, RouteSettings}
+import com.syntaxjockey.terane.indexer.http.HttpServer
+import akka.routing.SmallestMailboxRouter
 
 /**
  * Top level supervisor actor.
@@ -45,10 +47,14 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
 
   val minimumSize = 1
 
+  /* start the event router */
+  // FIXME: get router config from settings
+  val eventRouter = context.actorOf(EventRouter.props().withRouter(SmallestMailboxRouter(nrOfInstances = 5)), "event-router")
+
   /* start the toplevel domain object managers */
-  val routes = context.actorOf(EventRouter.props(self), "event-router")
-  val sources = context.actorOf(SourceManager.props(self, routes), "source-manager")
+  val sources = context.actorOf(SourceManager.props(self, eventRouter), "source-manager")
   val sinks = context.actorOf(SinkManager.props(self), "sink-manager")
+  val routes = context.actorOf(RouteManager.props(self, eventRouter), "route-manager")
   val queries = context.actorOf(SearchManager.props(self), "search-manager")
 
   /* start the HTTP service if configured */
@@ -229,6 +235,17 @@ case class CreateSink(name: String, settings: SinkSettings) extends SinkCommand 
 case class DeleteSink(name: String) extends SinkCommand with MustPerformOnLeader
 case class DescribeSink(name: String) extends SinkQuery with CanPerformAnywhere
 case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
+
+/*
+ * Route operations
+ */
+sealed trait RouteOperation
+sealed trait RouteCommand extends RouteOperation with ClusterCommand
+sealed trait RouteQuery extends RouteOperation with ClusterQuery
+case class CreateRoute(name: String, settings: RouteSettings) extends RouteCommand with MustPerformOnLeader
+case class DeleteRoute(name: String) extends RouteCommand with MustPerformOnLeader
+case class DescribeRoute(name: String) extends RouteQuery with CanPerformAnywhere
+case object EnumerateRoutes extends RouteQuery with CanPerformAnywhere
 
 /*
  * Search operations
