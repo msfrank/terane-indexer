@@ -212,7 +212,7 @@ object SinkManager {
   case class PendingOperations(current: (SinkOperation,ActorRef), queue: Vector[(SinkOperation,ActorRef)]) extends SinkManagerData
 }
 
-case class Sink(id: UUID, znode: ZNode, settings: SinkSettings)
+case class Sink(znode: ZNode, settings: SinkSettings)
 case class SinkRef(actor: ActorRef, sink: Sink)
 case class SinkMap(sinks: Map[String,SinkRef])
 

@@ -44,7 +44,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
       val route = RouteContext(Vector(MatchesAll), StoreAllAction)
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
-      val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(UUID.randomUUID(), emptyZNode, TestSinkSettings))))
+      val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
       route.process(source, TestEvent("source", event), sinks)
       expectMsg(event)
     }
@@ -53,7 +53,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
       val route = RouteContext(Vector(MatchesAll), StoreAction(Vector("sink")))
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
-      val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(UUID.randomUUID(), emptyZNode, TestSinkSettings))))
+      val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
       route.process(source, TestEvent("source", event), sinks)
       expectMsg(event)
     }
@@ -62,7 +62,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
       val route = RouteContext(Vector(MatchesAll), DropAction)
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
-      val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(UUID.randomUUID(), emptyZNode, TestSinkSettings))))
+      val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
       route.process(source, TestEvent("source", event), sinks)
       expectNoMsg()
     }
@@ -71,7 +71,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
       val route = RouteContext(Vector(MatchesAll), StoreAction(Vector("sink1")))
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
-      val sinks = SinkMap(Map("sink2" -> SinkRef(testActor, Sink(UUID.randomUUID(), emptyZNode, TestSinkSettings))))
+      val sinks = SinkMap(Map("sink2" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
       route.process(source, TestEvent("source", event), sinks)
       expectNoMsg()
     }

@@ -188,7 +188,7 @@ object CassandraSink {
       .and().commit()
     val stat = zookeeper.checkExists().forPath(path)
     val actor = factory.actorOf(CassandraSink.props(id, settings, path))
-    SinkRef(actor, Sink(id, stat, settings))
+    SinkRef(actor, Sink(stat, settings))
   }
 
   def open(zookeeper: CuratorFramework, name: String, settings: CassandraSinkSettings)(implicit factory: ActorRefFactory): SinkRef = {
@@ -196,7 +196,7 @@ object CassandraSink {
     val id = UUID.fromString(new String(zookeeper.getData.forPath(path + "/id"), Zookeeper.UTF_8_CHARSET))
     val stat = zookeeper.checkExists().forPath(path)
     val actor = factory.actorOf(CassandraSink.props(id, settings, path))
-    SinkRef(actor, Sink(id, stat, settings))
+    SinkRef(actor, Sink(stat, settings))
   }
 
   val CF_EVENTS = new ColumnFamily[UUID,String]("events", UUIDSerializer.get(), StringSerializer.get())

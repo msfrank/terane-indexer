@@ -171,7 +171,7 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val DescribeSourceFormat = jsonFormat1(DescribeSource.apply)
 
   /* convert Sink class */
-  implicit val SinkFormat = jsonFormat3(Sink.apply)
+  implicit val SinkFormat = jsonFormat2(Sink.apply)
 
   /* convert CreateSink class */
   implicit val CreateSinkFormat = jsonFormat2(CreateSink.apply)
