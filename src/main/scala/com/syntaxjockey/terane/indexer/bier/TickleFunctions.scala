@@ -57,9 +57,24 @@ object TickleFunctions {
       }
   }
 
+  def coerce_text(args: String): Target = TargetText(args)
+  def coerce_literal(args: String): Target = TargetLiteral(args)
+  def coerce_integer(args: String): Target = TargetInteger(args)
+  def coerce_float(args: String): Target = TargetFloat(args)
+  def coerce_datetime(args: String): Target = TargetDatetime(args)
+  def coerce_address(args: String): Target = TargetAddress(args)
+  def coerce_hostname(args: String): Target = TargetHostname(args)
+
   val targetFunctions: Map[String, String => Target] = Map(
     "cidr" -> TickleFunctions.target_cidr,
-    "now" -> TickleFunctions.target_now
+    "now" -> TickleFunctions.target_now,
+    "text" -> TickleFunctions.coerce_text,
+    "literal" -> TickleFunctions.coerce_literal,
+    "integer" -> TickleFunctions.coerce_integer,
+    "float" -> TickleFunctions.coerce_float,
+    "datetime" -> TickleFunctions.coerce_datetime,
+    "address" -> TickleFunctions.coerce_address,
+    "hostname" -> TickleFunctions.coerce_hostname
   )
 
   def parsePredicateFunction(factory: ActorRefFactory, subject: String, functionName: String, functionArgs: Seq[TargetValue], params: TickleParserParams): Matchers = {
