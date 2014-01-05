@@ -25,7 +25,7 @@ import com.syntaxjockey.terane.indexer.bier.BierEvent
 /**
  *
  */
-case class RouteContext(matches: Vector[MatchStatement], action: MatchAction) {
+case class RouteContext(name: String, matches: Vector[MatchStatement], action: MatchAction) {
   def process(source: SourceRef, sourceEvent: SourceEvent, sinks: SinkMap) {
     matches.map { matchStatement =>
       matchStatement.evaluate(sourceEvent, sinks) match {
@@ -54,7 +54,7 @@ object MatchesNone extends MatchStatement {
   def evaluate(sourceEvent: SourceEvent, sinks: SinkMap) = Some(false)
 }
 
-class MatchesTag(tag: String) extends MatchStatement {
+case class MatchesTag(tag: String) extends MatchStatement {
   def evaluate(sourceEvent: SourceEvent, sinks: SinkMap) = if (sourceEvent.event.tags.contains(tag)) Some(true) else None
 }
 

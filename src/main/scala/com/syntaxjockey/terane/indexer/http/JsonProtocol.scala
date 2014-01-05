@@ -30,10 +30,10 @@ import java.util.UUID
 import com.syntaxjockey.terane.indexer.bier.datatypes.DataType
 import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.bier._
-import com.syntaxjockey.terane.indexer.sink._
 import com.syntaxjockey.terane.indexer.zookeeper.ZNode
 
 object JsonProtocol extends DefaultJsonProtocol {
+  import com.syntaxjockey.terane.indexer.route.RouteSettings._
 
   /* convert UUID class */
   implicit object UUIDFormat extends RootJsonFormat[UUID] {
@@ -182,6 +182,17 @@ object JsonProtocol extends DefaultJsonProtocol {
   /* convert DescribeSink class */
   implicit val DescribeSinkFormat = jsonFormat1(DescribeSink.apply)
 
+  /* convert Route class */
+  implicit val RouteFormat = jsonFormat2(Route.apply)
+
+  /* convert CreateRoute class */
+  implicit val CreateRouteFormat = jsonFormat2(CreateRoute.apply)
+
+  /* convert DeleteRoute class */
+  implicit val DeleteRouteFormat = jsonFormat1(DeleteRoute.apply)
+
+  /* convert DescribeRoute class */
+  implicit val DescribeRouteFormat = jsonFormat1(DescribeRoute.apply)
 }
 
 object JsonBody {

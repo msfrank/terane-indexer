@@ -33,7 +33,7 @@ import com.syntaxjockey.terane.indexer.bier.FieldIdentifier
 import com.syntaxjockey.terane.indexer.zookeeper.Zookeeper
 import com.syntaxjockey.terane.indexer.source.SourceSettings
 import com.syntaxjockey.terane.indexer.sink.SinkSettings
-import com.syntaxjockey.terane.indexer.route.{EventRouter, RouteSettings}
+import com.syntaxjockey.terane.indexer.route.{RouteContext, EventRouter, RouteSettings}
 import com.syntaxjockey.terane.indexer.http.HttpServer
 import akka.routing.SmallestMailboxRouter
 
@@ -146,6 +146,9 @@ class ClusterSupervisor extends Actor with ActorLogging with FSM[ClusterState,Cl
     case Event(op: SinkOperation, _) =>
       sinks forward op
       stay()
+    case Event(op: RouteOperation, _) =>
+      routes forward op
+      stay()
     case Event(LeaderOperation(caller, op), _) =>
       self.tell(op, caller)
       stay()
@@ -242,7 +245,7 @@ case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
 sealed trait RouteOperation
 sealed trait RouteCommand extends RouteOperation with ClusterCommand
 sealed trait RouteQuery extends RouteOperation with ClusterQuery
-case class CreateRoute(name: String, settings: RouteSettings) extends RouteCommand with MustPerformOnLeader
+case class CreateRoute(name: String, context: RouteContext) extends RouteCommand with MustPerformOnLeader
 case class DeleteRoute(name: String) extends RouteCommand with MustPerformOnLeader
 case class DescribeRoute(name: String) extends RouteQuery with CanPerformAnywhere
 case object EnumerateRoutes extends RouteQuery with CanPerformAnywhere

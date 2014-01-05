@@ -73,53 +73,53 @@ trait ApiService extends HttpService {
         }
       }
     } ~
-      pathPrefix("1" / "queries" / JavaUUID) { case id: UUID =>
+    pathPrefix("1" / "queries" / JavaUUID) { case id: UUID =>
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).map {
+              case queryStatistics: QueryStatistics =>
+                queryStatistics
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[QueryStatistics]
+          }
+        } ~
+        delete {
+          complete {
+            actorRefFactory.actorSelection("/user/query-" + id).ask(DeleteQuery).map {
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+              case _ => StatusCodes.Accepted
+            }.mapTo[HttpResponse]
+          }
+        }
+      } ~
+      path("events") {
         pathEndOrSingleSlash {
           get {
-            complete {
-              actorRefFactory.actorSelection("/user/query-" + id).ask(DescribeQuery).map {
-                case queryStatistics: QueryStatistics =>
-                  queryStatistics
-                case failure: ApiFailure =>
-                  throw new ApiException(failure)
-              }.mapTo[QueryStatistics]
-            }
-          } ~
-            delete {
-              complete {
-                actorRefFactory.actorSelection("/user/query-" + id).ask(DeleteQuery).map {
-                  case failure: ApiFailure =>
-                    throw new ApiException(failure)
-                  case _ => StatusCodes.Accepted
-                }.mapTo[HttpResponse]
-              }
-            }
-        } ~
-          path("events") {
-            pathEndOrSingleSlash {
-              get {
-                parameter('offset.as[Int] ?) { offset =>
-                  parameter('limit.as[Int] ?) { limit =>
-                    val getEvents = GetEvents(offset, limit)
-                    complete {
-                      actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).map {
-                        case eventSet: EventSet =>
-                          eventSet
-                        case failure: ApiFailure =>
-                          throw new ApiException(failure)
-                      }.mapTo[EventSet]
-                    }
-                  }}
-              }
-            }
+            parameter('offset.as[Int] ?) { offset =>
+            parameter('limit.as[Int] ?) { limit =>
+              val getEvents = GetEvents(offset, limit)
+                complete {
+                  actorRefFactory.actorSelection("/user/query-" + id).ask(getEvents).map {
+                    case eventSet: EventSet =>
+                      eventSet
+                    case failure: ApiFailure =>
+                      throw new ApiException(failure)
+                  }.mapTo[EventSet]
+                }
+            }}
           }
+        }
       }
+    }
   }
 
   /**
    * Spray routes for manipulating sinks (create, describe, delete)
    */
-  val sourceId = Segment
+  val sourceName = Segment
   val sourcesRoutes = {
     path("1" / "sources") {
       pathEndOrSingleSlash {
@@ -151,7 +151,7 @@ trait ApiService extends HttpService {
         }
       }
     } ~
-    pathPrefix("1" / "sources" / sourceId) { case id: String =>
+    pathPrefix("1" / "sources" / sourceName) { case id: String =>
       pathEndOrSingleSlash {
         get {
           complete {
@@ -179,7 +179,7 @@ trait ApiService extends HttpService {
   /**
    * Spray routes for manipulating sinks (create, describe, delete)
    */
-  val sinkId = Segment
+  val sinkName = Segment
   val sinksRoutes = {
     path("1" / "sinks") {
       pathEndOrSingleSlash {
@@ -211,7 +211,7 @@ trait ApiService extends HttpService {
         }
       }
     } ~
-    pathPrefix("1" / "sinks" / sinkId) { case id: String =>
+    pathPrefix("1" / "sinks" / sinkName) { case id: String =>
       pathEndOrSingleSlash {
         get {
           complete {
@@ -236,7 +236,67 @@ trait ApiService extends HttpService {
     }
   }
 
-  val version1 = queriesRoutes ~ sourcesRoutes ~ sinksRoutes
+  /**
+   * Spray routes for manipulating routes (create, describe, delete)
+   */
+  val routeName = Segment
+  val routesRoutes = {
+    path("1" / "routes") {
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            supervisor.ask(EnumerateRoutes).map {
+              case EnumeratedRoutes(_routes) =>
+                _routes
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[Seq[Route]]
+          }
+        } ~
+        post {
+          hostName { hostname =>
+            entity(as[CreateRoute]) { case createRoute: CreateRoute =>
+              complete {
+                supervisor.ask(createRoute).map {
+                  case CreatedRoute(op, route) =>
+                    HttpResponse(StatusCodes.Created,
+                      JsonBody(route.toJson),
+                      List(Location("http://%s:%d/1/routes/%s".format(hostname, settings.port, route.context.name))))
+                  case failure: ApiFailure =>
+                    throw new ApiException(failure)
+                }.mapTo[HttpResponse]
+              }
+            }
+          }
+        }
+      }
+    } ~
+    pathPrefix("1" / "routes" / routeName) { case id: String =>
+      pathEndOrSingleSlash {
+        get {
+          complete {
+            supervisor.ask(DescribeRoute(id)).map {
+              case route: Route =>
+                route
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+            }.mapTo[Route]
+          }
+        } ~
+        delete {
+          complete {
+            supervisor.ask(DeleteRoute(id)).map {
+              case failure: ApiFailure =>
+                throw new ApiException(failure)
+              case _ => StatusCodes.OK
+            }.mapTo[HttpResponse]
+          }
+        }
+      }
+    }
+  }
+
+  val version1 = queriesRoutes ~ sourcesRoutes ~ sinksRoutes ~ routesRoutes
 
   val routes =  version1
 

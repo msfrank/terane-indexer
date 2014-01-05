@@ -22,7 +22,6 @@ package com.syntaxjockey.terane.indexer.route
 
 import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
-import java.util.UUID
 
 import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer.zookeeper.ZNode
@@ -30,7 +29,7 @@ import com.syntaxjockey.terane.indexer.source.SourceSettings
 import com.syntaxjockey.terane.indexer.sink.SinkSettings
 import com.syntaxjockey.terane.indexer._
 
-class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers {
+class RouteContextSpec extends TestCluster("RouteContextSpec") with WordSpec with MustMatchers {
 
   val emptyZNode = ZNode(0, 0, 0, 0, 0, 0, 0, 0 , 0 , 0, 0)
   object TestSourceSettings extends SourceSettings { val name = "testSource" }
@@ -38,10 +37,10 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
 
   case class TestEvent(source: String, event: BierEvent) extends SourceEvent
 
-  "A Route matching all" must {
+  "A RouteContext matching all" must {
 
     "store an event to all sinks" in {
-      val route = RouteContext(Vector(MatchesAll), StoreAllAction)
+      val route = RouteContext("route", Vector(MatchesAll), StoreAllAction)
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
@@ -50,7 +49,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
     }
 
     "store an event to the specified sink" in {
-      val route = RouteContext(Vector(MatchesAll), StoreAction(Vector("sink")))
+      val route = RouteContext("route", Vector(MatchesAll), StoreAction(Vector("sink")))
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
@@ -59,7 +58,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
     }
 
     "drop an event" in {
-      val route = RouteContext(Vector(MatchesAll), DropAction)
+      val route = RouteContext("route", Vector(MatchesAll), DropAction)
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
@@ -68,7 +67,7 @@ class RouteSpec extends TestCluster("RouteSpec") with WordSpec with MustMatchers
     }
 
     "not store an event if the sink is not defined" in {
-      val route = RouteContext(Vector(MatchesAll), StoreAction(Vector("sink1")))
+      val route = RouteContext("route", Vector(MatchesAll), StoreAction(Vector("sink1")))
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink2" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
