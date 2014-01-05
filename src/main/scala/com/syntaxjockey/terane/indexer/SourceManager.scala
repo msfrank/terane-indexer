@@ -96,6 +96,18 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
 
   when(ClusterLeader) {
 
+    case Event(EnumerateSources, _) =>
+      stay() replying EnumeratedSources(sources.values.toSeq)
+
+    case Event(DescribeSource(name), _) =>
+      val reply = sources.get(name) match {
+        case Some(sink) =>
+          sink
+        case None =>
+          ResourceNotFound
+      }
+      stay() replying reply
+
     /* if no operations are pending then execute, otherwise queue */
     case Event(op: SourceOperation, maybePending) =>
       val pendingOperations = maybePending match {
@@ -107,10 +119,24 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
       }
       stay() using pendingOperations
 
-    /* sink has been created successfully */
+    /* source has been created successfully */
     case Event(result @ CreatedSource(createOp, sourceref), PendingOperations((op, caller), queue)) =>
       caller ! result
       sources = sources + (createOp.name -> sourceref)
+      context.system.eventStream.publish(SourceMap(sources))
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
+      }
+      stay() using pendingOperations
+
+    /* source has been deleted successfully */
+    case Event(result @ DeletedSource(deleteOp), PendingOperations((op, caller), queue)) =>
+      caller ! result
+      sources = sources - deleteOp.name
       context.system.eventStream.publish(SourceMap(sources))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>

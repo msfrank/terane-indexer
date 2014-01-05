@@ -94,6 +94,18 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
 
   when(ClusterLeader) {
 
+    case Event(EnumerateSinks, _) =>
+      stay() replying EnumeratedSinks(sinks.values.toSeq)
+
+    case Event(DescribeSink(name), _) =>
+      val reply = sinks.get(name) match {
+        case Some(sink) =>
+          sink
+        case None =>
+          ResourceNotFound
+      }
+      stay() replying reply
+
     /* if no operations are pending then execute, otherwise queue */
     case Event(op: SinkOperation, maybePending) =>
       val pendingOperations = maybePending match {
@@ -109,6 +121,20 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
     case Event(result @ CreatedSink(createOp, sinkref), PendingOperations((op, caller), queue)) =>
       caller ! result
       sinks = sinks + (createOp.name -> sinkref)
+      context.system.eventStream.publish(SinkMap(sinks))
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
+      }
+      stay() using pendingOperations
+
+    /* sink has been deleted successfully */
+    case Event(result @ DeletedSink(deleteOp), PendingOperations((op, caller), queue)) =>
+      caller ! result
+      sinks = sinks - deleteOp.name
       context.system.eventStream.publish(SinkMap(sinks))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>

@@ -91,6 +91,8 @@ class SearchManager(supervisor: ActorRef) extends Actor with ActorLogging {
     case EnumerateQueries =>
       sender ! queriesById.values.toSeq
 
+    case DescribeQuery(id) =>
+
     /* an operation failed */
     case SearchOperationResultWithCaller(failure: SearchOperationFailed, caller) =>
       caller ! failure

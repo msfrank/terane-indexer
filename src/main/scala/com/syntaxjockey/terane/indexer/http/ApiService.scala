@@ -307,7 +307,6 @@ trait ApiService extends HttpService {
    */
   implicit def exceptionHandler(implicit log: LoggingContext) = ExceptionHandler {
     case ex: ApiException => ctx =>
-      log.error(ex, "caught API exception in spray routing: %s".format(ex.getMessage))
       ex.failure match {
         case failure: RetryLater =>
           ctx.complete(HttpResponse(StatusCodes.ServiceUnavailable, JsonBody(throwableToJson(ex))))

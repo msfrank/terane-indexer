@@ -109,6 +109,18 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
 
   when(ClusterLeader) {
 
+    case Event(EnumerateRoutes, _) =>
+      stay() replying EnumeratedRoutes(routes.values.toSeq)
+
+    case Event(DescribeRoute(name), _) =>
+      val reply = routes.get(name) match {
+        case Some(route) =>
+          route
+        case None =>
+          ResourceNotFound
+      }
+      stay() replying reply
+
     /* if no operations are pending then execute, otherwise queue */
     case Event(op: RouteOperation, maybePending) =>
       val pendingOperations = maybePending match {
@@ -124,6 +136,20 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
     case Event(result @ CreatedRoute(createOp, route), PendingOperations((op, caller), queue)) =>
       caller ! result
       routes = routes + (createOp.name -> route)
+      context.system.eventStream.publish(RouteMap(routes))
+      val pendingOperations = queue.headOption match {
+        case Some((_op, _caller)) =>
+          executeOperation(_op) pipeTo self
+          PendingOperations(queue.head, queue.tail)
+        case None =>
+          WaitingForOperation
+      }
+      stay() using pendingOperations
+
+    /* route has been deleted successfully */
+    case Event(result @ DeletedRoute(deleteOp), PendingOperations((op, caller), queue)) =>
+      caller ! result
+      routes = routes - deleteOp.name
       context.system.eventStream.publish(RouteMap(routes))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>
