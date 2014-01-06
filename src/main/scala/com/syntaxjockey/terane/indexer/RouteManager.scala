@@ -135,7 +135,7 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
     /* route has been created successfully */
     case Event(result @ CreatedRoute(createOp, route), PendingOperations((op, caller), queue)) =>
       caller ! result
-      routes = routes + (createOp.name -> route)
+      routes = routes + (createOp.context.name -> route)
       context.system.eventStream.publish(RouteMap(routes))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>

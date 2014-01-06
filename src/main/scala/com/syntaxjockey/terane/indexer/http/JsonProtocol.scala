@@ -32,6 +32,9 @@ import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.bier._
 import com.syntaxjockey.terane.indexer.zookeeper.ZNode
 
+import com.syntaxjockey.terane.indexer.sink.SinkSettings.SinkSettingsFormat
+import com.syntaxjockey.terane.indexer.source.SourceSettings.SourceSettingsFormat
+
 object JsonProtocol extends DefaultJsonProtocol {
   import com.syntaxjockey.terane.indexer.route.RouteSettings._
 
@@ -162,7 +165,10 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val SourceFormat = jsonFormat2(Source.apply)
 
   /* convert CreateSource class */
-  implicit val CreateSourceFormat = jsonFormat2(CreateSource.apply)
+  implicit object CreateSourceFormat extends RootJsonFormat[CreateSource] {
+    def write(createSource: CreateSource) = createSource.settings.toJson
+    def read(value: JsValue) = CreateSource(SourceSettingsFormat.read(value))
+  }
 
   /* convert DeleteSource class */
   implicit val DeleteSourceFormat = jsonFormat1(DeleteSource.apply)
@@ -174,7 +180,10 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val SinkFormat = jsonFormat2(Sink.apply)
 
   /* convert CreateSink class */
-  implicit val CreateSinkFormat = jsonFormat2(CreateSink.apply)
+  implicit object CreateSinkFormat extends RootJsonFormat[CreateSink] {
+    def write(createSink: CreateSink) = createSink.settings.toJson
+    def read(value: JsValue) = CreateSink(SinkSettingsFormat.read(value))
+  }
 
   /* convert DeleteSink class */
   implicit val DeleteSinkFormat = jsonFormat1(DeleteSink.apply)
@@ -186,7 +195,10 @@ object JsonProtocol extends DefaultJsonProtocol {
   implicit val RouteFormat = jsonFormat2(Route.apply)
 
   /* convert CreateRoute class */
-  implicit val CreateRouteFormat = jsonFormat2(CreateRoute.apply)
+  implicit object CreateRouteFormat extends RootJsonFormat[CreateRoute] {
+    def write(createRoute: CreateRoute) = createRoute.context.toJson
+    def read(value: JsValue) = CreateRoute(RouteContextFormat.read(value))
+  }
 
   /* convert DeleteRoute class */
   implicit val DeleteRouteFormat = jsonFormat1(DeleteRoute.apply)

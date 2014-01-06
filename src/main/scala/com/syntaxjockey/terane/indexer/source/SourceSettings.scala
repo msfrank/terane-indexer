@@ -50,21 +50,32 @@ object SourceSettings {
   implicit object SourceSettingsFormat extends JsonFormat[SourceSettings] {
     def write(settings: SourceSettings) = settings match {
       case settings: SyslogUdpSourceSettings =>
-        JsObject("sourceType" -> JsString("syslog-udp"), "settings" -> SyslogUdpSourceSettingsFormat.write(settings))
+        SyslogUdpSourceSettingsFormat.write(settings) match {
+          case JsObject(fields) =>
+            JsObject(fields + ("sourceType" -> JsString("syslog-udp")))
+          case unknown =>
+            throw new SerializationException("source settings are malformed: %s".format(unknown))
+        }
       case settings: SyslogTcpSourceSettings =>
-        JsObject("sourceType" -> JsString("syslog-tcp"), "settings" -> SyslogTcpSourceSettingsFormat.write(settings))
+        SyslogTcpSourceSettingsFormat.write(settings) match {
+          case JsObject(fields) =>
+            JsObject(fields + ("sourceType" -> JsString("syslog-tcp")))
+          case unknown =>
+            throw new SerializationException("source settings are malformed: %s".format(unknown))
+        }
       case unknown => throw new SerializationException("don't know how to serialize %s".format(unknown))
     }
 
     def read(value: JsValue) = value match {
       case obj: JsObject =>
         obj.fields.get("sourceType") match {
-          case Some(sinkType) =>
-            sinkType match {
+          case Some(sourceType) =>
+            val sourceSettings = JsObject(obj.fields - "sourceType")
+            sourceType match {
               case JsString("syslog-udp") =>
-                SyslogUdpSourceSettingsFormat.read(obj.fields("settings"))
+                SyslogUdpSourceSettingsFormat.read(sourceSettings)
               case JsString("syslog-tcp") =>
-                SyslogTcpSourceSettingsFormat.read(obj.fields("settings"))
+                SyslogTcpSourceSettingsFormat.read(sourceSettings)
               case unknown =>
                 throw new DeserializationException("unknown sourceType '%s'".format(unknown))
             }

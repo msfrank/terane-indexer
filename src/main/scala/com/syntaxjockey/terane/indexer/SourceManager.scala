@@ -122,7 +122,7 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
     /* source has been created successfully */
     case Event(result @ CreatedSource(createOp, sourceref), PendingOperations((op, caller), queue)) =>
       caller ! result
-      sources = sources + (createOp.name -> sourceref)
+      sources = sources + (createOp.settings.name -> sourceref)
       context.system.eventStream.publish(SourceMap(sources))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>
@@ -195,9 +195,9 @@ class SourceManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor w
       Future {
         val sourceref = op.settings match {
           case settings: SyslogUdpSourceSettings =>
-            SyslogUdpSource.create(zookeeper, op.name, settings, eventRouter)
+            SyslogUdpSource.create(zookeeper, op.settings.name, settings, eventRouter)
           case settings: SyslogTcpSourceSettings =>
-            SyslogTcpSource.create(zookeeper, op.name, settings, eventRouter)
+            SyslogTcpSource.create(zookeeper, op.settings.name, settings, eventRouter)
         }
         log.debug("created source {}: {}", op.settings.name, op.settings)
         CreatedSource(op, sourceref)

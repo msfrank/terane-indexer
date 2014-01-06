@@ -47,16 +47,23 @@ object SinkSettings extends DefaultJsonProtocol {
   implicit object SinkSettingsFormat extends RootJsonFormat[SinkSettings] {
     def write(settings: SinkSettings) = settings match {
       case settings: CassandraSinkSettings =>
-        JsObject("sinkType" -> JsString("cassandra"), "settings" -> CassandraSinkSettingsFormat.write(settings))
+        CassandraSinkSettingsFormat.write(settings) match {
+          case JsObject(fields) =>
+            JsObject(fields + ("sinkType" -> JsString("cassandra")))
+          case unknown =>
+            throw new SerializationException("sink settings are malformed: %s".format(unknown))
+        }
       case unknown => throw new SerializationException("don't know how to serialize %s".format(unknown))
     }
+
     def read(value: JsValue) = value match {
       case obj: JsObject =>
         obj.fields.get("sinkType") match {
           case Some(sinkType) =>
+            val sinkSettings = JsObject(obj.fields - "sinkType")
             sinkType match {
               case JsString("cassandra") =>
-                CassandraSinkSettingsFormat.read(obj.fields("settings"))
+                CassandraSinkSettingsFormat.read(sinkSettings)
               case unknown =>
                 throw new DeserializationException("unknown sinkType '%s'".format(unknown))
             }

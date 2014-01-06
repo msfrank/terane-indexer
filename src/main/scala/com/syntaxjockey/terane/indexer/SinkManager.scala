@@ -120,7 +120,7 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
     /* sink has been created successfully */
     case Event(result @ CreatedSink(createOp, sinkref), PendingOperations((op, caller), queue)) =>
       caller ! result
-      sinks = sinks + (createOp.name -> sinkref)
+      sinks = sinks + (createOp.settings.name -> sinkref)
       context.system.eventStream.publish(SinkMap(sinks))
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>
@@ -201,7 +201,7 @@ class SinkManager(supervisor: ActorRef) extends Actor with ActorLogging with FSM
       Future {
         val sinkref = op.settings match {
           case settings: CassandraSinkSettings =>
-            CassandraSink.create(zookeeper, op.name, settings)
+            CassandraSink.create(zookeeper, op.settings.name, settings)
         }
         log.debug("created sink {}: {}", op.settings.name, op.settings)
         CreatedSink(op, sinkref)
