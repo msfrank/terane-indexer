@@ -5,7 +5,7 @@ jdk:
   - oraclejdk7
 before_script:
   - ./ext/bin/install-ext-dependencies.sh
-  - ./ext/bin/start-test-cluster.sh -v
+  - ./ext/bin/start-travis-cluster.sh -v
 script:
   - sbt ++$TRAVIS_SCALA_VERSION compile
   - sbt ++$TRAVIS_SCALA_VERSION test
