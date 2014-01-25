@@ -239,7 +239,6 @@ trait ApiService extends HttpService {
   /**
    * Spray routes for manipulating routes (create, describe, delete)
    */
-  val routeName = Segment
   val routesRoutes = {
     path("1" / "routes") {
       pathEndOrSingleSlash {
@@ -250,46 +249,43 @@ trait ApiService extends HttpService {
                 _routes
               case failure: ApiFailure =>
                 throw new ApiException(failure)
-            }.mapTo[Seq[Route]]
+            }.mapTo[RoutingTable]
           }
         } ~
         post {
-          hostName { hostname =>
-            entity(as[CreateRoute]) { case createRoute: CreateRoute =>
-              complete {
-                supervisor.ask(createRoute).map {
-                  case CreatedRoute(op, route) =>
-                    HttpResponse(StatusCodes.Created,
-                      JsonBody(route.toJson),
-                      List(Location("http://%s:%d/1/routes/%s".format(hostname, settings.port, route.context.name))))
-                  case failure: ApiFailure =>
-                    throw new ApiException(failure)
-                }.mapTo[HttpResponse]
-              }
+          entity(as[CreateRoute]) { case createRoute: CreateRoute =>
+            complete {
+              supervisor.ask(createRoute).map {
+                case CreatedRoute(op, _routes) =>
+                  _routes
+                case failure: ApiFailure =>
+                  throw new ApiException(failure)
+              }.mapTo[RoutingTable]
             }
           }
-        }
-      }
-    } ~
-    pathPrefix("1" / "routes" / routeName) { case id: String =>
-      pathEndOrSingleSlash {
-        get {
-          complete {
-            supervisor.ask(DescribeRoute(id)).map {
-              case route: Route =>
-                route
-              case failure: ApiFailure =>
-                throw new ApiException(failure)
-            }.mapTo[Route]
+        } ~
+        put {
+          entity(as[ReplaceRoute]) { case replaceRoute: ReplaceRoute =>
+            complete {
+              supervisor.ask(replaceRoute).map {
+                case ReplacedRoute(op, _routes) =>
+                  _routes
+                case failure: ApiFailure =>
+                  throw new ApiException(failure)
+              }.mapTo[RoutingTable]
+            }
           }
         } ~
         delete {
-          complete {
-            supervisor.ask(DeleteRoute(id)).map {
-              case failure: ApiFailure =>
-                throw new ApiException(failure)
-              case _ => StatusCodes.OK
-            }.mapTo[HttpResponse]
+          entity(as[DeleteRoute]) { case deleteRoute: DeleteRoute =>
+            complete {
+              supervisor.ask(deleteRoute).map {
+                case DeletedRoute(op, _routes) =>
+                  _routes
+                case failure: ApiFailure =>
+                  throw new ApiException(failure)
+              }.mapTo[RoutingTable]
+            }
           }
         }
       }

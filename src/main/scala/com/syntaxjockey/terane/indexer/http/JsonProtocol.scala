@@ -191,20 +191,17 @@ object JsonProtocol extends DefaultJsonProtocol {
   /* convert DescribeSink class */
   implicit val DescribeSinkFormat = jsonFormat1(DescribeSink.apply)
 
-  /* convert Route class */
-  implicit val RouteFormat = jsonFormat2(Route.apply)
+  /* convert RoutingTable class */
+  implicit val RoutingTableFormat = jsonFormat2(RoutingTable.apply)
 
   /* convert CreateRoute class */
-  implicit object CreateRouteFormat extends RootJsonFormat[CreateRoute] {
-    def write(createRoute: CreateRoute) = createRoute.context.toJson
-    def read(value: JsValue) = CreateRoute(RouteContextFormat.read(value))
-  }
+  implicit val CreateRouteFormat = jsonFormat2(CreateRoute.apply)
+
+  /* convert ReplaceRoute class */
+  implicit val ReplaceRouteFormat = jsonFormat2(ReplaceRoute.apply)
 
   /* convert DeleteRoute class */
   implicit val DeleteRouteFormat = jsonFormat1(DeleteRoute.apply)
-
-  /* convert DescribeRoute class */
-  implicit val DescribeRouteFormat = jsonFormat1(DescribeRoute.apply)
 }
 
 object JsonBody {

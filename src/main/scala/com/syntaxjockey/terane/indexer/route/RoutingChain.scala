@@ -26,7 +26,7 @@ import com.syntaxjockey.terane.indexer.{SourceRef, SinkMap}
 /**
  *
  */
-class RoutingTable(routes: Vector[RouteContext]) {
+case class RoutingChain(routes: Vector[RouteContext]) {
 
   /**
    *
@@ -40,61 +40,61 @@ class RoutingTable(routes: Vector[RouteContext]) {
   }
 
   /**
-   * Append a route to the end of the routing table.
+   * Append a route to the end of the routing chain.
    */
-  def append(route: RouteContext): RoutingTable = new RoutingTable(routes :+ route)
+  def append(route: RouteContext): RoutingChain = new RoutingChain(routes :+ route)
 
   /**
-   * Insert a route in the specified position of the routing table. 
+   * Insert a route in the specified position of the routing chain.
    */
-  def insert(position: Int, route: RouteContext): RoutingTable = {
+  def insert(position: Int, route: RouteContext): RoutingChain = {
     if (position == 0)
-      new RoutingTable(route +: routes)
+      new RoutingChain(route +: routes)
     else if (position == routes.length - 1)
-      new RoutingTable(routes :+ route)
+      new RoutingChain(routes :+ route)
     else if (position < 0 || position >= routes.length)
       throw new Exception("invalid position %s".format(position))
     else {
       val before = routes.take(position)
       val after = routes.drop(position)
-      new RoutingTable((before :+ route) ++ after)
+      new RoutingChain((before :+ route) ++ after)
     }
   }
 
   /**
-   * Delete the route at the specified position in the routing table.
+   * Delete the route at the specified position in the routing chain.
    */
-  def delete(position: Int): RoutingTable = {
+  def delete(position: Int): RoutingChain = {
     if (position == 0)
-      new RoutingTable(routes.drop(1))
+      new RoutingChain(routes.drop(1))
     else if (position == routes.length - 1)
-      new RoutingTable(routes.dropRight(1))
+      new RoutingChain(routes.dropRight(1))
     else if (position < 0 || position >= routes.length)
       throw new Exception("invalid position %s".format(position))
     else {
       val before = routes.take(position)
       val after = routes.drop(position).drop(1)
-      new RoutingTable(before ++ after)
+      new RoutingChain(before ++ after)
     }
   }
 
   /**
-   * Replace the route at the specified position in the routing table with the specified route.
+   * Replace the route at the specified position in the routing chain with the specified route.
    */
-  def replace(position: Int, route: RouteContext): RoutingTable = {
+  def replace(position: Int, route: RouteContext): RoutingChain = {
     if (position < 0 || position >= routes.length)
       throw new Exception("invalid position %s".format(position))
-    new RoutingTable(routes.updated(position, route))
+    new RoutingChain(routes.updated(position, route))
   }
 
   /**
-   * Delete all routes in the routing table.
+   * Delete all routes in the routing chain.
    */
-  def flush(): RoutingTable = RoutingTable.empty
+  def flush(): RoutingChain = RoutingChain.empty
 }
 
-object RoutingTable {
+object RoutingChain {
 
-  val empty = new RoutingTable(Vector.empty)
+  val empty = new RoutingChain(Vector.empty)
 
 }

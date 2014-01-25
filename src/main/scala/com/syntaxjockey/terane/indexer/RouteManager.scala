@@ -26,13 +26,11 @@ import spray.json.JsonParser
 import org.apache.zookeeper.data.Stat
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.collection.JavaConversions._
-import java.net.{URLEncoder, URLDecoder}
 
 import com.syntaxjockey.terane.indexer.RouteManager.{RouteManagerData, RouteManagerState}
 import com.syntaxjockey.terane.indexer.zookeeper.{Zookeeper, ZNode}
-import com.syntaxjockey.terane.indexer.route.{RouteContext, RouteSettings}
-import com.syntaxjockey.terane.indexer.route.RouteSettings.RouteContextFormat
+import com.syntaxjockey.terane.indexer.route.RoutingChain
+import com.syntaxjockey.terane.indexer.route.RouteSettings.RoutingChainFormat
 
 /**
  * The RouteManager is a second-level actor (underneath ClusterSupervisor) which
@@ -51,7 +49,7 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
   // state
   var sourceMap = SourceMap(Map.empty)
   var sinkMap = SinkMap(Map.empty)
-  var routes: Map[String,Route] = Map.empty
+  var routes: RoutingTable = RoutingTable(ZNode.empty, RoutingChain.empty)
 
   // listen for any broadcast operations
   context.system.eventStream.subscribe(self, classOf[SinkBroadcastOperation])
@@ -65,8 +63,8 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
 
   override def preStart() {
     /* ensure that /sinks znode exists */
-    if (zookeeper.checkExists().forPath("/routes") == null)
-      zookeeper.create().forPath("/routes")
+    val ensure = zookeeper.newNamespaceAwareEnsurePath("/routes")
+    ensure.ensure(zookeeper.getZookeeperClient)
   }
 
   startWith(Ready, WaitingForOperation)
@@ -85,15 +83,12 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
 
     /* load sinks from zookeeper synchronously */
     case Event(NodeBecomesLeader, _) =>
-      routes = zookeeper.getChildren.forPath("/routes").map { child =>
-        val path = "/routes/" + child
-        val name = URLDecoder.decode(child, "UTF-8")
-        val stat = new Stat()
-        val bytes = new String(zookeeper.getData.storingStatIn(stat).forPath(path), Zookeeper.UTF_8_CHARSET)
-        val routeContext = RouteContextFormat.read(JsonParser(bytes))
-        log.debug("initialized route {}", name)
-        name -> Route(stat, routeContext)
-      }.toMap
+      val stat = new Stat()
+      val bytes = new String(zookeeper.getData.storingStatIn(stat).forPath("/routes"), Zookeeper.UTF_8_CHARSET)
+      routes = if (bytes.trim.length > 0)
+        RoutingTable(stat, RoutingChainFormat.read(JsonParser(bytes)))
+      else
+        RoutingTable(ZNode.empty, RoutingChain.empty)
       goto(ClusterLeader)
 
     /* wait for the leader to give us the list of sinks */
@@ -104,22 +99,13 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
 
   onTransition {
     case Ready -> ClusterLeader =>
-      context.system.eventStream.publish(RouteMap(routes))
+      context.system.eventStream.publish(routes)
   }
 
   when(ClusterLeader) {
 
     case Event(EnumerateRoutes, _) =>
-      stay() replying EnumeratedRoutes(routes.values.toSeq)
-
-    case Event(DescribeRoute(name), _) =>
-      val reply = routes.get(name) match {
-        case Some(route) =>
-          route
-        case None =>
-          ResourceNotFound
-      }
-      stay() replying reply
+      stay() replying EnumeratedRoutes(routes)
 
     /* if no operations are pending then execute, otherwise queue */
     case Event(op: RouteOperation, maybePending) =>
@@ -132,25 +118,11 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
       }
       stay() using pendingOperations
 
-    /* route has been created successfully */
-    case Event(result @ CreatedRoute(createOp, route), PendingOperations((op, caller), queue)) =>
+    /* routing table has been modified successfully */
+    case Event(result: RouteCommandResult, PendingOperations((op, caller), queue)) =>
       caller ! result
-      routes = routes + (createOp.context.name -> route)
-      context.system.eventStream.publish(RouteMap(routes))
-      val pendingOperations = queue.headOption match {
-        case Some((_op, _caller)) =>
-          executeOperation(_op) pipeTo self
-          PendingOperations(queue.head, queue.tail)
-        case None =>
-          WaitingForOperation
-      }
-      stay() using pendingOperations
-
-    /* route has been deleted successfully */
-    case Event(result @ DeletedRoute(deleteOp), PendingOperations((op, caller), queue)) =>
-      caller ! result
-      routes = routes - deleteOp.name
-      context.system.eventStream.publish(RouteMap(routes))
+      routes = result.result
+      context.system.eventStream.publish(routes)
       val pendingOperations = queue.headOption match {
         case Some((_op, _caller)) =>
           executeOperation(_op) pipeTo self
@@ -183,48 +155,32 @@ class RouteManager(supervisor: ActorRef, eventRouter: ActorRef) extends Actor wi
    *
    */
   def executeOperation(op: RouteOperation): Future[RouteOperationResult] = {
-    op match {
-      case createOp: CreateRoute =>
-        createRoute(createOp)
-      case deleteOp: DeleteRoute =>
-        deleteRoute(deleteOp)
-      case unknown =>
-        Future.successful(RouteOperationFailed(new Exception("failed to execute %s".format(op)), op))
+    val future = op match {
+      case _op @ CreateRoute(route, None) =>
+        executeModification(routes.root.append(route), routes.znode).map(CreatedRoute(_op, _))
+      case _op @ CreateRoute(route, Some(position)) =>
+        executeModification(routes.root.insert(position, route), routes.znode).map(CreatedRoute(_op, _))
+      case _op @ ReplaceRoute(route, position) =>
+        executeModification(routes.root.replace(position, route), routes.znode).map(ReplacedRoute(_op, _))
+      case _op @ DeleteRoute(None) =>
+        executeModification(routes.root.flush(), routes.znode).map(DeletedRoute(_op, _))
+      case _op @ DeleteRoute(Some(position)) =>
+        executeModification(routes.root.delete(position), routes.znode).map(DeletedRoute(_op, _))
+      case EnumerateRoutes =>
+        Future.successful(EnumeratedRoutes(routes))
+    }
+    future.recover {
+      case ex: Throwable => RouteOperationFailed(ex, op)
     }
   }
 
   /**
    *
    */
-  def createRoute(op: CreateRoute): Future[RouteOperationResult] = {
-    if (routes.contains(op.context.name))
-      Future.successful(RouteOperationFailed(new Exception("route %s already exists".format(op.context.name)), op))
-    else {
-      Future {
-
-        val path = "/routes/" + URLEncoder.encode(op.context.name, "UTF-8")
-        val bytes = RouteSettings.RouteContextFormat.write(op.context).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
-        zookeeper.create().forPath(path, bytes)
-        val stat = zookeeper.checkExists().forPath(path)
-        val route = Route(stat, op.context)
-        log.debug("created route {}", op.context)
-        CreatedRoute(op, route)
-      }.recover {
-        case ex: Throwable =>
-          RouteOperationFailed(ex, op)
-      }
-    }
-  }
-
-  /**
-   *
-   */
-  def deleteRoute(op: DeleteRoute): Future[RouteOperationResult] = {
-    if (!routes.contains(op.name))
-      Future.successful(RouteOperationFailed(new Exception("route %s does not exist".format(op.name)), op))
-    else {
-      Future.successful(DeletedRoute(op))
-    }
+  def executeModification(routes: RoutingChain, znode: ZNode): Future[RoutingTable] = Future {
+    val bytes = RoutingChainFormat.write(routes).prettyPrint.getBytes(Zookeeper.UTF_8_CHARSET)
+    val stat = zookeeper.setData().withVersion(znode.version).forPath("/routes", bytes)
+    RoutingTable(stat, routes)
   }
 
   initialize()
@@ -244,16 +200,15 @@ object RouteManager {
   case class PendingOperations(current: (RouteOperation,ActorRef), queue: Vector[(RouteOperation,ActorRef)]) extends RouteManagerData
 }
 
-
-case class Route(znode: ZNode, context: RouteContext)
-case class RouteMap(routes: Map[String,Route])
+case class RoutingTable(znode: ZNode, root: RoutingChain)
 
 sealed trait RouteOperationResult
-sealed trait RouteCommandResult extends RouteOperationResult
+sealed trait RouteCommandResult extends RouteOperationResult { val result: RoutingTable }
 sealed trait RouteQueryResult extends RouteOperationResult
 case class RouteOperationFailed(cause: Throwable, op: RouteOperation) extends RouteOperationResult
 case class RouteBroadcastOperation(caller: ActorRef, op: RouteOperation)
 
-case class CreatedRoute(op: CreateRoute, result: Route) extends RouteCommandResult
-case class DeletedRoute(op: DeleteRoute) extends RouteCommandResult
-case class EnumeratedRoutes(sinks: Seq[Route]) extends RouteQueryResult
+case class CreatedRoute(op: CreateRoute, result: RoutingTable) extends RouteCommandResult
+case class ReplacedRoute(op: ReplaceRoute, result: RoutingTable) extends RouteCommandResult
+case class DeletedRoute(op: DeleteRoute, result: RoutingTable) extends RouteCommandResult
+case class EnumeratedRoutes(result: RoutingTable) extends RouteQueryResult

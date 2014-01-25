@@ -26,7 +26,7 @@ import com.syntaxjockey.terane.indexer.bier.BierEvent
 import com.syntaxjockey.terane.indexer._
 import com.syntaxjockey.terane.indexer.SinkMap
 import com.syntaxjockey.terane.indexer.SourceMap
-import com.syntaxjockey.terane.indexer.RouteMap
+import com.syntaxjockey.terane.indexer.zookeeper.ZNode
 
 /**
  * The EventRouter is a second-level actor (underneath ClusterSupervisor) which
@@ -42,18 +42,18 @@ class EventRouter extends Actor with ActorLogging with Instrumented {
   // state
   var sourceMap = SourceMap(Map.empty)
   var sinkMap = SinkMap(Map.empty)
-  var routeMap = RouteMap(Map.empty)
+  var routes: RoutingTable = RoutingTable(ZNode.empty, RoutingChain.empty)
 
-  // subscribe to RouteMap, SourceMap and SinkMap changes
-  context.system.eventStream.subscribe(self, classOf[RouteMap])
+  // subscribe to SourceMap, SinkMap, and RoutingTable changes
   context.system.eventStream.subscribe(self, classOf[SourceMap])
   context.system.eventStream.subscribe(self, classOf[SinkMap])
+  context.system.eventStream.subscribe(self, classOf[RoutingTable])
 
   def receive = {
 
     /* the map of routes has changed */
-    case _routeMap: RouteMap =>
-      routeMap = _routeMap
+    case _routes: RoutingTable =>
+      routes = _routes
 
     /* the map of sources has changed */
     case _sourceMap: SourceMap =>
@@ -67,7 +67,7 @@ class EventRouter extends Actor with ActorLogging with Instrumented {
     case sourceEvent: SourceEvent =>
       sourceMap.sources.get(sourceEvent.source) match {
         case Some(sourceRef) =>
-          routeMap.routes.values.foreach(_.context.process(sourceRef, sourceEvent, sinkMap))
+          routes.root.process(sourceRef, sourceEvent, sinkMap)
         case None =>  // FIXME: retry at least once if source doesn't exist
       }
   }

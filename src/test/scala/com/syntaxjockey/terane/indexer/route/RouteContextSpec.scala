@@ -40,7 +40,7 @@ class RouteContextSpec extends TestCluster("RouteContextSpec") with WordSpec wit
   "A RouteContext matching all" must {
 
     "store an event to all sinks" in {
-      val route = RouteContext("route", Vector(MatchesAll), StoreAllAction)
+      val route = RouteContext(Some("route"), Vector(MatchesAll), StoreAllAction)
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
@@ -49,7 +49,7 @@ class RouteContextSpec extends TestCluster("RouteContextSpec") with WordSpec wit
     }
 
     "store an event to the specified sink" in {
-      val route = RouteContext("route", Vector(MatchesAll), StoreAction(Vector("sink")))
+      val route = RouteContext(Some("route"), Vector(MatchesAll), StoreAction(Vector("sink")))
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
@@ -58,7 +58,7 @@ class RouteContextSpec extends TestCluster("RouteContextSpec") with WordSpec wit
     }
 
     "drop an event" in {
-      val route = RouteContext("route", Vector(MatchesAll), DropAction)
+      val route = RouteContext(Some("route"), Vector(MatchesAll), DropAction)
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))
@@ -67,7 +67,7 @@ class RouteContextSpec extends TestCluster("RouteContextSpec") with WordSpec wit
     }
 
     "not store an event if the sink is not defined" in {
-      val route = RouteContext("route", Vector(MatchesAll), StoreAction(Vector("sink1")))
+      val route = RouteContext(Some("route"), Vector(MatchesAll), StoreAction(Vector("sink1")))
       val source = SourceRef(testActor, Source(emptyZNode, TestSourceSettings))
       val event = BierEvent(None)
       val sinks = SinkMap(Map("sink2" -> SinkRef(testActor, Sink(emptyZNode, TestSinkSettings))))

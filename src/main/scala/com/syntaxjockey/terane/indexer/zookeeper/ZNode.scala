@@ -50,4 +50,5 @@ object ZNode {
       stat.getPzxid
     )
   }
+  val empty = ZNode(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }

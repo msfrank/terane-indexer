@@ -106,4 +106,6 @@ object RouteSettings extends DefaultJsonProtocol {
   }
 
   implicit val RouteContextFormat = jsonFormat3(RouteContext.apply)
+
+  implicit val RoutingChainFormat = jsonFormat1(RoutingChain.apply)
 }

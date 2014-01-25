@@ -245,9 +245,9 @@ case object EnumerateSinks extends SinkQuery with CanPerformAnywhere
 sealed trait RouteOperation
 sealed trait RouteCommand extends RouteOperation with ClusterCommand
 sealed trait RouteQuery extends RouteOperation with ClusterQuery
-case class CreateRoute(context: RouteContext) extends RouteCommand with MustPerformOnLeader
-case class DeleteRoute(name: String) extends RouteCommand with MustPerformOnLeader
-case class DescribeRoute(name: String) extends RouteQuery with CanPerformAnywhere
+case class CreateRoute(context: RouteContext, position: Option[Int]) extends RouteCommand with MustPerformOnLeader
+case class ReplaceRoute(context: RouteContext, position: Int) extends RouteCommand with MustPerformOnLeader
+case class DeleteRoute(position: Option[Int]) extends RouteCommand with MustPerformOnLeader
 case object EnumerateRoutes extends RouteQuery with CanPerformAnywhere
 
 /*

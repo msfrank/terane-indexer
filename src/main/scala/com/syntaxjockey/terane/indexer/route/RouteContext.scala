@@ -25,17 +25,18 @@ import com.syntaxjockey.terane.indexer.bier.BierEvent
 /**
  *
  */
-case class RouteContext(name: String, matches: Vector[MatchStatement], action: MatchAction) {
-  def process(source: SourceRef, sourceEvent: SourceEvent, sinks: SinkMap) {
+case class RouteContext(name: Option[String], matches: Vector[MatchStatement], action: MatchAction) {
+  def process(source: SourceRef, sourceEvent: SourceEvent, sinks: SinkMap): Boolean = {
     matches.map { matchStatement =>
       matchStatement.evaluate(sourceEvent, sinks) match {
         case Some(statementMatches) =>
           if (statementMatches)
             action.execute(sourceEvent.event, sinks)
-          return
+          return true
         case None => // do nothing
       }
     }
+    false
   }
 }
 
