@@ -50,10 +50,10 @@ case class RoutingChain(routes: Vector[RouteContext]) {
   def insert(position: Int, route: RouteContext): RoutingChain = {
     if (position == 0)
       new RoutingChain(route +: routes)
-    else if (position == routes.length - 1)
+    else if (position == routes.length)
       new RoutingChain(routes :+ route)
-    else if (position < 0 || position >= routes.length)
-      throw new Exception("invalid position %s".format(position))
+    else if (position < 0 || position > routes.length)
+      throw new IndexOutOfBoundsException("invalid position %s".format(position))
     else {
       val before = routes.take(position)
       val after = routes.drop(position)
@@ -70,7 +70,7 @@ case class RoutingChain(routes: Vector[RouteContext]) {
     else if (position == routes.length - 1)
       new RoutingChain(routes.dropRight(1))
     else if (position < 0 || position >= routes.length)
-      throw new Exception("invalid position %s".format(position))
+      throw new IndexOutOfBoundsException("invalid position %s".format(position))
     else {
       val before = routes.take(position)
       val after = routes.drop(position).drop(1)
@@ -83,7 +83,7 @@ case class RoutingChain(routes: Vector[RouteContext]) {
    */
   def replace(position: Int, route: RouteContext): RoutingChain = {
     if (position < 0 || position >= routes.length)
-      throw new Exception("invalid position %s".format(position))
+      throw new IndexOutOfBoundsException("invalid position %s".format(position))
     new RoutingChain(routes.updated(position, route))
   }
 
